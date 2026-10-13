@@ -48,3 +48,24 @@ it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
   },
   75000,
 );
+it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
+  "真实OpenAI：主动周报使用合成数据、快速模型并保留来源标记",
+  async () => {
+    loadEnvConfig(process.cwd());
+    const { weeklyReview } = await import("../lib/ai/review");
+    const state = saveAsset(emptyState(), {
+      id: "review-fixture",
+      name: "合成现金",
+      category: "现金",
+      owner: "joint",
+      value: 500,
+      annualReturn: null,
+    });
+    const review = await weeklyReview(state);
+    expect(review).toContain("AI 周度复盘 · openai");
+    expect(review).toMatch(/500/);
+    expect(state.assets).toHaveLength(1);
+    expect(state.messages).toEqual([]);
+  },
+  75000,
+);

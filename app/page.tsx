@@ -16,7 +16,6 @@ import {
 import {
   Bell,
   Check,
-  ChevronRight,
   Database,
   History,
   Landmark,
@@ -30,7 +29,6 @@ import {
 } from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import {
-  alertsFor,
   breakdown,
   chartPoints,
   contributionSummary,
@@ -59,6 +57,9 @@ import CashflowTable from "./components/CashflowTable";
 import PushSettings from "./components/PushSettings";
 import { cloudClient } from "@/lib/cloud";
 import { allowedEmail } from "@/lib/access";
+import { proactiveInsights } from "@/lib/insights";
+import WealthPulse from "./components/WealthPulse";
+import AdvisorMarkdown from "./components/AdvisorMarkdown";
 
 type Modal =
   | {
@@ -90,6 +91,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [activeSection, setActiveSection] = useState("overview");
   const editStamp = useRef("");
   const stamp = (current: WealthState) =>
     JSON.stringify({
@@ -115,9 +117,31 @@ export default function Home() {
     [state],
   );
   const alerts = useMemo(
-    () => [...cloudAlerts, ...alertsFor(state)],
+    () => [...proactiveInsights(state), ...cloudAlerts],
     [state, cloudAlerts],
   );
+  const unreadInsights = proactiveInsights(state).filter(
+    (row) => !state.readAlerts.includes(row.id),
+  );
+  useEffect(() => {
+    if (!ready || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: "-5% 0px -65% 0px", threshold: 0 },
+    );
+    ["overview", "assets", "cashflow", "contributions", "framework"].forEach(
+      (id) => {
+        const el = document.getElementById(id);
+        if (el) observer.observe(el);
+      },
+    );
+    return () => observer.disconnect();
+  }, [ready, store.cloudLoading]);
   useEffect(() => {
     if (!store.cloudHousehold) {
       setCloudAlerts([]);
@@ -341,9 +365,13 @@ export default function Home() {
   );
   const advisor = (prompt?: string) =>
     window.dispatchEvent(
-      new CustomEvent("together-open-advisor", { detail: prompt }),
+      new CustomEvent("together-open-advisor", {
+        detail: prompt
+          ? `只做分析与讨论，不执行数据变更。\n${prompt}`
+          : undefined,
+      }),
     );
-  if (!ready)
+  if (!ready || (store.cloudLoading && !state.updatedAt))
     return <div className="loading-screen">正在读取家庭财富数据…</div>;
   return (
     <main>
@@ -352,19 +380,42 @@ export default function Home() {
           <span>t</span>ogether
         </a>
         <nav>
-          <a href="#overview">
+          <a
+            href="#overview"
+            aria-current={activeSection === "overview" ? "location" : undefined}
+          >
             <LineChart />
             全景
           </a>
-          <a href="#assets">
+          <a
+            href="#assets"
+            aria-current={activeSection === "assets" ? "location" : undefined}
+          >
             <WalletCards />
             资产与负债
           </a>
-          <a href="#contributions">
+          <a
+            href="#cashflow"
+            aria-current={activeSection === "cashflow" ? "location" : undefined}
+          >
+            <WalletCards />
+            每月现金流
+          </a>
+          <a
+            href="#contributions"
+            aria-current={
+              activeSection === "contributions" ? "location" : undefined
+            }
+          >
             <Users />
             成员贡献
           </a>
-          <a href="#framework">
+          <a
+            href="#framework"
+            aria-current={
+              activeSection === "framework" ? "location" : undefined
+            }
+          >
             <Landmark />
             家庭计划
           </a>
@@ -400,7 +451,7 @@ export default function Home() {
         <header id="overview">
           <div>
             <p className="eyebrow">TOGETHER · FAMILY WEALTH</p>
-            <h1>一起看见财富，也看见下一步。</h1>
+            <h1>家庭财富，一起掌握。</h1>
             <button
               className="save-status"
               onClick={() => open({ kind: "settings" })}
@@ -426,9 +477,10 @@ export default function Home() {
               onClick={() => open({ kind: "alerts" })}
             >
               <Bell size={19} />
-              {alerts.some((row) => !state.readAlerts.includes(row.id)) && (
-                <i />
-              )}
+              {state.preferences.proactive !== false &&
+                alerts.some((row) => !state.readAlerts.includes(row.id)) && (
+                  <i />
+                )}
             </button>
             <button className="primary" onClick={() => open({ kind: "asset" })}>
               <Plus size={16} />
@@ -455,7 +507,9 @@ export default function Home() {
           </div>
         )}
         <div className="mobile-nav">
+          <a href="#overview">总览</a>
           <a href="#assets">资产</a>
+          <a href="#cashflow">收支</a>
           <a href="#contributions">贡献</a>
           <a href="#framework">计划</a>
           <button onClick={() => open({ kind: "members" })}>成员</button>
@@ -499,16 +553,53 @@ export default function Home() {
             </p>
           </div>
         </div>
+        <WealthPulse
+          state={state}
+          insights={state.preferences.proactive === false ? [] : unreadInsights}
+          onDiscuss={advisor}
+          onDismiss={(alertId) =>
+            change(
+              (current) => ({
+                ...current,
+                readAlerts: [...new Set([...current.readAlerts, alertId])],
+              }),
+              "处理主动提醒",
+            )
+          }
+        />
         <div className="ownership-strip">
           {owners.map((group) => (
-            <div key={group.key}>
+            <button
+              type="button"
+              key={group.key}
+              aria-label={`查看${group.name}持有资产`}
+              onClick={() => {
+                if (
+                  change(
+                    (current) => ({
+                      ...current,
+                      preferences: {
+                        ...current.preferences,
+                        allocation: "owner",
+                      },
+                    }),
+                    "按成员查看资产",
+                  )
+                ) {
+                  setFilter(group.key);
+                  document
+                    .getElementById("assets")
+                    ?.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+            >
               <span>
                 <i style={{ background: group.color }} />
                 {group.name}持有
               </span>
               <b>{money(group.amount)}</b>
               <small>占总资产 {group.percent.toFixed(1)}%</small>
-            </div>
+            </button>
           ))}
         </div>
         <div className="dashboard-grid">
@@ -918,6 +1009,7 @@ export default function Home() {
             </p>
           )}
         </section>
+        <CashflowTable state={state} onChange={change} />
         <section className="card contributions-card" id="contributions">
           <div className="card-head">
             <div>
@@ -1013,24 +1105,6 @@ export default function Home() {
             </div>
           )}
         </section>
-        {alerts.length > 0 && (
-          <section className="insight">
-            <Sparkles size={21} />
-            <div>
-              <span className="eyebrow">下一步</span>
-              <h3>{alerts[0].title}</h3>
-              <p>{alerts[0].body}</p>
-            </div>
-            <button
-              className="text-button"
-              onClick={() => advisor(alerts[0].prompt)}
-            >
-              一起梳理
-              <ChevronRight size={15} />
-            </button>
-          </section>
-        )}
-        <CashflowTable state={state} onChange={change} />
         <FinancialFramework
           plan={state.plan}
           assets={state.assets}
@@ -1424,11 +1498,35 @@ export default function Home() {
       )}
       {modal?.kind === "alerts" && (
         <Dialog title="家庭提醒" onClose={close}>
+          <label className="proactive-toggle">
+            <input
+              type="checkbox"
+              checked={state.preferences.proactive !== false}
+              onChange={(event) =>
+                change(
+                  (current) => ({
+                    ...current,
+                    preferences: {
+                      ...current.preferences,
+                      proactive: event.target.checked,
+                    },
+                  }),
+                  "更新主动提醒偏好",
+                )
+              }
+            />
+            <span>
+              开启主动洞察与每周复盘
+              <small>
+                即时提示依据记录生成；每周可使用已配置 AI。不会自动改账。
+              </small>
+            </span>
+          </label>
           <div className="alerts-list">
             {alerts.map((row) => (
               <article key={row.id}>
                 <h3>{row.title}</h3>
-                <p>{row.body}</p>
+                <AdvisorMarkdown text={row.body} />
                 <div className="button-row">
                   <button
                     type="button"

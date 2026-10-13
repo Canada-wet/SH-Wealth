@@ -12,6 +12,7 @@ import {
 import { id, totals, type WealthState } from "@/lib/wealth";
 import type { AssistantAction } from "@/lib/advisor-actions";
 import AdvisorMarkdown from "./AdvisorMarkdown";
+import { proactiveInsights } from "@/lib/insights";
 import {
   activeChat,
   allChats,
@@ -39,6 +40,17 @@ export default function FloatingAdvisor({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [hiddenNudges, setHiddenNudges] = useState<string[]>([]);
+  const [overviewPromptVisible, setOverviewPromptVisible] = useState(true);
+  const insights =
+    state.preferences.proactive === false
+      ? []
+      : proactiveInsights(state).filter(
+          (row) => !state.readAlerts.includes(row.id),
+        );
+  const nudge = insights.find(
+    (row) => row.priority === "attention" && !hiddenNudges.includes(row.id),
+  );
   const currentChat =
     allChats(state).find((chat) => chat.id === selectedChatId) ??
     activeChat(state);
@@ -57,15 +69,33 @@ export default function FloatingAdvisor({
   useEffect(() => {
     try {
       setSelectedChatId(localStorage.getItem("together-selected-chat"));
+      const hidden: unknown = JSON.parse(
+        sessionStorage.getItem("together-hidden-nudges") || "[]",
+      );
+      if (
+        Array.isArray(hidden) &&
+        hidden.every((row) => typeof row === "string")
+      )
+        setHiddenNudges(hidden);
     } catch {
       // A blocked local preference must not prevent cloud chat restoration.
     }
   }, []);
   useEffect(() => {
+    const summary = document.querySelector(".pulse-next");
+    if (!summary || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) =>
+      setOverviewPromptVisible(entry.isIntersecting),
+    );
+    observer.observe(summary);
+    return () => observer.disconnect();
+  }, [insights[0]?.id]);
+  useEffect(() => {
     const show = (event: Event) => {
       setOpen(true);
       const prompt = (event as CustomEvent<string>).detail;
       if (typeof prompt === "string") setInput(prompt);
+      setHistoryOpen(false);
     };
     window.addEventListener("together-open-advisor", show);
     return () => {
@@ -258,6 +288,32 @@ export default function FloatingAdvisor({
             </span>
             <small>{saveStatus || "本机已保存"}</small>
           </div>
+          {!historyOpen && insights.length > 0 && (
+            <details className="advisor-suggestions">
+              <summary>
+                <Sparkles size={14} /> 主动发现 · {insights.length}{" "}
+                个可讨论的事项 <ChevronDown size={14} />
+              </summary>
+              <div>
+                {insights.slice(0, 4).map((row) => (
+                  <button
+                    type="button"
+                    key={row.id}
+                    disabled={busy || loading}
+                    onClick={() =>
+                      setInput(
+                        `只做分析与讨论，不执行数据变更。\n${row.prompt}`,
+                      )
+                    }
+                  >
+                    <b>{row.title}</b>
+                    <small>{row.body}</small>
+                    <span>依据：{row.source} · 点击准备讨论</span>
+                  </button>
+                ))}
+              </div>
+            </details>
+          )}
           {historyOpen && (
             <div className="advisor-history" aria-label="聊天历史">
               <label>
@@ -327,8 +383,9 @@ export default function FloatingAdvisor({
           >
             {!currentChat.messages.length && (
               <div className="chat-message assistant">
-                我可以解读你们的资产、负债与贡献，也可以根据明确要求更新数据。试试「把某个账户本年回报改为
-                -2.5%」。
+                {insights.length
+                  ? `我从最新记录中发现 ${insights.length} 个值得讨论的事项。展开上方“主动发现”选择一个，或直接告诉我想了解什么。`
+                  : "我们可以一起解读资产、核对收支或讨论目标。明确要求修改数据时，我也能协助更新。"}
               </div>
             )}
             {currentChat.messages.map((message) => (
@@ -383,6 +440,40 @@ export default function FloatingAdvisor({
           </small>
         </section>
       )}
+      {!open && !loading && !overviewPromptVisible && nudge && (
+        <div className="advisor-nudge" role="status">
+          <button
+            className="nudge-close"
+            aria-label="本次暂不显示主动提示"
+            onClick={() => {
+              const next = [...hiddenNudges, nudge.id];
+              setHiddenNudges(next);
+              try {
+                sessionStorage.setItem(
+                  "together-hidden-nudges",
+                  JSON.stringify(next),
+                );
+              } catch {
+                /* Session-only dismissal remains available. */
+              }
+            }}
+          >
+            <X size={14} />
+          </button>
+          <span>顾问发现一个需要核对的事项</span>
+          <b>{nudge.title}</b>
+          <button
+            className="text-button"
+            onClick={() => {
+              setOpen(true);
+              setHistoryOpen(false);
+              setInput(`只做分析与讨论，不执行数据变更。\n${nudge.prompt}`);
+            }}
+          >
+            展开讨论 ↗
+          </button>
+        </div>
+      )}
       <button
         className="advisor-bubble"
         aria-label={open ? "收起财富顾问" : "打开财富顾问"}
@@ -395,7 +486,11 @@ export default function FloatingAdvisor({
           <>
             <Bot size={21} />
             <span>问问顾问</span>
-            <Sparkles size={13} />
+            {insights.length && !loading ? (
+              <i className="advisor-unread">{insights.length}</i>
+            ) : (
+              <Sparkles size={13} />
+            )}
           </>
         )}
       </button>

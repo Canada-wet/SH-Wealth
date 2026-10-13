@@ -66,6 +66,7 @@ export type WealthState = {
     model: string;
     allocation: "category" | "owner";
     months: number;
+    proactive?: boolean;
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -547,6 +548,8 @@ export function validateState(raw: unknown): asserts raw is WealthState {
     typeof state.preferences.model !== "string" ||
     !["category", "owner"].includes(state.preferences.allocation) ||
     ![3, 6, 12, 24].includes(state.preferences.months) ||
+    (state.preferences.proactive !== undefined &&
+      typeof state.preferences.proactive !== "boolean") ||
     !Array.isArray(state.readAlerts) ||
     state.readAlerts.some((value) => typeof value !== "string")
   )

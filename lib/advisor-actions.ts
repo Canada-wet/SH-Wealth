@@ -326,6 +326,7 @@ export function parseAdvisorResult(raw: string, allowChanges = true) {
   }
 }
 export function mutationRequested(message: string) {
+  if (/只做分析|不执行数据变更/.test(message)) return false;
   return (
     /(?:请|帮我|把|将|直接)?(?:添加|新增|删除|移除|修改|改为|改成|更新|记录|设为|设置|清空)|\b(?:add|delete|remove|update|set|change|record)\b/i.test(
       message,

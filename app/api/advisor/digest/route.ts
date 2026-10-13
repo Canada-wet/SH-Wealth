@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { alertsFor, money, totals, validateState } from "@/lib/wealth";
+import { validateState } from "@/lib/wealth";
+import { ruleReview, weeklyReview } from "@/lib/ai/review";
+export const maxDuration = 60;
 import { pushReady, sendPush } from "@/lib/push";
 export async function GET(request: Request) {
   if (!process.env.CRON_SECRET)
@@ -39,10 +41,9 @@ export async function GET(request: Request) {
     } catch {
       continue;
     }
-    const total = totals(row.document);
-    const insight = alertsFor(row.document)[0];
+    if (row.document.preferences.proactive === false) continue;
     const title = "本周家庭财富回顾";
-    const body = `净资产 ${money(total.netWorth)}；资产 ${money(total.totalAssets)}，负债 ${money(total.totalDebts)}。${insight ? ` ${insight.title}：${insight.body}` : " 记得一起确认账户估值和本月贡献。"}`;
+    const body = ruleReview(row.document, now);
     const hash = createHash("sha256")
       .update(`${row.household_id}-${week}`)
       .digest("hex")
@@ -65,7 +66,17 @@ export async function GET(request: Request) {
       failures++;
       continue;
     }
-    if (alert.data?.length) processed++;
+    if (alert.data?.length) {
+      processed++;
+      const review = await weeklyReview(row.document, now);
+      if (review !== body) {
+        const saved = await admin
+          .from("advisor_alerts")
+          .update({ body: review })
+          .eq("id", alertId);
+        if (saved.error) failures++;
+      }
+    }
     if (pushReady()) {
       const subscriptions = await admin
         .from("wealth_push_subscriptions")
@@ -78,7 +89,11 @@ export async function GET(request: Request) {
       for (const entry of subscriptions.data ?? []) {
         if (entry.last_alert_id === alertId) continue;
         try {
-          await sendPush(entry.subscription, { title, body });
+          // Keep lock-screen notifications brief; the full review stays private in-app.
+          await sendPush(entry.subscription, {
+            title,
+            body: "已根据最新家庭记录准备好本周复盘。打开私密家庭空间查看。",
+          });
           const saved = await admin
             .from("wealth_push_subscriptions")
             .update({ last_alert_id: alertId })

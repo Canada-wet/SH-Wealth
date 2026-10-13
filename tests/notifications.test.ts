@@ -4,14 +4,29 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   send: vi.fn(),
   ready: vi.fn(() => true),
+  review: vi.fn(),
 }));
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     from: mocks.from,
-    auth: { getUser: vi.fn(async () => ({ data: { user: { id: "u", email:"henrywhy233@gmail.com", email_confirmed_at:"2026-01-01" } } })) },
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: {
+          user: {
+            id: "u",
+            email: "henrywhy233@gmail.com",
+            email_confirmed_at: "2026-01-01",
+          },
+        },
+      })),
+    },
   }),
 }));
 vi.mock("@/lib/push", () => ({ pushReady: mocks.ready, sendPush: mocks.send }));
+vi.mock("@/lib/ai/review", async (original) => ({
+  ...(await original<object>()),
+  weeklyReview: mocks.review,
+}));
 import { GET } from "../app/api/advisor/digest/route";
 import { POST } from "../app/api/notifications/subscribe/route";
 beforeEach(() => {
@@ -20,6 +35,8 @@ beforeEach(() => {
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test");
   mocks.send.mockResolvedValue({});
+  mocks.review.mockResolvedValue("AI 合成复盘");
+  mocks.review.mockClear();
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("主动提醒与Web Push", () => {
@@ -76,6 +93,7 @@ describe("主动提醒与Web Push", () => {
         };
       if (table === "advisor_alerts")
         return {
+          update: () => ({ eq: async () => ({ error: null }) }),
           upsert: (row: { id: string; body: string }) => {
             expect(row.body).toContain("$900.00");
             return {
@@ -127,5 +145,27 @@ describe("主动提醒与Web Push", () => {
       pushed: 0,
     });
     expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.review).toHaveBeenCalledTimes(1);
+    expect(mocks.send.mock.calls.at(-1)?.[1].body).not.toContain("900");
+  });
+  it("关闭主动复盘后定时任务不生成或推送", async () => {
+    const state = emptyState();
+    state.preferences.proactive = false;
+    mocks.from.mockImplementation((table) => {
+      if (table !== "household_documents") throw new Error("Unexpected write");
+      return {
+        select: async () => ({
+          data: [{ household_id: "fixture", document: state }],
+          error: null,
+        }),
+      };
+    });
+    const response = await GET(
+      new Request("http://localhost/api/advisor/digest", {
+        headers: { authorization: "Bearer test-secret" },
+      }),
+    );
+    expect(await response.json()).toMatchObject({ processed: 0, pushed: 0 });
+    expect(mocks.review).not.toHaveBeenCalled();
   });
 });
