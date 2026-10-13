@@ -42,7 +42,8 @@ http
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader(
       "Access-Control-Allow-Headers",
-    req.headers["access-control-request-headers"] || "apikey,authorization,content-type,x-client-info,x-supabase-api-version",
+      req.headers["access-control-request-headers"] ||
+        "apikey,authorization,content-type,x-client-info,x-supabase-api-version",
     );
     res.setHeader(
       "Access-Control-Allow-Methods",
@@ -93,7 +94,9 @@ http
             document: null,
           });
           invites.set(result, result);
-        } else if (name === "household_invite_token")
+        } else if (name === "is_wealth_member")
+          result = documents.has(args.target_household);
+        else if (name === "household_invite_token")
           result = invites.get(args.target_household);
         else if (name === "join_wealth_household") result = args.invite_token;
         else if (name === "save_household_document") {
@@ -135,6 +138,10 @@ http
       return;
     }
     if (address.pathname === "/rest/v1/advisor_alerts") {
+      res.end("[]");
+      return;
+    }
+    if (address.pathname === "/rest/v1/wealth_notification_channels") {
       res.end("[]");
       return;
     }

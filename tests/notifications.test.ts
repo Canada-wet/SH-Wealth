@@ -23,6 +23,9 @@ vi.mock("@supabase/supabase-js", () => ({
   }),
 }));
 vi.mock("@/lib/push", () => ({ pushReady: mocks.ready, sendPush: mocks.send }));
+vi.mock("@/lib/channel-server", () => ({
+  dispatchChannelNotices: vi.fn(async () => ({ accepted: 0, failures: 0 })),
+}));
 vi.mock("@/lib/ai/review", async (original) => ({
   ...(await original<object>()),
   weeklyReview: mocks.review,

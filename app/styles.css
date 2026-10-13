@@ -2369,6 +2369,133 @@ tbody tr:hover {
     scroll-padding-top: 70px;
   }
 }
+.channel-settings {
+  padding: 6px 0;
+}
+.notification-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+.notification-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.notification-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+.channel-heading p {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 7px 0 16px;
+}
+.channel-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 10px;
+}
+.channel-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.channel-card-head > span {
+  margin-left: auto;
+  color: #9a8661;
+  background: #faf2e2;
+  border-radius: 20px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+.channel-card-head > span.connected {
+  color: var(--green);
+  background: var(--sage);
+}
+.channel-card p,
+.wechat-feasibility p {
+  font-size: 11px;
+  color: #617566;
+  margin-bottom: 9px;
+}
+.channel-card small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin: 7px 0 12px;
+}
+.channel-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  margin: 12px 0;
+  font-weight: 400;
+}
+.channel-consent input {
+  width: 15px;
+  margin-top: 2px;
+  accent-color: var(--green);
+}
+.channel-link {
+  display: grid;
+  justify-items: start;
+  background: #f0f5ec;
+  padding: 14px;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+.channel-note {
+  padding: 11px;
+  border-radius: 8px;
+  background: #eff4e9;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.channel-setup {
+  padding: 10px;
+  background: #f6f8f2;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.channel-setup summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+}
+.channel-setup p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.channel-setup a {
+  font-size: 10px;
+  color: var(--green);
+}
+.wechat-feasibility {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 15px;
+}
+.wechat-feasibility summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.wechat-feasibility a {
+  display: block;
+  font-size: 11px;
+  color: var(--green);
+  margin: 7px 0;
+}
 @media (prefers-reduced-motion: reduce) {
   :root {
     scroll-behavior: auto;

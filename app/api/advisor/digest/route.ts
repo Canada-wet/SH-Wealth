@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { validateState } from "@/lib/wealth";
 import { ruleReview, weeklyReview } from "@/lib/ai/review";
+import { dispatchChannelNotices } from "@/lib/channel-server";
 export const maxDuration = 60;
 import { pushReady, sendPush } from "@/lib/push";
 export async function GET(request: Request) {
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
   let processed = 0;
   let pushed = 0;
   let failures = 0;
+  let channelAccepted = 0;
   for (const row of documents ?? []) {
     try {
       validateState(row.document);
@@ -77,6 +79,13 @@ export async function GET(request: Request) {
         if (saved.error) failures++;
       }
     }
+    const channelResult = await dispatchChannelNotices(
+      admin,
+      row.household_id,
+      alertId,
+    );
+    channelAccepted += channelResult.accepted;
+    failures += channelResult.failures;
     if (pushReady()) {
       const subscriptions = await admin
         .from("wealth_push_subscriptions")
@@ -115,7 +124,7 @@ export async function GET(request: Request) {
     }
   }
   return NextResponse.json(
-    { ok: failures === 0, processed, pushed, failures },
+    { ok: failures === 0, processed, pushed, channelAccepted, failures },
     { status: failures ? 502 : 200 },
   );
 }

@@ -60,6 +60,7 @@ import { allowedEmail } from "@/lib/access";
 import { proactiveInsights } from "@/lib/insights";
 import WealthPulse from "./components/WealthPulse";
 import AdvisorMarkdown from "./components/AdvisorMarkdown";
+import ChannelSettings from "./components/ChannelSettings";
 
 type Modal =
   | {
@@ -87,6 +88,9 @@ export default function Home() {
   const store = useWealth();
   const { state, ready, commit } = store;
   const [modal, setModal] = useState<Modal>(null);
+  const [notificationView, setNotificationView] = useState<
+    "alerts" | "channels"
+  >("alerts");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("");
@@ -1497,71 +1501,107 @@ export default function Home() {
         </Dialog>
       )}
       {modal?.kind === "alerts" && (
-        <Dialog title="家庭提醒" onClose={close}>
-          <label className="proactive-toggle">
-            <input
-              type="checkbox"
-              checked={state.preferences.proactive !== false}
-              onChange={(event) =>
-                change(
-                  (current) => ({
-                    ...current,
-                    preferences: {
-                      ...current.preferences,
-                      proactive: event.target.checked,
-                    },
-                  }),
-                  "更新主动提醒偏好",
-                )
-              }
-            />
-            <span>
-              开启主动洞察与每周复盘
-              <small>
-                即时提示依据记录生成；每周可使用已配置 AI。不会自动改账。
-              </small>
-            </span>
-          </label>
-          <div className="alerts-list">
-            {alerts.map((row) => (
-              <article key={row.id}>
-                <h3>{row.title}</h3>
-                <AdvisorMarkdown text={row.body} />
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      close();
-                      advisor(row.prompt);
-                    }}
-                  >
-                    与顾问讨论
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={state.readAlerts.includes(row.id)}
-                    onClick={() =>
-                      change(
-                        (current) => ({
-                          ...current,
-                          readAlerts: [...current.readAlerts, row.id],
-                        }),
-                        "已读提醒",
-                      )
-                    }
-                  >
-                    {state.readAlerts.includes(row.id) ? "已读" : "标为已读"}
-                  </button>
-                </div>
-              </article>
-            ))}
-            {!alerts.length && (
-              <p>当前没有待处理提醒。更新账户或计划后，会生成新的提示。</p>
-            )}
+        <Dialog title="通知与消息渠道" onClose={close}>
+          <div
+            className="notification-tabs"
+            role="tablist"
+            aria-label="通知设置页面"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={notificationView === "alerts"}
+              onClick={() => setNotificationView("alerts")}
+            >
+              主动提醒
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={notificationView === "channels"}
+              onClick={() => setNotificationView("channels")}
+            >
+              消息渠道
+            </button>
           </div>
-          <PushSettings householdId={store.cloudHousehold} />
+          {notificationView === "alerts" && (
+            <>
+              <label className="proactive-toggle">
+                <input
+                  type="checkbox"
+                  checked={state.preferences.proactive !== false}
+                  onChange={(event) =>
+                    change(
+                      (current) => ({
+                        ...current,
+                        preferences: {
+                          ...current.preferences,
+                          proactive: event.target.checked,
+                        },
+                      }),
+                      "更新主动提醒偏好",
+                    )
+                  }
+                />
+                <span>
+                  开启主动洞察与每周复盘
+                  <small>
+                    即时提示依据记录生成；每周可使用已配置 AI。不会自动改账。
+                  </small>
+                </span>
+              </label>
+              <div className="alerts-list">
+                {alerts.map((row) => (
+                  <article key={row.id}>
+                    <h3>{row.title}</h3>
+                    <AdvisorMarkdown text={row.body} />
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => {
+                          close();
+                          advisor(row.prompt);
+                        }}
+                      >
+                        与顾问讨论
+                      </button>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={state.readAlerts.includes(row.id)}
+                        onClick={() =>
+                          change(
+                            (current) => ({
+                              ...current,
+                              readAlerts: [...current.readAlerts, row.id],
+                            }),
+                            "已读提醒",
+                          )
+                        }
+                      >
+                        {state.readAlerts.includes(row.id)
+                          ? "已读"
+                          : "标为已读"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+                {!alerts.length && (
+                  <p>当前没有待处理提醒。更新账户或计划后，会生成新的提示。</p>
+                )}
+              </div>
+            </>
+          )}
+          {notificationView === "channels" && (
+            <>
+              <ChannelSettings
+                householdId={store.cloudHousehold}
+                proactive={state.preferences.proactive !== false}
+              />
+              <PushSettings householdId={store.cloudHousehold} />
+            </>
+          )}
         </Dialog>
       )}
       {modal?.kind === "settings" && (

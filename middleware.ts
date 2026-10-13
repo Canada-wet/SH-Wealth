@@ -7,7 +7,9 @@ export async function middleware(request: NextRequest) {
   if (
     path === "/login" ||
     path.startsWith("/auth/") ||
-    path === "/api/advisor/digest"
+    path === "/api/advisor/digest" ||
+    path === "/api/notifications/telegram" ||
+    path === "/api/notifications/whatsapp"
   )
     return NextResponse.next();
   let response = NextResponse.next({ request });

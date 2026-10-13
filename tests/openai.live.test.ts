@@ -69,3 +69,28 @@ it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
   },
   75000,
 );
+it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
+  "真实OpenAI：外部渠道只读顾问回答合成快照，资产保持不变",
+  async () => {
+    loadEnvConfig(process.cwd());
+    const { channelAdvice } = await import("../lib/channel-advisor");
+    const state = saveAsset(emptyState(), {
+      id: "channel-fixture",
+      name: "合成现金",
+      category: "现金",
+      owner: "joint",
+      value: 500,
+      annualReturn: null,
+    });
+    state.preferences.model = "openai-fast";
+    const original = JSON.stringify(state);
+    const answer = await channelAdvice(
+      "目前家庭净资产多少？用一句话回答。",
+      state,
+    );
+    expect(answer).toContain("500");
+    expect(answer).toContain("只读顾问");
+    expect(JSON.stringify(state)).toBe(original);
+  },
+  75000,
+);

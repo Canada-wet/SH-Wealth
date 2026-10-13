@@ -37,7 +37,7 @@ E2E_USE_MOCK_AUTH=1 npm run test:e2e
 Supabase 配置：
 
 1. 将 `.env.example` 的配置放入 `.env.local` 或 `.env`。这些文件已加入 Git 忽略规则。
-2. 新项目先运行 `supabase/schema.sql`，再依次执行 `supabase/persistence.sql`、`supabase/push.sql`、`supabase/access.sql`、`supabase/shared-home.sql`。
+2. 新项目先运行 `supabase/schema.sql`，再依次执行 `supabase/persistence.sql`、`supabase/push.sql`、`supabase/access.sql`、`supabase/shared-home.sql`、`supabase/channels.sql`。
 3. 由管理员预先创建并确认两个授权账号，页面不开放注册。登录时自动创建或复用唯一家庭，并关联两位成员，不需要手动分享邀请代码。
 4. 后续保存自动同步；重新打开恢复已登录的家庭连接。实时事件、窗口恢复可见和轮询一起同步伴侣的更新。
 
@@ -94,6 +94,8 @@ Supabase 配置：
 
 ## 真实外部集成测试
 
+通知中心增加“消息渠道”：支持 Email（Resend 或 TLS SMTP）、Telegram Bot 和 WhatsApp Business 的订阅、绑定、断开、测试与周报分发。Telegram 支持主动授权的只读平台内顾问，聊天回存家庭历史；WhatsApp 顾问默认关闭，必须先核实 Meta 当前政策。微信仅完成可行性评估，未声称已接通。完整配置、安全边界与官方资料见 [消息渠道接入说明](docs/notifications-setup.md)。
+
 默认 `npm test` 不调用付费模型或外部数据库。显式运行：
 
 ```bash
@@ -102,7 +104,7 @@ npm run test:ai
 npm run test:e2e:cloud
 ```
 
-所有写入测试使用合成数据和隔离的临时家庭；另有显式启用的 `home.live.spec.ts` 只读检查，验证全新浏览器登录自动加载真实共同家庭，且文档和版本不变。数据库测试另创建白名单外临时账号验证拒绝访问，结束后仅清理测试对象，不删除真实账号。忽略的本地环境需要 `TEST_MEMBER_ONE_PASSWORD` / `TEST_MEMBER_TWO_PASSWORD`，不可提交密码。`test:ai` 使用已配置的 OpenAI key 验证授权聊天和主动周报两次合成数据请求，会产生少量 API 费用。Anthropic / DeepSeek 的适配器通过 mock 测试；真实调用还需要对应 key。
+所有写入测试使用合成数据和隔离的临时家庭；另有显式启用的 `home.live.spec.ts` 只读检查，验证全新浏览器登录自动加载真实共同家庭，且文档和版本不变。数据库测试另创建白名单外临时账号验证拒绝访问，结束后仅清理测试对象，不删除真实账号。忽略的本地环境需要 `TEST_MEMBER_ONE_PASSWORD` / `TEST_MEMBER_TWO_PASSWORD`，不可提交密码。`test:ai` 使用已配置的 OpenAI key 验证授权聊天、主动周报和渠道只读顾问三次合成数据请求，会产生少量 API 费用。Anthropic / DeepSeek 的适配器通过 mock 测试；真实调用还需要对应 key。
 
 ## GitHub 与 Vercel
 
