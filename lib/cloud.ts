@@ -12,7 +12,10 @@ export function cloudClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   client ??= createBrowserClient(url, key, {
-    cookieOptions: { secure: typeof window !== "undefined" && window.location.protocol === "https:" },
+    cookieOptions: {
+      secure:
+        typeof window !== "undefined" && window.location.protocol === "https:",
+    },
   });
   return client;
 }
@@ -26,6 +29,14 @@ export async function cloudRead(householdId: string) {
     .single();
   if (error) throw new Error(error.message);
   return data as CloudDocument;
+}
+export async function sharedHousehold() {
+  const client = cloudClient();
+  if (!client) throw new Error("尚未配置 Supabase。");
+  const { data, error } = await client.rpc("ensure_shared_wealth_household");
+  if (error) throw new Error(error.message);
+  if (typeof data !== "string") throw new Error("共同家庭初始化失败。");
+  return data;
 }
 export async function cloudWrite(
   householdId: string,

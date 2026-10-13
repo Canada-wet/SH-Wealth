@@ -8,6 +8,7 @@ import {
 } from "./wealth";
 export const STATE_KEY = "together-wealth-v3";
 export const BACKUP_KEY = "together-wealth-backup-v3";
+export const MIGRATION_KEY = "together-wealth-before-cloud-v3";
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 export function readState(storage: StorageLike): WealthState {
   const saved = storage.getItem(STATE_KEY);

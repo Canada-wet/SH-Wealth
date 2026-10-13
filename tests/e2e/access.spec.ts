@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { authenticate } from "./auth-helper";
+import { authenticate, cleanupAuthenticated } from "./auth-helper";
+test.afterEach(async ({ page }) => cleanupAuthenticated(page));
 import { emptyState } from "../../lib/wealth";
 test("访客无法进入工作台、白名单外账号不能登录、接口拒绝匿名", async ({
   page,
@@ -45,15 +46,20 @@ test("回复标题、列表、粗体数字和表格都正确显示，不暴露Ma
   ).toBeVisible();
   await expect(message.locator("strong").first()).toHaveText("净资产：");
   await expect(message.locator("table")).toBeVisible();
-  const tableSize = await message.locator(".advisor-table-scroll").evaluate(element => ({width:element.clientWidth,content:element.scrollWidth}));
+  const tableSize = await message
+    .locator(".advisor-table-scroll")
+    .evaluate((element) => ({
+      width: element.clientWidth,
+      content: element.scrollWidth,
+    }));
   expect(tableSize.content).toBeLessThanOrEqual(tableSize.width + 1);
   await expect(message).not.toContainText("**");
-  await expect(message.getByText("整体财务较稳健。",{exact:true})).toBeInViewport();
-  await page
-    .locator(".advisor-window")
-    .screenshot({
-      path: `test-results/chat-formatted-${test.info().project.name}.png`,
-    });
+  await expect(
+    message.getByText("整体财务较稳健。", { exact: true }),
+  ).toBeInViewport();
+  await page.locator(".advisor-window").screenshot({
+    path: `test-results/chat-formatted-${test.info().project.name}.png`,
+  });
 });
 test("重置入口能发起邮件请求，过期链接不会显示修改密码成功", async ({
   page,

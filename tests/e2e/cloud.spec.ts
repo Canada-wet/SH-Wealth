@@ -1,98 +1,44 @@
-import { test, expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
-import { loadEnvConfig } from "@next/env";
-test("两位成员通过页面登录、共享家庭、同步编辑并在重开后恢复", async ({
+import { test, expect } from "@playwright/test";
+import { emptyState, saveAsset } from "../../lib/wealth";
+import { authenticate, cleanupAuthenticated } from "./auth-helper";
+test("双成员自动恢复、资产与聊天跨设备同步，刷新后继续旧对话", async ({
   page,
   browser,
 }) => {
-  test.skip(
-    process.env.RUN_SUPABASE_E2E !== "1",
-    "真实Supabase UI测试单独启用",
-  );
+  test.skip(process.env.RUN_SUPABASE_E2E !== "1", "Live cloud test is opt-in");
   test.setTimeout(60000);
-  loadEnvConfig(process.cwd());
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  );
-  const fixtures: { id: string; email: string; password: string }[] = [];
-  let householdId = "";
+  const state = saveAsset(emptyState(), {
+    id: "fixture",
+    name: "共享测试储蓄",
+    owner: "joint",
+    category: "现金",
+    value: 500,
+    annualReturn: 2,
+  });
+  state.preferences.model = "local";
+  state.messages = [
+    { id: "old-user", role: "user", text: "家庭现金安排" },
+    { id: "old-answer", role: "assistant", text: "这是已保存的历史讨论。" },
+  ];
+  const home = await authenticate(page, { seed: state });
   const partnerContext = await browser.newContext();
   const partner = await partnerContext.newPage();
-  const account = async () => {
-    const index = fixtures.length;
-    const email = ["henrywhy233@gmail.com", "sallyxie0378@gmail.com"][index];
-    const password =
-      process.env[
-        index === 0 ? "TEST_MEMBER_ONE_PASSWORD" : "TEST_MEMBER_TWO_PASSWORD"
-      ];
-    if (!password)
-      throw new Error(
-        "Private cloud tests require both member passwords in ignored local environment.",
-      );
-    const fixture = { id: "existing-authorized-member", email, password };
-    fixtures.push(fixture);
-    return fixture;
-  };
-  const login = async (
-    target: Page,
-    fixture: { email: string; password: string },
-  ) => {
-    target.on("dialog", (dialog) => dialog.accept());
-    await target.goto("/login");
-    await target.getByLabel("邮箱", { exact: true }).fill(fixture.email);
-    await target.getByLabel("密码", { exact: true }).fill(fixture.password);
-    await target
-      .getByRole("button", { name: "登录家庭空间", exact: true })
-      .click();
-    await expect(target).toHaveURL(/\/$/);
-    await target
-      .getByRole("button", { name: "备份与同步", exact: true })
-      .click();
-    const dialog = target.getByRole("dialog");
-    await expect(dialog).toContainText("已登录");
-  };
   try {
-    const first = await account();
-    const second = await account();
-    await login(page, first);
-    let dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "新建家庭", exact: true }).click();
-    await expect(dialog).toContainText("家庭空间已创建");
-    householdId = await dialog.getByLabel("选择家庭").inputValue();
-    await dialog
-      .getByRole("button", { name: "上传本机数据", exact: true })
-      .click();
-    await expect(dialog).toContainText("本机数据已上传");
-    await dialog
-      .getByRole("button", { name: "显示邀请代码", exact: true })
-      .click();
-    const invite = await dialog.locator(".invite-code code").innerText();
-    await dialog.getByRole("button", { name: "关闭弹窗" }).click();
-    await page.getByRole("button", { name: "添加资产", exact: true }).click();
-    dialog = page.getByRole("dialog");
-    await dialog.getByLabel("资产名称").fill("共享测试储蓄");
-    await dialog.getByLabel("当前价值（CAD）").fill("500");
-    await dialog.getByRole("button", { name: "保存资产" }).click();
-    await expect(page.locator(".save-status")).toContainText("已同步 Supabase");
-    await login(partner, second);
-    dialog = partner.getByRole("dialog");
-    await dialog.getByLabel("伴侣邀请代码").fill(invite);
-    await dialog.getByRole("button", { name: "加入家庭", exact: true }).click();
-    await expect(dialog).toContainText("已加入家庭空间");
-    await dialog
-      .getByRole("button", { name: "加载云端数据", exact: true })
-      .click();
-    await expect(dialog).toContainText("云端家庭已连接");
-    await dialog.getByRole("button", { name: "关闭弹窗" }).click();
-    await expect(partner.getByTestId("net-worth")).toHaveText("$500.00");
+    await authenticate(partner, {
+      email: "sallyxie0378@gmail.com",
+      householdId: home,
+    });
+    await page.goto("/");
+    await partner.goto("/");
+    await expect(page.getByTestId("net-worth")).toHaveText("$500.00");
+    await expect(partner.locator(".save-status")).toContainText(
+      "已同步 Supabase",
+    );
     await partner
       .getByRole("button", { name: "编辑共享测试储蓄本年回报" })
       .click();
-    dialog = partner.getByRole("dialog");
-    await dialog.getByLabel("本年回报（%）").fill("-4.5");
-    await dialog.getByRole("button", { name: "保存资产" }).click();
+    await partner.getByRole("dialog").getByLabel("本年回报（%）").fill("-4.5");
+    await partner.getByRole("button", { name: "保存资产" }).click();
     await expect(partner.locator(".save-status")).toContainText(
       "已同步 Supabase",
     );
@@ -100,22 +46,43 @@ test("两位成员通过页面登录、共享家庭、同步编辑并在重开�
     await expect(
       page.getByRole("button", { name: "编辑共享测试储蓄本年回报" }),
     ).toContainText("-4.5%");
+    await page.getByRole("button", { name: "打开财富顾问" }).click();
+    await expect(page.locator(".advisor-messages")).toContainText(
+      "已保存的历史讨论",
+    );
+    await page.getByRole("button", { name: "新建对话" }).click();
+    await page.getByLabel("顾问消息").fill("目前净资产多少");
+    await page.getByRole("button", { name: "发送消息" }).click();
+    await expect(page.locator(".advisor-messages")).toContainText("500");
+    await expect(page.locator(".save-status")).toContainText("已同步 Supabase");
     await partner.reload();
-    await expect(partner.getByTestId("net-worth")).toHaveText("$500.00");
+    await partner.getByRole("button", { name: "打开财富顾问" }).click();
+    await partner.getByRole("button", { name: "查看聊天历史" }).click();
+    await expect(
+      partner.getByRole("button", { name: "继续会话：家庭现金安排" }),
+    ).toBeVisible();
+    await partner
+      .getByRole("button", { name: "继续会话：家庭现金安排" })
+      .click();
+    await expect(partner.locator(".advisor-messages")).toContainText(
+      "已保存的历史讨论",
+    );
+    await partner.getByLabel("顾问消息").fill("目前净资产多少");
+    await partner.getByRole("button", { name: "发送消息" }).click();
+    await expect(partner.locator(".advisor-messages")).toContainText("500");
     await expect(partner.locator(".save-status")).toContainText(
       "已同步 Supabase",
+    );
+    await partner.reload();
+    await partner.getByRole("button", { name: "打开财富顾问" }).click();
+    await expect(partner.locator(".advisor-messages")).toContainText(
+      "已保存的历史讨论",
     );
     await expect(
       partner.getByRole("button", { name: "编辑共享测试储蓄本年回报" }),
     ).toContainText("-4.5%");
   } finally {
     await partnerContext.close();
-    if (householdId) {
-      const deleted = await admin
-        .from("households")
-        .delete()
-        .eq("id", householdId);
-      if (deleted.error) throw deleted.error;
-    }
+    await cleanupAuthenticated(page);
   }
 });

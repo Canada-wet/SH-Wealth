@@ -444,6 +444,16 @@ export default function Home() {
             </button>
           </div>
         )}
+        {store.cloudChoice && (
+          <div className="error-banner" role="alert">
+            <span>
+              发现本机与云端两份不同数据，尚未覆盖。请选择家庭共享版本。
+            </span>
+            <button onClick={() => open({ kind: "settings" })}>
+              选择数据版本
+            </button>
+          </div>
+        )}
         <div className="mobile-nav">
           <a href="#assets">资产</a>
           <a href="#contributions">贡献</a>
@@ -1465,11 +1475,14 @@ export default function Home() {
           connectCloud={store.connectCloud}
           disconnectCloud={store.disconnectCloud}
           cloudStatus={store.cloudStatus}
+          cloudChoice={store.cloudChoice}
           householdId={store.cloudHousehold}
         />
       )}
       <FloatingAdvisor
         state={state}
+        saveStatus={store.cloudStatus}
+        loading={store.cloudLoading || !ready}
         onActions={onActions}
         onChange={(update) => commit(update, "保存顾问对话")}
       />

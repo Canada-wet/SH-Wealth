@@ -26,7 +26,12 @@ export type BudgetItem = {
   essential: boolean;
 };
 export type Goal = { name: string; target: number; year: string };
-export type Message = { id: string; role: "assistant" | "user"; text: string };
+export type Message = {
+  id: string;
+  role: "assistant" | "user";
+  text: string;
+  createdAt?: string;
+};
 export type Snapshot = {
   id: string;
   at: string;
@@ -55,6 +60,8 @@ export type WealthState = {
   history: Snapshot[];
   plan: { values: Record<string, string>; checks: Record<string, boolean> };
   messages: Message[];
+  chatCurrent?: import("./conversations").ChatMeta;
+  chatArchives?: import("./conversations").Conversation[];
   preferences: {
     model: string;
     allocation: "category" | "owner";
@@ -544,4 +551,34 @@ export function validateState(raw: unknown): asserts raw is WealthState {
     state.readAlerts.some((value) => typeof value !== "string")
   )
     throw new Error("设置数据无效。");
+  const validMessage = (row: Message) =>
+    !!row &&
+    typeof row.id === "string" &&
+    !!row.id &&
+    ["assistant", "user"].includes(row.role) &&
+    typeof row.text === "string" &&
+    (row.createdAt === undefined || !Number.isNaN(Date.parse(row.createdAt)));
+  const validMeta = (row: import("./conversations").ChatMeta) =>
+    !!row &&
+    typeof row.id === "string" &&
+    !!row.id &&
+    typeof row.title === "string" &&
+    (row.createdAt === undefined || !Number.isNaN(Date.parse(row.createdAt))) &&
+    (row.updatedAt === undefined || !Number.isNaN(Date.parse(row.updatedAt)));
+  if (
+    state.messages.some((row) => !validMessage(row)) ||
+    (state.chatCurrent !== undefined && !validMeta(state.chatCurrent)) ||
+    (state.chatArchives !== undefined &&
+      (!Array.isArray(state.chatArchives) ||
+        !unique(state.chatArchives) ||
+        state.chatArchives.some(
+          (row) =>
+            !validMeta(row) ||
+            !Array.isArray(row.messages) ||
+            !unique(row.messages) ||
+            row.messages.some((message) => !validMessage(message)) ||
+            row.id === (state.chatCurrent?.id ?? "legacy-chat"),
+        )))
+  )
+    throw new Error("会话历史无效。");
 }

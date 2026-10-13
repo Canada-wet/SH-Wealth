@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { emptyState, saveAsset } from "../../lib/wealth";
-import { authenticate } from "./auth-helper";
+import { authenticate, cleanupAuthenticated } from "./auth-helper";
 test.beforeEach(async ({ page }) => authenticate(page));
+test.afterEach(async ({ page }) => cleanupAuthenticated(page));
 const document = () =>
   saveAsset(emptyState(), {
     id: "a",

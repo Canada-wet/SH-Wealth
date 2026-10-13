@@ -1,26 +1,66 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, ChevronDown, Send, Sparkles, Trash2, X } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  Send,
+  Sparkles,
+  History,
+  Plus,
+  X,
+} from "lucide-react";
 import { id, totals, type WealthState } from "@/lib/wealth";
 import type { AssistantAction } from "@/lib/advisor-actions";
 import AdvisorMarkdown from "./AdvisorMarkdown";
+import {
+  activeChat,
+  allChats,
+  appendChat,
+  newChat,
+  openChat,
+} from "@/lib/conversations";
 export default function FloatingAdvisor({
   state,
   onActions,
   onChange,
+  saveStatus,
+  loading = false,
 }: {
   state: WealthState;
   onActions: (actions: AssistantAction[]) => WealthState;
-  onChange: (update: (state: WealthState) => WealthState) => void;
+  onChange: (update: (state: WealthState) => WealthState) => WealthState;
+  saveStatus?: string;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const currentChat =
+    allChats(state).find((chat) => chat.id === selectedChatId) ??
+    activeChat(state);
+  const chooseChat = (chatId: string) => {
+    setSelectedChatId(chatId);
+    try {
+      localStorage.setItem("together-selected-chat", chatId);
+    } catch {
+      setError("阅读位置未能保存，聊天内容不受影响。");
+    }
+  };
   const latest = useRef(state);
   latest.current = state;
   const messagesRef = useRef<HTMLDivElement>(null);
   const controller = useRef<AbortController | null>(null);
+  useEffect(() => {
+    try {
+      setSelectedChatId(localStorage.getItem("together-selected-chat"));
+    } catch {
+      // A blocked local preference must not prevent cloud chat restoration.
+    }
+  }, []);
   useEffect(() => {
     const show = (event: Event) => {
       setOpen(true);
@@ -37,11 +77,14 @@ export default function FloatingAdvisor({
     const container = messagesRef.current;
     if (!container) return;
     const newest = container.lastElementChild as HTMLElement | null;
-    if (!busy && state.messages.at(-1)?.role === "assistant" && newest) {
+    if (!busy && currentChat.messages.at(-1)?.role === "assistant" && newest) {
       // Complete replies arrive at once: start at their conclusion, not their footer.
-      container.scrollTop += newest.getBoundingClientRect().top - container.getBoundingClientRect().top - 16;
+      container.scrollTop +=
+        newest.getBoundingClientRect().top -
+        container.getBoundingClientRect().top -
+        16;
     } else container.scrollTop = container.scrollHeight;
-  }, [state.messages, busy, open]);
+  }, [currentChat.messages, busy, open, historyOpen]);
   const fingerprint = (current: WealthState) =>
     JSON.stringify({
       assets: current.assets,
@@ -55,18 +98,15 @@ export default function FloatingAdvisor({
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
     const question = input.trim();
-    if (!question || busy) return;
+    if (!question || busy || loading) return;
     setError("");
-    const snapshot = latest.current;
+    const snapshot = openChat(latest.current, currentChat.id);
+    const chatId = activeChat(snapshot).id;
     const financial = fingerprint(snapshot);
     try {
-      onChange((current) => ({
-        ...current,
-        messages: [
-          ...current.messages,
-          { id: id(), role: "user", text: question },
-        ],
-      }));
+      onChange((current) =>
+        appendChat(current, { id: id(), role: "user", text: question }, chatId),
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "消息无法保存");
       return;
@@ -101,10 +141,9 @@ export default function FloatingAdvisor({
         applied = true;
       }
       const text = `${result.answer || "已完成分析。"}${applied ? `\n\n✓ 已保存 ${actions.length} 项变更，页面已同步。` : ""}${result.route ? `\n\n${result.route.provider === "local" ? "本地助手" : `${result.route.provider} · ${result.route.model}`} · ${result.route.reason}` : ""}`;
-      onChange((current) => ({
-        ...current,
-        messages: [...current.messages, { id: id(), role: "assistant", text }],
-      }));
+      onChange((current) =>
+        appendChat(current, { id: id(), role: "assistant", text }, chatId),
+      );
     } catch (reason) {
       const message =
         reason instanceof Error
@@ -120,6 +159,11 @@ export default function FloatingAdvisor({
     }
   };
   const total = totals(state);
+  const chats = allChats(state).filter((chat) =>
+    `${chat.title}\n${chat.messages.map((row) => row.text).join("\n")}`
+      .toLowerCase()
+      .includes(historyQuery.toLowerCase()),
+  );
   return (
     <div className="advisor-widget">
       {open && (
@@ -135,20 +179,31 @@ export default function FloatingAdvisor({
               </small>
             </div>
             <button
-              aria-label="清空聊天记录"
+              aria-label="查看聊天历史"
               disabled={busy}
+              aria-expanded={historyOpen}
+              onClick={() => setHistoryOpen(!historyOpen)}
+            >
+              <History size={17} />
+            </button>
+            <button
+              aria-label="新建对话"
+              disabled={busy || loading}
               onClick={() => {
-                if (window.confirm("清空当前聊天记录？"))
-                  try {
-                    onChange((current) => ({ ...current, messages: [] }));
-                  } catch (reason) {
-                    setError(
-                      reason instanceof Error ? reason.message : "保存失败",
-                    );
-                  }
+                try {
+                  const next = onChange(newChat);
+                  chooseChat(next.chatCurrent!.id);
+                  setHistoryOpen(false);
+                  setInput("");
+                  setError("");
+                } catch (reason) {
+                  setError(
+                    reason instanceof Error ? reason.message : "保存失败",
+                  );
+                }
               }}
             >
-              <Trash2 size={15} />
+              <Plus size={17} />
             </button>
             <button aria-label="收起顾问" onClick={() => setOpen(false)}>
               <ChevronDown size={19} />
@@ -197,18 +252,86 @@ export default function FloatingAdvisor({
             <span>{state.debts.length} 项负债</span>
             <span>净资产 {total.netWorth.toLocaleString("en-CA")}</span>
           </div>
+          <div className="advisor-conversation-meta">
+            <span title={currentChat.title}>
+              {historyOpen ? "历史会话" : currentChat.title}
+            </span>
+            <small>{saveStatus || "本机已保存"}</small>
+          </div>
+          {historyOpen && (
+            <div className="advisor-history" aria-label="聊天历史">
+              <label>
+                搜索历史
+                <input
+                  type="search"
+                  aria-label="搜索聊天历史"
+                  placeholder="搜索问题或回复…"
+                  value={historyQuery}
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                />
+              </label>
+              <p>新建对话会保留旧记录；选择任意会话可回看并继续提问。</p>
+              {chats.length ? (
+                chats.map((chat) => (
+                  <button
+                    type="button"
+                    className="advisor-history-item"
+                    key={chat.id}
+                    aria-label={`继续会话：${chat.title}`}
+                    onClick={() => {
+                      try {
+                        chooseChat(chat.id);
+                        setHistoryOpen(false);
+                        setInput("");
+                      } catch (reason) {
+                        setError(
+                          reason instanceof Error
+                            ? reason.message
+                            : "无法打开会话",
+                        );
+                      }
+                    }}
+                  >
+                    <b>{chat.title}</b>
+                    <small>
+                      {chat.messages.length} 条消息 ·{" "}
+                      {chat.updatedAt
+                        ? new Date(chat.updatedAt).toLocaleString("zh-CN", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "导入的历史记录"}
+                      {chat.id === currentChat.id ? " · 当前会话" : ""}
+                    </small>
+                    <span>
+                      {chat.messages
+                        .filter((row) => row.role === "assistant")
+                        .at(-1)
+                        ?.text.replace(/[*#]/g, "")
+                        .slice(0, 70) || "点击继续对话"}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p>没有匹配的会话。</p>
+              )}
+            </div>
+          )}
           <div
             className="advisor-messages"
+            hidden={historyOpen}
             ref={messagesRef}
             aria-live="polite"
           >
-            {!state.messages.length && (
+            {!currentChat.messages.length && (
               <div className="chat-message assistant">
                 我可以解读你们的资产、负债与贡献，也可以根据明确要求更新数据。试试「把某个账户本年回报改为
                 -2.5%」。
               </div>
             )}
-            {state.messages.map((message) => (
+            {currentChat.messages.map((message) => (
               <div className={`chat-message ${message.role}`} key={message.id}>
                 {message.role === "assistant" ? (
                   <AdvisorMarkdown text={message.text} />
@@ -232,6 +355,7 @@ export default function FloatingAdvisor({
             <textarea
               aria-label="顾问消息"
               value={input}
+              disabled={historyOpen || loading}
               maxLength={6000}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
@@ -247,7 +371,10 @@ export default function FloatingAdvisor({
               placeholder="描述问题，或直接要求修改数据…"
               rows={2}
             />
-            <button disabled={busy || !input.trim()} aria-label="发送消息">
+            <button
+              disabled={busy || historyOpen || loading || !input.trim()}
+              aria-label="发送消息"
+            >
               <Send size={17} />
             </button>
           </form>

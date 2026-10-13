@@ -6,8 +6,24 @@ import {
   validateState,
   type WealthState,
 } from "./wealth";
-import { readState, writeState, STATE_KEY, BACKUP_KEY } from "./storage";
-import { cloudClient, cloudRead, cloudWrite } from "./cloud";
+import {
+  readState,
+  writeState,
+  STATE_KEY,
+  BACKUP_KEY,
+  MIGRATION_KEY,
+} from "./storage";
+import { cloudClient, cloudRead, cloudWrite, sharedHousehold } from "./cloud";
+import { connectionPlan, hasSavedData, sameData } from "./cloud-plan";
+import { mergeChatHistory } from "./conversations";
+export type CloudChoice = {
+  householdId: string;
+  remoteRevision: number;
+  assets: number;
+  debts: number;
+  history: number;
+  messages: number;
+};
 type CloudLink = {
   householdId: string;
   remoteRevision: number;
@@ -22,6 +38,11 @@ export default function useWealth() {
   const [error, setError] = useState("");
   const [cloudStatus, setCloudStatus] = useState("仅保存于本机");
   const [cloudHousehold, setCloudHousehold] = useState("");
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudChoice, setCloudChoice] = useState<CloudChoice | null>(null);
+  const choice = useRef<CloudChoice | null>(null);
+  const booting = useRef(false);
+  const localReadable = useRef(true);
   const remote = useRef<CloudLink | null>(null);
   const syncing = useRef(false);
   const syncCloud = useCallback(async function sync(): Promise<void> {
@@ -66,6 +87,8 @@ export default function useWealth() {
   }, []);
   const replaceFromCloud = useCallback((document: WealthState) => {
     validateState(document);
+    if (hasSavedData(current.current) && !localStorage.getItem(MIGRATION_KEY))
+      localStorage.setItem(MIGRATION_KEY, JSON.stringify(current.current));
     writeState(localStorage, document);
     current.current = document;
     setState(document);
@@ -73,7 +96,7 @@ export default function useWealth() {
   const connectCloud = useCallback(
     async (
       householdId: string,
-      mode: "load" | "upload" | "resume" = "load",
+      mode: "load" | "upload" | "resume" | "auto" = "load",
     ) => {
       const client = cloudClient();
       if (!client) throw new Error("尚未配置 Supabase URL 与公开密钥。");
@@ -81,9 +104,70 @@ export default function useWealth() {
         data: { user },
       } = await client.auth.getUser();
       if (!user) throw new Error("请先登录。");
+      const observedRevision = current.current.revision;
       const row = await cloudRead(householdId);
+      let operation = mode;
+      let merged = false;
+      if (mode === "auto") {
+        const decision = connectionPlan(current.current, row.document);
+        if (decision === "choice") {
+          remote.current = null;
+          const pending = {
+            householdId,
+            remoteRevision: row.revision,
+            assets: row.document!.assets.length,
+            debts: row.document!.debts.length,
+            history: row.document!.history.length,
+            messages:
+              row.document!.messages.length +
+              (row.document!.chatArchives ?? []).reduce(
+                (sum, chat) => sum + chat.messages.length,
+                0,
+              ),
+          };
+          choice.current = pending;
+          setCloudChoice(pending);
+          setCloudHousehold(householdId);
+          setCloudStatus("本机与云端均有数据 · 待选择版本");
+          return;
+        }
+        if (decision === "merge-chat") {
+          replaceFromCloud(
+            finishChange(
+              row.document!,
+              mergeChatHistory(row.document!, current.current),
+              "保留本机聊天历史",
+            ),
+          );
+          operation = "upload";
+          merged = true;
+        } else operation = decision;
+      }
+      if (
+        operation === "load" &&
+        current.current.revision !== observedRevision &&
+        !(row.document && sameData(row.document, current.current)) &&
+        !merged
+      )
+        throw new Error("加载期间本机有新修改，未覆盖你的数据，请重新连接。");
+      if (
+        operation === "upload" &&
+        choice.current?.householdId === householdId &&
+        choice.current.remoteRevision !== row.revision
+      ) {
+        choice.current = {
+          ...choice.current,
+          remoteRevision: row.revision,
+          assets: row.document?.assets.length ?? 0,
+          debts: row.document?.debts.length ?? 0,
+          history: row.document?.history.length ?? 0,
+          messages: row.document?.messages.length ?? 0,
+        };
+        setCloudChoice(choice.current);
+        throw new Error("云端又有新修改，请确认最新版本信息后再选择。");
+      }
       let resumeNeedsUpload = false;
-      if (mode === "resume") {
+      if (operation === "resume") {
         const raw = localStorage.getItem(CLOUD_KEY);
         const saved: CloudLink | null = raw ? JSON.parse(raw) : null;
         if (
@@ -94,20 +178,29 @@ export default function useWealth() {
           throw new Error("请重新选择家庭空间。");
         if (
           row.revision !== saved.remoteRevision &&
-          current.current.revision !== saved.localRevision
+          current.current.revision !== saved.localRevision &&
+          !(row.document && sameData(row.document, current.current))
         )
           throw new Error(
             "本机与云端都有新修改，请在数据设置选择要加载的版本。",
           );
-        if (row.revision !== saved.remoteRevision && row.document)
+        if (
+          row.revision !== saved.remoteRevision &&
+          row.document &&
+          !sameData(row.document, current.current)
+        )
           replaceFromCloud(row.document);
         resumeNeedsUpload =
           row.revision === saved.remoteRevision &&
           current.current.revision !== saved.localRevision;
-      } else if (mode === "load" && row.document)
+      } else if (
+        operation === "load" &&
+        row.document &&
+        !sameData(row.document, current.current)
+      )
         replaceFromCloud(row.document);
       const shouldUpload =
-        mode === "upload" || !row.document || resumeNeedsUpload;
+        operation === "upload" || !row.document || resumeNeedsUpload;
       remote.current = {
         householdId,
         remoteRevision: row.revision,
@@ -116,18 +209,27 @@ export default function useWealth() {
       };
       localStorage.setItem(CLOUD_KEY, JSON.stringify(remote.current));
       setCloudHousehold(householdId);
+      choice.current = null;
+      setCloudChoice(null);
       setError("");
       await syncCloud();
+      if (!remote.current)
+        throw new Error(
+          "云端同步未完成，本机数据已保留，请重新连接后处理版本冲突。",
+        );
     },
     [replaceFromCloud, syncCloud],
   );
   useEffect(() => {
     try {
       const loaded = readState(localStorage);
-      writeState(localStorage, loaded);
+      // A normal refresh must not replace the previous-change recovery copy.
+      if (localStorage.getItem(STATE_KEY) === null)
+        writeState(localStorage, loaded);
       current.current = loaded;
       setState(loaded);
     } catch (reason) {
+      localReadable.current = false;
       setError(
         `保存数据无法读取：${reason instanceof Error ? reason.message : "格式错误"}。原始数据已保留，请使用备份恢复。`,
       );
@@ -149,23 +251,44 @@ export default function useWealth() {
     return () => window.removeEventListener("storage", syncTab);
   }, []);
   useEffect(() => {
-    if (!ready || !cloudClient()) return;
+    if (!ready) return;
+    if (!cloudClient()) {
+      setCloudLoading(false);
+      return;
+    }
     let active = true;
     const resume = async () => {
       try {
-        const raw = localStorage.getItem(CLOUD_KEY);
-        if (!raw) return;
-        const saved: CloudLink = JSON.parse(raw);
         const {
           data: { session },
         } = await cloudClient()!.auth.getSession();
-        if (active && session?.user.id === saved.userId)
-          await connectCloud(saved.householdId, "resume");
+        if (!active || !session || booting.current || !localReadable.current)
+          return;
+        booting.current = true;
+        setCloudStatus("正在连接家庭云端数据…");
+        const raw = localStorage.getItem(CLOUD_KEY);
+        const saved: CloudLink | null = raw ? JSON.parse(raw) : null;
+        if (saved?.userId === session.user.id) {
+          try {
+            await connectCloud(saved.householdId, "resume");
+          } catch (reason) {
+            if (
+              reason instanceof Error &&
+              /JSON object|0 rows|not found/i.test(reason.message)
+            ) {
+              localStorage.removeItem(CLOUD_KEY);
+              await connectCloud(await sharedHousehold(), "auto");
+            } else throw reason;
+          }
+        } else await connectCloud(await sharedHousehold(), "auto");
       } catch (reason) {
         if (active) {
           setCloudStatus("云端待连接 · 本机已保存");
           setError(reason instanceof Error ? reason.message : "云端连接失败");
         }
+      } finally {
+        booting.current = false;
+        if (active) setCloudLoading(false);
       }
     };
     void resume();
@@ -181,7 +304,9 @@ export default function useWealth() {
     ) => {
       if (!ready) throw new Error("数据仍在载入，请稍后重试。");
       const previous = current.current;
-      const next = finishChange(previous, update(previous), reason, financial);
+      const updated = update(previous);
+      if (updated === previous) return previous;
+      const next = finishChange(previous, updated, reason, financial);
       writeState(localStorage, next, previous.revision);
       current.current = next;
       setState(next);
@@ -198,6 +323,7 @@ export default function useWealth() {
       current.current = next;
       setState(next);
       setError("");
+      localReadable.current = true;
       void syncCloud();
     },
     [syncCloud],
@@ -288,6 +414,8 @@ export default function useWealth() {
     recoverPrevious,
     cloudStatus,
     cloudHousehold,
+    cloudLoading,
+    cloudChoice,
     connectCloud,
     disconnectCloud,
   };
