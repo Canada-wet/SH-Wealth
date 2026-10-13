@@ -1440,6 +1440,7 @@ td.numeric {
 }
 .advisor-markdown table {
   width: 100%;
+  min-width: 0;
   border-collapse: collapse;
   font-size: 11px;
 }

@@ -45,6 +45,8 @@ test("回复标题、列表、粗体数字和表格都正确显示，不暴露Ma
   ).toBeVisible();
   await expect(message.locator("strong").first()).toHaveText("净资产：");
   await expect(message.locator("table")).toBeVisible();
+  const tableSize = await message.locator(".advisor-table-scroll").evaluate(element => ({width:element.clientWidth,content:element.scrollWidth}));
+  expect(tableSize.content).toBeLessThanOrEqual(tableSize.width + 1);
   await expect(message).not.toContainText("**");
   await page
     .locator(".advisor-window")
