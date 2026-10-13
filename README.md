@@ -19,6 +19,13 @@ NEXT_DIST_DIR=.next-test npm run build
 npm run test:e2e
 ```
 
+CI 浏览器测试使用隔离的假身份服务，不接触真实账号。离线复现：
+
+```bash
+NEXT_DIST_DIR=.next-test NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:3102 NEXT_PUBLIC_SUPABASE_ANON_KEY=offline-test-anon-key npm run build
+E2E_USE_MOCK_AUTH=1 npm run test:e2e
+```
+
 开发缓存在 `.next-dev`，生产缓存在 `.next`，测试缓存在 `.next-test`。修改环境变量或 `next.config.ts` 后需要重启开发服务。
 
 ## 数据保存与共享
@@ -31,7 +38,7 @@ Supabase 配置：
 
 1. 将 `.env.example` 的配置放入 `.env.local` 或 `.env`。这些文件已加入 Git 忽略规则。
 2. 在 SQL Editor 执行 `supabase/persistence.sql`，以及 `supabase/push.sql`。已有旧表可直接执行新增脚本；新项目还需先运行 `supabase/schema.sql`。
-3. 页面内注册或登录，创建家庭并上传本机数据；分享邀请代码给伴侣，伴侣加入后加载云端数据。启用邮件确认的项目需要先确认注册邮件。
+3. 由管理员预先创建并确认两个授权账号，页面不开放注册。登录后创建家庭并上传本机数据；分享邀请代码给伴侣，伴侣加入后加载云端数据。
 4. 后续保存自动同步；重新打开恢复已登录的家庭连接。实时事件、窗口恢复可见和轮询一起同步伴侣的更新。
 
 云端写入通过带版本校验的 RPC 执行。两个设备同时修改时会拒绝旧版本覆盖，而不是静默丢失数据。RLS 限制家庭数据读取；邀请代码只向家庭创建者展示。云端保留完整文档修改历史。
@@ -55,6 +62,18 @@ Supabase 配置：
 
 当前模型配置参考：[OpenAI](https://developers.openai.com/api/docs/guides/latest-model)、[Anthropic](https://platform.claude.com/docs/en/models/overview)、[DeepSeek](https://api-docs.deepseek.com/quick_start/pricing/)。
 
+## 私密登录与密码恢复
+
+工作台仅允许 `henrywhy233@gmail.com` 和 `sallyxie0378@gmail.com` 两个已验证邮箱。服务端通过 Supabase 验证用户，不信任浏览器提交的邮箱；`supabase/access.sql` 进一步以限制型 RLS 策略约束旧表、新表和家庭 RPC。不要仅部署前端白名单。
+
+运行 `supabase/access.sql`，在 Supabase 关闭全局新用户注册，但保持 Email 登录提供方启用。Site URL 设置为 `https://sh-wealth.vercel.app`，允许 `/auth/reset-password` 回跳。初始密码通过管理员接口配置，不属于代码、环境样例或部署变量。可从登录页申请邮件重置，新密码需要至少 10 位。
+
+当前免费默认邮件提供方只向项目团队地址发信且发送额度有限，**不能保证两位成员都能收到重置邮件**。完整邮件恢复需要在 Supabase Authentication 中配置自定义 SMTP。未配置时界面会如实显示服务错误；默认 PKCE 链接应在发起重置时的浏览器打开。配置 SMTP 后可启用 `supabase/templates/recovery.html`，使用一次性 TokenHash 支持跨浏览器恢复。
+
+所有顾问调用都需要授权账号。外部模型在数据库按账号、原子地限制为每分钟 6 次 / 每小时 40 次；限流检查失败时拒绝调用，避免多实例绕过内存限流。
+
+回复采用安全 Markdown 呈现：标题、段落、列表、重点数字和横向可滚动表格，不执行原始 HTML，过滤危险链接。
+
 ## 主动提醒与 Web Push
 
 站内提醒从真实数据生成：待录入资产、估值过期、应急金差额、负债复盘和目标完成。每周 Vercel Cron 从同一份云端家庭文档生成财富回顾并保存为站内提醒。
@@ -73,7 +92,7 @@ npm run test:ai
 npm run test:e2e:cloud
 ```
 
-`test:cloud` 与 `test:e2e:cloud` 创建临时测试账号和家庭，验证共享、持久化、RLS 隔离、版本冲突以及浏览器间同步，结束后清理测试数据，不发送注册邮件。`test:ai` 使用已配置的 OpenAI key 发起一次合成数据的模型请求，会产生少量 API 费用。Anthropic / DeepSeek 的适配器通过 mock 测试；真实调用还需要对应 key。
+真实测试使用两个现有授权账号，只创建临时测试家庭；数据库测试另创建一个白名单外账号验证拒绝访问，结束后仅清理临时家庭和该临时账号，不删除真实账号。忽略的本地环境需要 `TEST_MEMBER_ONE_PASSWORD` / `TEST_MEMBER_TWO_PASSWORD`，不可提交密码。`test:ai` 使用授权登录和已配置的 OpenAI key 发起一次合成数据的模型请求，会产生少量 API 费用。Anthropic / DeepSeek 的适配器通过 mock 测试；真实调用还需要对应 key。
 
 ## GitHub 与 Vercel
 

@@ -15,7 +15,11 @@ jobs:
       - run: npm run build
         env:
           NEXT_DIST_DIR: .next-test
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:3102
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: offline-test-anon-key
       - run: npm run test:e2e
+        env:
+          E2E_USE_MOCK_AUTH: "1"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

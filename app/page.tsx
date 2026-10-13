@@ -58,6 +58,7 @@ import DataSettings from "./components/DataSettings";
 import CashflowTable from "./components/CashflowTable";
 import PushSettings from "./components/PushSettings";
 import { cloudClient } from "@/lib/cloud";
+import { allowedEmail } from "@/lib/access";
 
 type Modal =
   | {
@@ -68,6 +69,20 @@ type Modal =
   | { kind: "goal" | "members" | "history" | "alerts" | "settings" }
   | null;
 export default function Home() {
+  useEffect(() => {
+    const client = cloudClient();
+    if (!client) return;
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((event, session) => {
+      if (
+        event === "SIGNED_OUT" ||
+        (session && !allowedEmail(session.user.email))
+      )
+        window.location.replace("/login");
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const store = useWealth();
   const { state, ready, commit } = store;
   const [modal, setModal] = useState<Modal>(null);

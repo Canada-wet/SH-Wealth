@@ -1,5 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { emptyState, saveAsset } from "../lib/wealth";
+const access = vi.hoisted(() => ({
+  authorize: vi.fn(),
+  slot: vi.fn(async () => ({ data: true, error: null })),
+}));
+vi.mock("@/lib/server-auth", () => ({ authorizeRequest: access.authorize }));
+access.authorize.mockImplementation(async () => ({
+  status: 200,
+  user: { id: "fixture" },
+  client: { rpc: access.slot },
+}));
 vi.mock("@/lib/ai/router", () => ({
   chooseRoute: vi.fn(() => ({
     provider: "local",
@@ -18,6 +28,31 @@ const request = (body: unknown) =>
     headers: { "Content-Type": "application/json" },
   });
 describe("顾问API", () => {
+  it("匿名和未授权邮箱在调用模型之前被拒绝", async () => {
+    for (const status of [401, 403]) {
+      access.authorize.mockResolvedValueOnce({ status, error: "denied" });
+      expect(
+        (await POST(request({ message: "hi", state: emptyState() }))).status,
+      ).toBe(status);
+    }
+  });
+  it("数据库限流生效，检查失败则安全拒绝", async () => {
+    for (const [slot, status] of [
+      [{ data: false, error: null }, 429],
+      [{ data: null, error: { message: "unavailable" } }, 503],
+    ] as const) {
+      vi.mocked(chooseRoute).mockReturnValueOnce({
+        provider: "openai",
+        model: "test",
+        reason: "test",
+        complexity: "simple",
+      });
+      access.slot.mockResolvedValueOnce(slot as never);
+      expect(
+        (await POST(request({ message: "hi", state: emptyState() }))).status,
+      ).toBe(status);
+    }
+  });
   it("非法JSON和空问题返回400", async () => {
     expect(
       (

@@ -13,16 +13,34 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
     });
     const users: string[] = [];
     let householdId: string | undefined;
+    let accountIndex = 0;
     const account = async () => {
-      const email = `together-test-${crypto.randomUUID()}@example.com`;
-      const password = crypto.randomUUID() + "Aa1!";
-      const { data, error } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-      if (error) throw error;
-      users.push(data.user.id);
+      const index = accountIndex++;
+      const email =
+        index < 2
+          ? ["henrywhy233@gmail.com", "sallyxie0378@gmail.com"][index]
+          : `together-test-${crypto.randomUUID()}@example.com`;
+      const password =
+        index < 2
+          ? process.env[
+              index === 0
+                ? "TEST_MEMBER_ONE_PASSWORD"
+                : "TEST_MEMBER_TWO_PASSWORD"
+            ]
+          : crypto.randomUUID() + "Aa1!";
+      if (!password)
+        throw new Error(
+          "Private integration tests require both allowed account passwords.",
+        );
+      if (index >= 2) {
+        const { data, error } = await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        if (error) throw error;
+        users.push(data.user.id);
+      }
       const client = createClient(url, key, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
@@ -34,6 +52,16 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
       const first = await account();
       const second = await account();
       const outsider = await account();
+      expect(
+        (
+          await outsider.rpc("create_wealth_household", {
+            display_name: "Not allowed",
+          })
+        ).error,
+      ).toBeTruthy();
+      expect(
+        (await outsider.rpc("take_wealth_advisor_slot")).error,
+      ).toBeTruthy();
       const created = await first.rpc("create_wealth_household", {
         display_name: "Integration test",
       });
@@ -118,11 +146,12 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
         .eq("household_id", householdId!)
         .order("revision");
       expect(history.data?.map((row) => row.revision)).toEqual([1, 2]);
+      const firstId = (await first.auth.getUser()).data.user!.id;
       const subscription = await first
         .from("wealth_push_subscriptions")
         .insert({
           household_id: householdId,
-          user_id: users[0],
+          user_id: firstId,
           endpoint: `https://example.invalid/fixture-${crypto.randomUUID()}`,
           subscription: {
             endpoint: "fixture",
@@ -139,7 +168,7 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
         .from("wealth_push_subscriptions")
         .insert({
           household_id: householdId,
-          user_id: users[0],
+          user_id: firstId,
           endpoint: "https://example.invalid/forbidden",
           subscription: {},
         });

@@ -2,6 +2,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { cloudClient } from "@/lib/cloud";
+import { allowedEmail } from "@/lib/access";
 import { parseBackup } from "@/lib/storage";
 import type { WealthState } from "@/lib/wealth";
 import Dialog from "./Dialog";
@@ -69,15 +70,15 @@ export default function DataSettings({
       setBusy(false);
     }
   };
-  const auth = (signup: boolean) =>
+  const auth = () =>
     run(async () => {
       if (!client) return;
-      const { data, error } = signup
-        ? await client.auth.signUp({ email, password })
-        : await client.auth.signInWithPassword({ email, password });
+      if (!allowedEmail(email)) throw new Error("此账号没有访问权限。");
+      const { error } = await client.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
       if (error) throw error;
-      if (signup && !data.session)
-        setNotice("注册成功，请查看邮箱中的确认链接，再返回登录。");
     });
   const create = () =>
     run(async () => {
@@ -194,17 +195,17 @@ export default function DataSettings({
                 type="button"
                 className="primary"
                 disabled={busy || !email || password.length < 8}
-                onClick={() => void auth(false)}
+                onClick={() => void auth()}
               >
                 登录
               </button>
               <button
                 type="button"
                 className="secondary"
-                disabled={busy || !email || password.length < 8}
-                onClick={() => void auth(true)}
+                disabled={busy}
+                onClick={() => window.location.assign("/login")}
               >
-                创建账号
+                邮箱重置密码
               </button>
             </div>
           </>
@@ -325,6 +326,7 @@ export default function DataSettings({
                     disconnectCloud();
                     await client.auth.signOut();
                     setHouseholds([]);
+                    window.location.assign("/login");
                   })
                 }
               >

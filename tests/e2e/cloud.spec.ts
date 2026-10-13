@@ -21,15 +21,17 @@ test("两位成员通过页面登录、共享家庭、同步编辑并在重开�
   const partnerContext = await browser.newContext();
   const partner = await partnerContext.newPage();
   const account = async () => {
-    const email = `together-ui-test-${crypto.randomUUID()}@example.com`;
-    const password = crypto.randomUUID() + "Aa1!";
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (error) throw error;
-    const fixture = { id: data.user.id, email, password };
+    const index = fixtures.length;
+    const email = ["henrywhy233@gmail.com", "sallyxie0378@gmail.com"][index];
+    const password =
+      process.env[
+        index === 0 ? "TEST_MEMBER_ONE_PASSWORD" : "TEST_MEMBER_TWO_PASSWORD"
+      ];
+    if (!password)
+      throw new Error(
+        "Private cloud tests require both member passwords in ignored local environment.",
+      );
+    const fixture = { id: "existing-authorized-member", email, password };
     fixtures.push(fixture);
     return fixture;
   };
@@ -38,14 +40,17 @@ test("两位成员通过页面登录、共享家庭、同步编辑并在重开�
     fixture: { email: string; password: string },
   ) => {
     target.on("dialog", (dialog) => dialog.accept());
-    await target.goto("/");
+    await target.goto("/login");
+    await target.getByLabel("邮箱", { exact: true }).fill(fixture.email);
+    await target.getByLabel("密码", { exact: true }).fill(fixture.password);
+    await target
+      .getByRole("button", { name: "登录家庭空间", exact: true })
+      .click();
+    await expect(target).toHaveURL(/\/$/);
     await target
       .getByRole("button", { name: "备份与同步", exact: true })
       .click();
     const dialog = target.getByRole("dialog");
-    await dialog.getByLabel("邮箱", { exact: true }).fill(fixture.email);
-    await dialog.getByLabel("密码", { exact: true }).fill(fixture.password);
-    await dialog.getByRole("button", { name: "登录", exact: true }).click();
     await expect(dialog).toContainText("已登录");
   };
   try {
@@ -111,10 +116,6 @@ test("两位成员通过页面登录、共享家庭、同步编辑并在重开�
         .delete()
         .eq("id", householdId);
       if (deleted.error) throw deleted.error;
-    }
-    for (const fixture of fixtures) {
-      const removed = await admin.auth.admin.deleteUser(fixture.id);
-      if (removed.error) throw removed.error;
     }
   }
 });

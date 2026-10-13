@@ -1,11 +1,23 @@
 import { it, expect } from "vitest";
 import { loadEnvConfig } from "@next/env";
 import { emptyState, saveAsset } from "../lib/wealth";
+import { createClient } from "@supabase/supabase-js";
 it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
   "真实OpenAI：模型调用与结构化回复",
   async () => {
     loadEnvConfig(process.cwd());
     const { POST } = await import("../app/api/advisor/route");
+    const client = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const login = await client.auth.signInWithPassword({
+      email: "henrywhy233@gmail.com",
+      password: process.env.TEST_MEMBER_ONE_PASSWORD!,
+    });
+    if (login.error || !login.data.session)
+      throw new Error("Private integration account login failed");
     const state = saveAsset(emptyState(), {
       id: "fixture",
       name: "测试现金账户",
@@ -17,7 +29,10 @@ it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
     const response = await POST(
       new Request("http://localhost/api/advisor", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${login.data.session.access_token}`,
+        },
         body: JSON.stringify({
           message: "目前家庭净资产多少？用一句话回答。",
           preference: "openai-fast",

@@ -7,7 +7,11 @@ import {
   PLAN_FIELDS,
 } from "@/lib/advisor-actions";
 import { totals, validateState, type WealthState } from "@/lib/wealth";
+import { authorizeRequest } from "@/lib/server-auth";
 export async function POST(request: Request) {
+  const auth = await authorizeRequest(request);
+  if (auth.status !== 200)
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   let body: { message?: string; preference?: Preference; state?: WealthState };
   try {
     body = await request.json();
@@ -33,6 +37,17 @@ export async function POST(request: Request) {
     const route = chooseRoute(message, preference);
     if (route.provider === "local")
       return NextResponse.json({ ...localAdvice(message, state), route });
+    const slot = await auth.client.rpc("take_wealth_advisor_slot");
+    if (slot.error)
+      return NextResponse.json(
+        { error: "顾问访问检查失败，请稍后重试。" },
+        { status: 503 },
+      );
+    if (!slot.data)
+      return NextResponse.json(
+        { error: "请求较频繁，请稍后再试（每分钟 6 次、每小时 40 次）。" },
+        { status: 429 },
+      );
     const snapshot = {
       members: state.members,
       ...totals(state),
@@ -50,7 +65,7 @@ export async function POST(request: Request) {
       .join("\n");
     const raw = await generateAdvice(
       route,
-      `${instructions}\n现金流表另支持：add_cashflow(name,owner,amount,kind=income或expense,essential=boolean)；update_cashflow(existingName,amount,essential可选)；delete_cashflow(name)。amount为税后每月CAD金额。已有现金流表时，必要开支和收入是计算结果，修改现金流项目，不修改同名plan字段。`,
+      `${instructions}\nanswer 使用清晰的 Markdown：先给 1–2 句结论，再按需要用简短小标题和列表；重点数字可加粗，每个列表项单独换行，避免大段文字。详细分析控制在约 5 个要点，最后给 1–3 个可执行下一步；简单查询直接回答。表格仅用于真正需要并列对比的少量数据。不要在 answer 里展示 JSON、actions 或技术路由信息。\n现金流表另支持：add_cashflow(name,owner,amount,kind=income或expense,essential=boolean)；update_cashflow(existingName,amount,essential可选)；delete_cashflow(name)。amount为税后每月CAD金额。已有现金流表时，必要开支和收入是计算结果，修改现金流项目，不修改同名plan字段。`,
       `近期对话（仅作背景）：\n${context}\n\n本次用户要求：${message}`,
     );
     return NextResponse.json({

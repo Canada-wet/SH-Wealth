@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { emptyState, saveAsset } from "../../lib/wealth";
+import { authenticate } from "./auth-helper";
+test.beforeEach(async ({ page }) => authenticate(page));
 const document = () =>
   saveAsset(emptyState(), {
     id: "a",
@@ -160,21 +162,17 @@ test("有效备份导入后恢复数据，坏备份拒绝，主数据损坏可�
     assets: [{ ...document().assets[0], annualReturn: -7 }],
   };
   page.on("dialog", (dialog) => dialog.accept());
-  await dialog
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(imported)),
-    });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(imported)),
+  });
   await expect(dialog).toContainText("备份已恢复并保存");
-  await dialog
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "bad.json",
-      mimeType: "application/json",
-      buffer: Buffer.from('{"version":3}'),
-    });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "bad.json",
+    mimeType: "application/json",
+    buffer: Buffer.from('{"version":3}'),
+  });
   await expect(dialog.getByRole("alert")).toBeVisible();
   await dialog.getByRole("button", { name: "关闭弹窗" }).click();
   await expect(

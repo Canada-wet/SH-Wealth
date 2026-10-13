@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { pushReady } from "@/lib/push";
+import { allowedEmail } from "@/lib/access";
 export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,6 +19,11 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "登录已过期，请重新登录。" },
       { status: 401 },
+    );
+  if (!allowedEmail(user.data.user.email) || !user.data.user.email_confirmed_at)
+    return NextResponse.json(
+      { error: "此账号没有访问权限。" },
+      { status: 403 },
     );
   let body: {
     householdId?: string;
@@ -38,17 +44,15 @@ export async function POST(request: Request) {
     !body.subscription.keys?.p256dh
   )
     return NextResponse.json({ error: "订阅信息不完整。" }, { status: 400 });
-  const { error } = await client
-    .from("wealth_push_subscriptions")
-    .upsert(
-      {
-        household_id: body.householdId,
-        user_id: user.data.user.id,
-        endpoint: body.subscription.endpoint,
-        subscription: body.subscription,
-      },
-      { onConflict: "user_id,endpoint" },
-    );
+  const { error } = await client.from("wealth_push_subscriptions").upsert(
+    {
+      household_id: body.householdId,
+      user_id: user.data.user.id,
+      endpoint: body.subscription.endpoint,
+      subscription: body.subscription,
+    },
+    { onConflict: "user_id,endpoint" },
+  );
   if (error)
     return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });

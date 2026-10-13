@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     from: mocks.from,
-    auth: { getUser: vi.fn(async () => ({ data: { user: { id: "u" } } })) },
+    auth: { getUser: vi.fn(async () => ({ data: { user: { id: "u", email:"henrywhy233@gmail.com", email_confirmed_at:"2026-01-01" } } })) },
   }),
 }));
 vi.mock("@/lib/push", () => ({ pushReady: mocks.ready, sendPush: mocks.send }));

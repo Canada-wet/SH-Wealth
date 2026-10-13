@@ -22,7 +22,9 @@
     "openai": "^4.85.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-markdown": "^10.1.0",
     "recharts": "^2.15.1",
+    "remark-gfm": "^4.0.1",
     "web-push": "^3.6.7"
   },
   "overrides": {

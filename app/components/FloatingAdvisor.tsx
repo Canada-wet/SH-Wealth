@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bot, ChevronDown, Send, Sparkles, Trash2, X } from "lucide-react";
 import { id, totals, type WealthState } from "@/lib/wealth";
 import type { AssistantAction } from "@/lib/advisor-actions";
+import AdvisorMarkdown from "./AdvisorMarkdown";
 export default function FloatingAdvisor({
   state,
   onActions,
@@ -204,7 +205,11 @@ export default function FloatingAdvisor({
             )}
             {state.messages.map((message) => (
               <div className={`chat-message ${message.role}`} key={message.id}>
-                {message.text}
+                {message.role === "assistant" ? (
+                  <AdvisorMarkdown text={message.text} />
+                ) : (
+                  message.text
+                )}
               </div>
             ))}
             {busy && (
