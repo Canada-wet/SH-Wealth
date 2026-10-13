@@ -1367,6 +1367,7 @@ td.numeric {
   color: #345047;
   white-space: normal;
   max-width: 100%;
+  width: 100%;
 }
 .advisor-markdown {
   font-size: 13px;

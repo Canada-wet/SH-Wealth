@@ -34,8 +34,13 @@ export default function FloatingAdvisor({
     };
   }, []);
   useEffect(() => {
-    if (messagesRef.current)
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    const container = messagesRef.current;
+    if (!container) return;
+    const newest = container.lastElementChild as HTMLElement | null;
+    if (!busy && state.messages.at(-1)?.role === "assistant" && newest) {
+      // Complete replies arrive at once: start at their conclusion, not their footer.
+      container.scrollTop += newest.getBoundingClientRect().top - container.getBoundingClientRect().top - 16;
+    } else container.scrollTop = container.scrollHeight;
   }, [state.messages, busy, open]);
   const fingerprint = (current: WealthState) =>
     JSON.stringify({

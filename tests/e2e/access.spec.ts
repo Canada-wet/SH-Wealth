@@ -48,6 +48,7 @@ test("回复标题、列表、粗体数字和表格都正确显示，不暴露Ma
   const tableSize = await message.locator(".advisor-table-scroll").evaluate(element => ({width:element.clientWidth,content:element.scrollWidth}));
   expect(tableSize.content).toBeLessThanOrEqual(tableSize.width + 1);
   await expect(message).not.toContainText("**");
+  await expect(message.getByText("整体财务较稳健。",{exact:true})).toBeInViewport();
   await page
     .locator(".advisor-window")
     .screenshot({
