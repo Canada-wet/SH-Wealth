@@ -61,6 +61,7 @@ it.skipIf(process.env.RUN_OPENAI_INTEGRATION !== "1")(
       value: 500,
       annualReturn: null,
     });
+    state.preferences.model = "openai-fast";
     const review = await weeklyReview(state);
     expect(review).toContain("AI 周度复盘 · openai");
     expect(review).toMatch(/500/);

@@ -162,7 +162,7 @@ describe("多模型路由与适配器", () => {
   it("已配置provider按复杂度路由", () => {
     vi.stubEnv("OPENAI_API_KEY", "test");
     vi.stubEnv("DEEPSEEK_API_KEY", "test");
-    expect(chooseRoute("目前余额多少").model).toBe("gpt-6-luna");
+    expect(chooseRoute("目前余额多少").model).toBe("deepseek-flash");
     expect(chooseRoute("退休税务情景规划").model).toBe("gpt-6-astra");
     expect(chooseRoute("请分析我们投资账户配置").provider).toBe("deepseek");
   });

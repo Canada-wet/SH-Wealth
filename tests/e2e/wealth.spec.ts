@@ -196,6 +196,13 @@ test("本地聊天实际修改页面数据并保存对话及模型偏好", async
   await page.getByLabel("顾问模型策略").selectOption("local");
   await page.getByLabel("顾问消息").fill("把共同储蓄本年回报改为 -2.5%");
   await page.getByRole("button", { name: "发送消息" }).click();
+  await expect(
+    page.getByRole("region", { name: "数据修改预览" }),
+  ).toContainText("-2.5%");
+  await expect(
+    page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
+  ).toHaveText("+2%");
+  await page.getByRole("button", { name: "确认并保存修改" }).click();
   await expect(page.locator(".advisor-messages")).toContainText(
     "已保存 1 项变更",
   );

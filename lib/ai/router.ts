@@ -104,7 +104,16 @@ export function assessComplexity(question: string): Complexity {
   const complexHits = complexSignals.filter((signal) =>
     normalized.includes(signal),
   ).length;
-  if (complexHits >= 2 || question.length > 100 || /\d{4}/.test(question))
+  // A balance of 50000 or a recorded year is not a planning problem.
+  const planning =
+    /压力测试|情景|退休规划|税务规划|报税策略|再平衡|scenario|stress.test|retirement.plan|tax.plan|rebalance/i.test(
+      question,
+    );
+  if (
+    planning ||
+    complexHits >= 2 ||
+    (complexHits > 0 && question.length > 180)
+  )
     return "complex";
   if (complexHits === 1 || question.length > 42) return "standard";
   if (simpleSignals.some((signal) => normalized.includes(signal)))
@@ -147,7 +156,7 @@ export function chooseRoute(
     Complexity,
     Exclude<Preference, "auto" | "local">[]
   > = {
-    simple: ["openai-fast", "anthropic-fast", "deepseek-chat"],
+    simple: ["deepseek-chat", "openai-fast", "anthropic-fast"],
     standard: ["deepseek-chat", "openai-balanced", "anthropic-fast"],
     complex: ["openai-reasoning", "anthropic-reasoning", "deepseek-reasoner"],
   };
@@ -163,7 +172,8 @@ export function chooseRoute(
     };
   return {
     ...models[choice],
-    reason: `自动路由：${complexity === "simple" ? "快速问答" : complexity === "standard" ? "常规分析" : "深度规划"}`,
+    complexity,
+    reason: `自动路由：${complexity === "complex" ? "深度规划" : choice === "deepseek-chat" ? "省钱优先" : "低成本备选"}`,
   };
 }
 

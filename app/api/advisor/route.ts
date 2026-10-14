@@ -9,6 +9,7 @@ import {
 import { totals, validateState, type WealthState } from "@/lib/wealth";
 import { authorizeRequest } from "@/lib/server-auth";
 import { chatContext } from "@/lib/conversations";
+export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await authorizeRequest(request);
   if (auth.status !== 200)

@@ -54,6 +54,7 @@ import FloatingAdvisor from "./components/FloatingAdvisor";
 import Dialog from "./components/Dialog";
 import DataSettings from "./components/DataSettings";
 import CashflowTable from "./components/CashflowTable";
+import HouseholdReview from "./components/HouseholdReview";
 import PushSettings from "./components/PushSettings";
 import { cloudClient } from "@/lib/cloud";
 import { allowedEmail } from "@/lib/access";
@@ -61,6 +62,7 @@ import { proactiveInsights } from "@/lib/insights";
 import WealthPulse from "./components/WealthPulse";
 import AdvisorMarkdown from "./components/AdvisorMarkdown";
 import ChannelSettings from "./components/ChannelSettings";
+import { financialFingerprint } from "@/lib/advisor-preview";
 
 type Modal =
   | {
@@ -95,6 +97,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [assetSort, setAssetSort] = useState("original");
   const [activeSection, setActiveSection] = useState("overview");
   const editStamp = useRef("");
   const stamp = (current: WealthState) =>
@@ -180,16 +183,27 @@ export default function Home() {
     state.goal.target > 0
       ? Math.max(0, Math.min((balance.netWorth / state.goal.target) * 100, 100))
       : 0;
-  const assets = state.assets.filter(
-    (asset) =>
-      (!filter ||
-        (state.preferences.allocation === "owner"
-          ? asset.owner
-          : asset.category) === filter) &&
-      `${asset.name} ${asset.category} ${ownerLabel(asset.owner, state.members)}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
+  const assets = state.assets
+    .filter(
+      (asset) =>
+        (!filter ||
+          (state.preferences.allocation === "owner"
+            ? asset.owner
+            : asset.category) === filter) &&
+        `${asset.name} ${asset.category} ${ownerLabel(asset.owner, state.members)}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
+    .sort((a, b) =>
+      assetSort === "value-desc"
+        ? b.value - a.value
+        : assetSort === "name"
+          ? a.name.localeCompare(b.name, "zh-CN")
+          : assetSort === "return-desc"
+            ? (b.annualReturn ?? -Infinity) - (a.annualReturn ?? -Infinity)
+            : 0,
+    );
+  const filteredTotal = assets.reduce((sum, row) => sum + row.value, 0);
   const open = (next: Modal) => {
     editStamp.current = stamp(state);
     setFormError("");
@@ -223,9 +237,21 @@ export default function Home() {
       return false;
     }
   };
-  const onActions = (actions: AssistantAction[]) => {
+  const onActions = (
+    actions: AssistantAction[],
+    expectedFinancial?: string,
+  ) => {
     const next = commit(
-      (current) => applyAssistantActions(current, actions),
+      (current) => {
+        if (
+          expectedFinancial &&
+          expectedFinancial !== financialFingerprint(current)
+        )
+          throw new Error(
+            "家庭数据已有变化，未执行过期的顾问修改。请重新提问。",
+          );
+        return applyAssistantActions(current, actions);
+      },
       "AI 更新家庭数据",
       actions.some((action) => action.type !== "set_plan_field"),
     );
@@ -866,6 +892,27 @@ export default function Home() {
             <span>
               {assets.length} / {state.assets.length} 项资产
             </span>
+            <select
+              aria-label="资产排序"
+              value={assetSort}
+              onChange={(event) => setAssetSort(event.target.value)}
+            >
+              <option value="original">录入顺序</option>
+              <option value="value-desc">价值从高到低</option>
+              <option value="name">按名称</option>
+              <option value="return-desc">本年回报从高到低</option>
+            </select>
+            {(filter || search) && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setFilter("");
+                  setSearch("");
+                }}
+              >
+                清除筛选
+              </button>
+            )}
           </div>
           <div className="table-scroll">
             <table>
@@ -942,6 +989,15 @@ export default function Home() {
                 ))}
               </tbody>
               <tfoot>
+                {(filter || search) && (
+                  <tr>
+                    <td colSpan={3}>当前筛选小计 · {assets.length} 项</td>
+                    <td className="numeric" data-testid="filtered-assets-total">
+                      {money(filteredTotal)}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                )}
                 <tr>
                   <td colSpan={3}>
                     资产合计{filter || search ? "（全部账户）" : ""}
@@ -1014,6 +1070,7 @@ export default function Home() {
           )}
         </section>
         <CashflowTable state={state} onChange={change} />
+        <HouseholdReview state={state} />
         <section className="card contributions-card" id="contributions">
           <div className="card-head">
             <div>

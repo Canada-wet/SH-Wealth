@@ -13,6 +13,9 @@ import { id, totals, type WealthState } from "@/lib/wealth";
 import type { AssistantAction } from "@/lib/advisor-actions";
 import AdvisorMarkdown from "./AdvisorMarkdown";
 import { proactiveInsights } from "@/lib/insights";
+import { financialFingerprint, previewActions } from "@/lib/advisor-preview";
+import useChatDraft from "@/lib/useChatDraft";
+import VoiceControls from "./VoiceControls";
 import {
   activeChat,
   allChats,
@@ -28,20 +31,29 @@ export default function FloatingAdvisor({
   loading = false,
 }: {
   state: WealthState;
-  onActions: (actions: AssistantAction[]) => WealthState;
+  onActions: (
+    actions: AssistantAction[],
+    expectedFinancial?: string,
+  ) => WealthState;
   onChange: (update: (state: WealthState) => WealthState) => WealthState;
   saveStatus?: string;
   loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
   const [error, setError] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [hiddenNudges, setHiddenNudges] = useState<string[]>([]);
   const [overviewPromptVisible, setOverviewPromptVisible] = useState(true);
+  const [pending, setPending] = useState<{
+    actions: AssistantAction[];
+    rows: string[];
+    fingerprint: string;
+    chatId: string;
+  } | null>(null);
   const insights =
     state.preferences.proactive === false
       ? []
@@ -54,6 +66,7 @@ export default function FloatingAdvisor({
   const currentChat =
     allChats(state).find((chat) => chat.id === selectedChatId) ??
     activeChat(state);
+  const [input, setInput] = useChatDraft(currentChat.id);
   const chooseChat = (chatId: string) => {
     setSelectedChatId(chatId);
     try {
@@ -102,7 +115,7 @@ export default function FloatingAdvisor({
       window.removeEventListener("together-open-advisor", show);
       controller.current?.abort();
     };
-  }, []);
+  }, [setInput]);
   useEffect(() => {
     const container = messagesRef.current;
     if (!container) return;
@@ -115,28 +128,26 @@ export default function FloatingAdvisor({
         16;
     } else container.scrollTop = container.scrollHeight;
   }, [currentChat.messages, busy, open, historyOpen]);
-  const fingerprint = (current: WealthState) =>
-    JSON.stringify({
-      assets: current.assets,
-      debts: current.debts,
-      budget: current.budget,
-      goal: current.goal,
-      plan: current.plan,
-      contributions: current.contributions,
-      members: current.members,
-    });
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
     const question = input.trim();
-    if (!question || busy || loading) return;
+    if (!question || busy || loading || pending || voiceListening) return;
     setError("");
     const snapshot = openChat(latest.current, currentChat.id);
     const chatId = activeChat(snapshot).id;
-    const financial = fingerprint(snapshot);
+    const financial = financialFingerprint(snapshot);
     try {
-      onChange((current) =>
-        appendChat(current, { id: id(), role: "user", text: question }, chatId),
-      );
+      if (!(
+        currentChat.messages.at(-1)?.role === "user" &&
+        currentChat.messages.at(-1)?.text === question
+      ))
+        onChange((current) =>
+          appendChat(
+            current,
+            { id: id(), role: "user", text: question },
+            chatId,
+          ),
+        );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "消息无法保存");
       return;
@@ -161,31 +172,63 @@ export default function FloatingAdvisor({
       const actions = Array.isArray(result.actions)
         ? (result.actions as AssistantAction[])
         : [];
-      let applied = false;
       if (actions.length) {
-        if (financial !== fingerprint(latest.current))
+        if (financial !== financialFingerprint(latest.current))
           throw new Error(
             "对话期间家庭数据已有变化，请用最新数据重新发起修改。",
           );
-        onActions(actions);
-        applied = true;
+        setPending({
+          actions,
+          rows: previewActions(latest.current, actions),
+          fingerprint: financial,
+          chatId,
+        });
       }
-      const text = `${result.answer || "已完成分析。"}${applied ? `\n\n✓ 已保存 ${actions.length} 项变更，页面已同步。` : ""}${result.route ? `\n\n${result.route.provider === "local" ? "本地助手" : `${result.route.provider} · ${result.route.model}`} · ${result.route.reason}` : ""}`;
+      const text = `${result.answer || "已完成分析。"}${actions.length ? `\n\n待确认 ${actions.length} 项变更：请核对预览，确认后才会保存。刷新页面后需重新发起，未确认变更不会执行。` : ""}${result.route ? `\n\n${result.route.provider === "local" ? "本地助手" : `${result.route.provider} · ${result.route.model}`} · ${result.route.reason}` : ""}`;
       onChange((current) =>
         appendChat(current, { id: id(), role: "assistant", text }, chatId),
       );
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.name === "AbortError"
-            ? "请求超时，请重试。"
-            : reason.message
+      const message = controller.current?.signal.aborted
+        ? "请求已停止或超时；问题已保留，可重试。停止不保证服务商取消计费。"
+        : reason instanceof Error
+          ? reason.message
           : "请求失败。";
       setError(message);
       setInput(question);
     } finally {
       clearTimeout(timer);
       setBusy(false);
+    }
+  };
+  const confirm = () => {
+    if (!pending) return;
+    try {
+      if (pending.fingerprint !== financialFingerprint(latest.current))
+        throw new Error(
+          "家庭数据已有变化，此预览已过期。请取消并用最新数据重新提问。",
+        );
+      onActions(pending.actions, pending.fingerprint);
+      const text = `✓ 已保存 ${pending.actions.length} 项变更，页面已同步。\n\n${pending.rows.map((row) => `- ${row}`).join("\n")}`;
+      setPending(null);
+      try {
+        onChange((current) =>
+          appendChat(
+            current,
+            { id: id(), role: "assistant", text },
+            pending.chatId,
+          ),
+        );
+        setError("");
+      } catch {
+        setError(
+          "财务修改已保存，但确认消息未能保存。请查看财富历史，不要重复执行。",
+        );
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "保存失败，未执行修改。",
+      );
     }
   };
   const total = totals(state);
@@ -210,7 +253,7 @@ export default function FloatingAdvisor({
             </div>
             <button
               aria-label="查看聊天历史"
-              disabled={busy}
+              disabled={busy || Boolean(pending)}
               aria-expanded={historyOpen}
               onClick={() => setHistoryOpen(!historyOpen)}
             >
@@ -218,7 +261,7 @@ export default function FloatingAdvisor({
             </button>
             <button
               aria-label="新建对话"
-              disabled={busy || loading}
+              disabled={busy || loading || Boolean(pending)}
               onClick={() => {
                 try {
                   const next = onChange(newChat);
@@ -260,7 +303,7 @@ export default function FloatingAdvisor({
                 }
               }}
             >
-              <option value="auto">自动路由</option>
+              <option value="auto">自动路由 · DeepSeek 省钱优先</option>
               <option value="local">本地数据助手</option>
               <optgroup label="OpenAI">
                 <option value="openai-fast">快速</option>
@@ -277,6 +320,12 @@ export default function FloatingAdvisor({
               </optgroup>
             </select>
           </div>
+          {state.preferences.model === "auto" && (
+            <small className="route-hint">
+              日常问答 / 记账用 DeepSeek；退休、税务与情景规划升级
+              GPT‑6。未配置时按可用模型选择，不因余额位数升级。
+            </small>
+          )}
           <div className="advisor-context">
             <span>{state.assets.length} 项资产</span>
             <span>{state.debts.length} 项负债</span>
@@ -408,11 +457,83 @@ export default function FloatingAdvisor({
               {error}
             </div>
           )}
+          {pending && (
+            <div
+              className="advisor-preview"
+              role="region"
+              aria-label="数据修改预览"
+            >
+              <b>确认这 {pending.actions.length} 项修改？</b>
+              <p>
+                金额为
+                CAD。所有变更一次性保存，并写入历史；未确认不会改变页面数据。
+              </p>
+              <ul>
+                {pending.rows.map((row, index) => (
+                  <li key={index}>{row}</li>
+                ))}
+              </ul>
+              <div>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={loading || busy}
+                  onClick={confirm}
+                >
+                  确认并保存修改
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    const chatId = pending.chatId;
+                    setPending(null);
+                    try {
+                      onChange((current) =>
+                        appendChat(
+                          current,
+                          {
+                            id: id(),
+                            role: "assistant",
+                            text: "已取消本次待确认修改；家庭数据未变。",
+                          },
+                          chatId,
+                        ),
+                      );
+                    } catch {
+                      setError("取消记录未保存，财务数据未修改。");
+                    }
+                  }}
+                >
+                  取消修改
+                </button>
+              </div>
+            </div>
+          )}
+          <VoiceControls
+            key={currentChat.id}
+            input={input}
+            onTranscript={setInput}
+            onListeningChange={setVoiceListening}
+            reply={
+              currentChat.messages
+                .filter((row) => row.role === "assistant")
+                .at(-1)?.text || ""
+            }
+            disabled={busy || loading || historyOpen || Boolean(pending)}
+            active={open}
+          />
           <form className="advisor-compose" onSubmit={send}>
             <textarea
               aria-label="顾问消息"
               value={input}
-              disabled={historyOpen || loading}
+              disabled={
+                historyOpen ||
+                loading ||
+                busy ||
+                Boolean(pending) ||
+                voiceListening
+              }
               maxLength={6000}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
@@ -429,14 +550,30 @@ export default function FloatingAdvisor({
               rows={2}
             />
             <button
-              disabled={busy || historyOpen || loading || !input.trim()}
+              disabled={
+                busy ||
+                historyOpen ||
+                loading ||
+                Boolean(pending) ||
+                voiceListening ||
+                !input.trim()
+              }
               aria-label="发送消息"
             >
               <Send size={17} />
             </button>
           </form>
+          {busy && (
+            <button
+              type="button"
+              className="advisor-stop"
+              onClick={() => controller.current?.abort()}
+            >
+              停止本次回复
+            </button>
+          )}
           <small className="advisor-disclaimer">
-            明确提出的数据修改会自动保存；AI 分析供家庭规划参考。
+            草稿仅保存在此设备；数据修改先预览确认。AI 分析供家庭讨论参考。
           </small>
         </section>
       )}
