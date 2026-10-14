@@ -463,6 +463,10 @@ export default function Home() {
           <span>t</span>ogether
         </a>
         <nav>
+          <a href="/markets">
+            <LineChart />
+            市场看板
+          </a>
           <a
             href="#overview"
             aria-current={activeSection === "overview" ? "location" : undefined}
@@ -617,6 +621,7 @@ export default function Home() {
         )}
         <div className="financial-content" hidden={privacy}>
           <div className="mobile-nav">
+            <a href="/markets">市场</a>
             <a href="#overview">总览</a>
             <a href="#assets">资产</a>
             <a href="#cashflow">收支</a>

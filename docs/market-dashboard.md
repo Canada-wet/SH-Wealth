@@ -1,0 +1,54 @@
+# 市场看板
+
+入口为 `/markets`，首页桌面导航“市场看板”、手机导航“市场”。保留既有 Next.js / Supabase / Vercel、登录白名单、家庭版本冲突保护和备份格式，不创建新家庭或迁移财富数据。
+
+## 数据与时效
+
+| 内容 | 来源和口径 | 刷新边界 |
+| --- | --- | --- |
+| CAD → CNY / USD / JPY | TradingView 的 FX_IDC 盘中市场参考 | 用户主动启用外部行情；不是银行成交价 |
+| 官方汇率 | 加拿大央行 Valet 日均；原值为外币兑 CAD，反转为 1 CAD 兑目标货币 | 官方工作日发布，显示观测日期 |
+| 美股 / 加拿大 ETF | TradingView 允许嵌入的延迟报价；美国组 USD、TSX 组 CAD | 提供商控制行情更新和延迟，保留 D 标记 |
+| 美债 | FRED：DGS3MO / DGS1 / DGS2 / DGS5 / DGS10 / DGS30 | 最新非空日频固定期限收益率，% |
+| CPI / 核心 CPI | CPIAUCNS / CPILFENS，未季调指数与去年同月计算同比 | 月频，% |
+| 非农新增 | PAYEMS 季调就业总量，与上月相减 | 月频，千人；不是就业总人数 |
+| 失业率 | UNRATE，季调值 | 月频，% |
+| 实际 GDP | A191RL1Q225SBEA，环比折年率 SAAR | 季频，%，不是同比 |
+
+官方数据服务器缓存 300 秒，页面可手动刷新，前台约 5 分钟核对一次，后台隐藏时暂停轮询。读取时间与源数据观测日期分开。宏观日期代表统计期间，不冒充发布日期；历史值可能被官方修订。10Y−2Y 只在同一天的有效观测齐全时计算，以 bp 表示。
+
+数据源错误显示“暂不可用”，不填示例数值、不把缺值当零。整次刷新失败保留上次成功结果及其日期。混合频率的 FRED CSV 请求可能返回 ZIP，故宏观序列逐项请求，日频国债统一请求。
+
+## 自选与标的
+
+用户清单去重为 30 项，包括 NVDA、META 和 **NASDAQ:SPCX（SpaceX）**，不替换成旧 SPAC ETF 的 SPCK。CLS 默认 NYSE 的 USD 版，可另加 TSX:CLS；RBOT 使用 TSX 的 CAD 版。CGL.C / DATA.B 保留原始点号，不能改为下划线。
+
+支持按代码 / 名称 / 交易所搜索、添加、删除、查看图表；最多 60 项。同代码不同交易所视为不同标的。自选作为可选 `preferences.marketWatchlist` 随私密家庭文档共享、跨设备保存和导出恢复；旧备份无该字段仍可使用。仅查看行情、搜索、切图和换算不写家庭数据；编辑自选不产生财务历史快照，也不改变资产估值。遇到本机与云端版本待确认时，先返回家庭页处理，再修改自选。
+
+2026-10-14 实际窗口检查中，ZGIN 没有可用报价，保留代码并提供 BMO 发行方页面，不替换基金，不使用 NAV 冒充市场价格。其他标的也可能受行情覆盖、权限、市场休市、网络或浏览器阻断影响。个别空白不代表价格为零。
+
+## 安全与授权
+
+`GET /api/market` 验证既有两个授权账户，客户端响应 `private, no-store`，不提供未登录行情接口。服务端只访问固定公共序列，不转发家庭金额、原始聊天、任意 URL 或客户端查询参数。公共缓存中没有家庭数据或认证信息。不新增市场 API key，不调用付费 AI。
+
+第三方行情默认不加载，用户启用后使用独立跨域 iframe；不把第三方脚本注入财富页面。iframe 仅收到公开代码和图表配置，不发送用户自定义名称，提供商仍会获得连接 IP / 浏览器信息。开关仅保存于本机，暂停即卸载窗口。来源链接、提供商品牌和数据延迟提示保留。
+
+这不是全交易所授权的逐秒报价服务。TradingView 网站订阅不等于允许在 App 中分发实时证券数据；若需要股票交易级实时报价，须另接具备对应交易所分发许可的服务，不能靠去掉 D 标记实现。看板不交易、不推荐买卖、不覆盖用户手动账本。
+
+## 官方资料
+
+- [TradingView 数据与授权说明](https://www.tradingview.com/widget-docs/faq/data/)
+- [TradingView 市场报价组件](https://www.tradingview.com/widget-docs/widgets/watchlists/market-data/)
+- [加拿大央行 Valet 文档](https://www.bankofcanada.ca/valet/docs/)
+- [加拿大央行日均汇率](https://www.bankofcanada.ca/rates/exchange/daily-exchange-rates/)
+- [FRED CPI](https://fred.stlouisfed.org/series/CPIAUCNS)、[非农就业](https://fred.stlouisfed.org/series/PAYEMS)、[实际 GDP 增长](https://fred.stlouisfed.org/series/A191RL1Q225SBEA)
+- [Nasdaq：SpaceX 上市](https://www.nasdaq.com/newsroom/spacex-makes-history-raising-85-billion-through-nasdaq-listing)
+- [BMO ZGIN](https://www.bmoetfs.ca/etfs/zgin-bmo-global-innovators-fund-active-etf-series)
+
+## 复现
+
+默认单元与浏览器回归使用合成数据、隔离身份、受控行情窗口，不调用行情网站。
+
+`npm run test:market` 显式检查真实官方汇率、六项美债和五项宏观数据；不修改家庭数据。
+
+在已按离线身份构建 `.next-test` 后，`RUN_MARKET_WIDGETS=1 E2E_USE_MOCK_AUTH=1 npm run test:e2e -- tests/e2e/market-widgets.live.spec.ts --project=desktop` 显式检查真实第三方窗口的数字报价及图表。该测试仅使用合成临时家庭，结束后清理。不能用测试通过承诺每个标的、所有设备或未来时刻都有报价。

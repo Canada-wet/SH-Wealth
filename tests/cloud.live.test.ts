@@ -90,6 +90,9 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
         },
       ];
       state.plan.values.cost_share_method = "income";
+      state.preferences.marketWatchlist = [
+        { ticker: "NVDA", exchange: "NASDAQ", name: "Synthetic watchlist" },
+      ];
       state.contributions = [
         {
           id: "c",

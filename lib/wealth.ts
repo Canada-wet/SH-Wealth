@@ -79,6 +79,7 @@ export type WealthState = {
     proactive?: boolean;
     webSearch?: "auto" | "on" | "off";
     searchTopic?: keyof typeof import("./search-policy").SEARCH_TOPICS | "auto";
+    marketWatchlist?: import("./market").MarketInstrument[];
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -457,6 +458,22 @@ export function alertsFor(state: WealthState) {
 export function validateState(raw: unknown): asserts raw is WealthState {
   if (!raw || typeof raw !== "object") throw new Error("数据格式无效。");
   const state = raw as WealthState;
+  if (
+    state.preferences?.marketWatchlist !== undefined &&
+    (!Array.isArray(state.preferences.marketWatchlist) ||
+      state.preferences.marketWatchlist.length > 60 ||
+      state.preferences.marketWatchlist.some(
+        (row) =>
+          !row ||
+          typeof row.ticker !== "string" ||
+          !/^[A-Z0-9][A-Z0-9._-]{0,14}$/.test(row.ticker) ||
+          !["NASDAQ", "NYSE", "AMEX", "TSX"].includes(row.exchange) ||
+          typeof row.name !== "string" ||
+          !row.name.trim() ||
+          row.name.length > 100,
+      ))
+  )
+    throw new Error("市场自选清单无效。");
   if (
     state.version !== 3 ||
     !Number.isInteger(state.revision) ||
