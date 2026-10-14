@@ -1,10 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CalendarCheck, SlidersHorizontal } from "lucide-react";
 import { money, type WealthState } from "@/lib/wealth";
 import { reviewChecks, savingsScenario } from "@/lib/household-review";
 
-export default function HouseholdReview({ state }: { state: WealthState }) {
+export default function HouseholdReview({
+  state,
+  children,
+}: {
+  state: WealthState;
+  children?: ReactNode;
+}) {
   const review = reviewChecks(state);
   const [monthly, setMonthly] = useState<string | null>(null);
   const [months, setMonths] = useState("12");
@@ -28,6 +34,7 @@ export default function HouseholdReview({ state }: { state: WealthState }) {
     );
   return (
     <div className="household-tools">
+      {children}
       <details className="household-review">
         <summary>
           <CalendarCheck size={18} /> 一起复盘{" "}

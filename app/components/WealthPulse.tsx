@@ -46,7 +46,10 @@ export default function WealthPulse({
               ? "待填写必要开支"
               : `${pulse.coverage.toFixed(1)} 个月`}
           </b>
-          <small>现金类别 ÷ 必要开支 · 需核对流动性</small>
+          <small>
+            已排除明确锁定 / 不易变现现金
+            {pulse.cashUnverified > 0 ? " · 含待核对资金" : ""}
+          </small>
         </a>
         <a href="#overview">
           <span>目标月度参考</span>

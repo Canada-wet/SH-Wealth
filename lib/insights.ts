@@ -1,10 +1,12 @@
 import {
   breakdown,
   budgetTotals,
+  cashReference,
   money,
   totals,
   type WealthState,
 } from "./wealth";
+import { goalPace, valuationReview } from "./household-workspace";
 
 export type Insight = {
   id: string;
@@ -21,14 +23,9 @@ export function householdPulse(state: WealthState, now = new Date()) {
   const budget = state.budget ?? [];
   const hasIncome = budget.some((row) => row.kind === "income");
   const hasExpenses = budget.some((row) => row.kind === "expense");
-  const cash = state.assets
-    .filter((row) => /现金|储蓄|cash|hisa/i.test(row.category))
-    .reduce((sum, row) => sum + row.value, 0);
-  const months = Math.max(
-    0,
-    (Number(state.goal.year) - now.getFullYear()) * 12 + 12 - now.getMonth(),
-  );
-  const gap = Math.max(0, state.goal.target - totals(state).netWorth);
+  const cashInfo = cashReference(state.assets);
+  const cash = cashInfo.amount;
+  const pace = goalPace(state, now);
   return {
     ...cashflow,
     cash,
@@ -37,8 +34,9 @@ export function householdPulse(state: WealthState, now = new Date()) {
     complete: hasIncome && hasExpenses,
     coverage:
       hasExpenses && cashflow.essential > 0 ? cash / cashflow.essential : null,
-    monthlyGoal: months > 0 ? gap / months : null,
-    months,
+    monthlyGoal: pace.required,
+    months: pace.months,
+    cashUnverified: cashInfo.unverified,
   };
 }
 
@@ -98,6 +96,17 @@ export function proactiveInsights(
       href: "#emergency",
     });
   const latest = state.history.at(-1);
+  const staleAccounts = valuationReview(state, now);
+  if (state.assets.some((row) => row.valuationDate) && staleAccounts.length)
+    add("account-dates", {
+      title: `${staleAccounts.length} 项账户的核对日期值得更新`,
+      body: "逐项检查未填日期、超过 30 天或未来日期的账户；修改收支不会自动刷新账户估值日期。",
+      prompt:
+        "根据各个账户的估值核对日期，帮我们安排更新顺序，不要猜测新估值。",
+      priority: "next",
+      source: "每项账户核对日期",
+      href: "#assets",
+    });
   if (latest && now.getTime() - Date.parse(latest.at) > 30 * 86400000)
     add("stale", {
       title: "到一次家庭数据复盘的时间了",

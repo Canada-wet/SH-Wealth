@@ -26,6 +26,8 @@ import {
   Trash2,
   Users,
   WalletCards,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import {
@@ -63,6 +65,16 @@ import WealthPulse from "./components/WealthPulse";
 import AdvisorMarkdown from "./components/AdvisorMarkdown";
 import ChannelSettings from "./components/ChannelSettings";
 import { financialFingerprint } from "@/lib/advisor-preview";
+import {
+  LIQUIDITY,
+  todayToronto,
+  undoFinancial,
+  undoPoint,
+  type FinancialUndo,
+} from "@/lib/household-workspace";
+import ValuationTable from "./components/ValuationTable";
+import HouseholdPlanning from "./components/HouseholdPlanning";
+import HistoryComparison from "./components/HistoryComparison";
 
 type Modal =
   | {
@@ -70,7 +82,10 @@ type Modal =
       id?: string;
       focusReturn?: boolean;
     }
-  | { kind: "goal" | "members" | "history" | "alerts" | "settings" }
+  | {
+      kind:
+        "goal" | "members" | "history" | "alerts" | "settings" | "valuations";
+    }
   | null;
 export default function Home() {
   useEffect(() => {
@@ -95,6 +110,13 @@ export default function Home() {
   >("alerts");
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
+  const [privacy, setPrivacy] = useState(false);
+  const [undo, setUndo] = useState<FinancialUndo | null>(null);
+  useEffect(() => {
+    try {
+      setPrivacy(sessionStorage.getItem("together-privacy") === "on");
+    } catch {}
+  }, []);
   const [filter, setFilter] = useState("");
   const [search, setSearch] = useState("");
   const [assetSort, setAssetSort] = useState("original");
@@ -205,6 +227,7 @@ export default function Home() {
     );
   const filteredTotal = assets.reduce((sum, row) => sum + row.value, 0);
   const open = (next: Modal) => {
+    if (privacy) return;
     editStamp.current = stamp(state);
     setFormError("");
     setModal(next);
@@ -225,7 +248,20 @@ export default function Home() {
     dismiss = false,
   ) => {
     try {
-      commit(update, reason, financial);
+      let before: WealthState | undefined;
+      const next = commit(
+        (current) => {
+          if (dismiss && editStamp.current !== stamp(current))
+            throw new Error(
+              "家庭数据已更新，请重新打开编辑，不覆盖伴侣的新记录。",
+            );
+          before = current;
+          return update(current);
+        },
+        reason,
+        financial,
+      );
+      if (financial && before) setUndo(undoPoint(before, next, reason));
       setToast("已保存");
       setFormError("");
       if (dismiss) close();
@@ -241,8 +277,10 @@ export default function Home() {
     actions: AssistantAction[],
     expectedFinancial?: string,
   ) => {
+    let before: WealthState | undefined;
     const next = commit(
       (current) => {
+        before = current;
         if (
           expectedFinancial &&
           expectedFinancial !== financialFingerprint(current)
@@ -255,6 +293,7 @@ export default function Home() {
       "AI 更新家庭数据",
       actions.some((action) => action.type !== "set_plan_field"),
     );
+    if (before) setUndo(undoPoint(before, next, "顾问修改"));
     setToast("顾问变更已保存");
     return next;
   };
@@ -269,6 +308,7 @@ export default function Home() {
         );
       if (modal?.kind === "asset") {
         const asset: Asset = {
+          ...state.assets.find((row) => row.id === modal.id),
           id: modal.id ?? id(),
           name: text("name"),
           owner: text("owner"),
@@ -278,7 +318,12 @@ export default function Home() {
             text("annualReturn") === ""
               ? null
               : numberInput(text("annualReturn"), "本年回报", true),
+          valuationDate: text("valuationDate") || undefined,
+          liquidity: (text("liquidity") || "unknown") as Asset["liquidity"],
+          note: text("note"),
         };
+        if (asset.valuationDate && asset.valuationDate > todayToronto())
+          throw new Error("核对日期不能在未来。");
         change(
           (current) => saveAsset(current, asset),
           `${modal.id ? "修改" : "新增"}资产：${asset.name}`,
@@ -287,10 +332,17 @@ export default function Home() {
         );
       } else if (modal?.kind === "debt") {
         const debt = {
+          ...state.debts.find((row) => row.id === modal.id),
           id: modal.id ?? id(),
           name: text("name"),
           owner: text("owner"),
           value: numberInput(text("value"), "负债余额"),
+          annualRate: text("annualRate")
+            ? numberInput(text("annualRate"), "年利率")
+            : null,
+          monthlyPayment: text("monthlyPayment")
+            ? numberInput(text("monthlyPayment"), "月还款")
+            : null,
         };
         change(
           (current) => ({
@@ -394,6 +446,7 @@ export default function Home() {
     </>
   );
   const advisor = (prompt?: string) =>
+    !privacy &&
     window.dispatchEvent(
       new CustomEvent("together-open-advisor", {
         detail: prompt
@@ -502,6 +555,23 @@ export default function Home() {
           </div>
           <div className="header-actions">
             <button
+              className="icon-button"
+              aria-label={privacy ? "显示家庭数据" : "隐藏家庭数据"}
+              onClick={() => {
+                const next = !privacy;
+                setPrivacy(next);
+                close();
+                try {
+                  sessionStorage.setItem(
+                    "together-privacy",
+                    next ? "on" : "off",
+                  );
+                } catch {}
+              }}
+            >
+              {privacy ? <EyeOff size={19} /> : <Eye size={19} />}
+            </button>
+            <button
               className="icon-button notification-button"
               aria-label="通知"
               onClick={() => open({ kind: "alerts" })}
@@ -536,254 +606,87 @@ export default function Home() {
             </button>
           </div>
         )}
-        <div className="mobile-nav">
-          <a href="#overview">总览</a>
-          <a href="#assets">资产</a>
-          <a href="#cashflow">收支</a>
-          <a href="#contributions">贡献</a>
-          <a href="#framework">计划</a>
-          <button onClick={() => open({ kind: "members" })}>成员</button>
-          <button onClick={() => open({ kind: "settings" })}>数据</button>
-        </div>
-        <div className="hero">
-          <div>
-            <span className="label">家庭净资产 · CAD</span>
-            <div className="value" data-testid="net-worth">
-              {money(balance.netWorth)}
-            </div>
-            <div className="balance-split">
-              <span>
-                总资产 <b>{money(balance.totalAssets)}</b>
-              </span>
-              <span>
-                总负债 <b>{money(balance.totalDebts)}</b>
-              </span>
-            </div>
-          </div>
-          <div className="goal">
-            <div className="goal-top">
-              <span>{state.goal.name}</span>
-              <button
-                aria-label="编辑财富目标"
-                onClick={() => open({ kind: "goal" })}
-              >
-                <Pencil size={13} />
-              </button>
-              <b>{progress.toFixed(1)}%</b>
-            </div>
-            <div className="bar">
-              <i style={{ width: `${progress}%` }} />
-            </div>
+        {privacy && (
+          <div className="privacy-curtain" role="status">
+            <EyeOff size={26} />
+            <h2>家庭数据已隐藏</h2>
             <p>
-              距目标还差{" "}
-              {money(Math.max(state.goal.target - balance.netWorth, 0))}
-              <span>
-                {money(state.goal.target)} · {state.goal.year} 年
-              </span>
+              适合共享屏幕或公共场合。点击右上角眼睛恢复；这不是退出登录或访问控制。
             </p>
           </div>
-        </div>
-        <WealthPulse
-          state={state}
-          insights={state.preferences.proactive === false ? [] : unreadInsights}
-          onDiscuss={advisor}
-          onDismiss={(alertId) =>
-            change(
-              (current) => ({
-                ...current,
-                readAlerts: [...new Set([...current.readAlerts, alertId])],
-              }),
-              "处理主动提醒",
-            )
-          }
-        />
-        <div className="ownership-strip">
-          {owners.map((group) => (
-            <button
-              type="button"
-              key={group.key}
-              aria-label={`查看${group.name}持有资产`}
-              onClick={() => {
-                if (
-                  change(
-                    (current) => ({
-                      ...current,
-                      preferences: {
-                        ...current.preferences,
-                        allocation: "owner",
-                      },
-                    }),
-                    "按成员查看资产",
-                  )
-                ) {
-                  setFilter(group.key);
-                  document
-                    .getElementById("assets")
-                    ?.scrollIntoView({ behavior: "smooth" });
-                }
-              }}
-            >
-              <span>
-                <i style={{ background: group.color }} />
-                {group.name}持有
-              </span>
-              <b>{money(group.amount)}</b>
-              <small>占总资产 {group.percent.toFixed(1)}%</small>
-            </button>
-          ))}
-        </div>
-        <div className="dashboard-grid">
-          <section className="card chart-card">
-            <div className="card-head">
-              <div>
-                <h2>净资产走势</h2>
-                <p>每次估值变动留存历史 · CAD</p>
+        )}
+        <div className="financial-content" hidden={privacy}>
+          <div className="mobile-nav">
+            <a href="#overview">总览</a>
+            <a href="#assets">资产</a>
+            <a href="#cashflow">收支</a>
+            <a href="#contributions">贡献</a>
+            <a href="#framework">计划</a>
+            <button onClick={() => open({ kind: "members" })}>成员</button>
+            <button onClick={() => open({ kind: "settings" })}>数据</button>
+          </div>
+          <div className="hero">
+            <div>
+              <span className="label">家庭净资产 · CAD</span>
+              <div className="value" data-testid="net-worth">
+                {money(balance.netWorth)}
               </div>
-              <div className="button-row">
-                <select
-                  aria-label="图表时间范围"
-                  value={state.preferences.months}
-                  onChange={(e) =>
-                    change(
-                      (current) => ({
-                        ...current,
-                        preferences: {
-                          ...current.preferences,
-                          months: Number(e.target.value),
-                        },
-                      }),
-                      "切换图表范围",
-                    )
-                  }
-                >
-                  <option value={3}>近 3 个月</option>
-                  <option value={6}>近 6 个月</option>
-                  <option value={12}>近 12 个月</option>
-                  <option value={24}>近 24 个月</option>
-                </select>
-                <button
-                  className="text-button"
-                  onClick={() => open({ kind: "history" })}
-                >
-                  <History size={14} />
-                  历史
-                </button>
+              <div className="balance-split">
+                <span>
+                  总资产 <b>{money(balance.totalAssets)}</b>
+                </span>
+                <span>
+                  总负债 <b>{money(balance.totalDebts)}</b>
+                </span>
               </div>
             </div>
-            {history.length > 1 ? (
-              <div className="chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={history}
-                    margin={{ top: 18, right: 10, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="wealth-fill"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0"
-                          stopColor="#a8c7b7"
-                          stopOpacity={0.5}
-                        />
-                        <stop
-                          offset="1"
-                          stopColor="#a8c7b7"
-                          stopOpacity={0.02}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid vertical={false} stroke="#eef2ed" />
-                    <XAxis
-                      dataKey="at"
-                      tickFormatter={(at) =>
-                        new Date(at).toLocaleDateString("zh-CN", {
-                          month: "short",
-                          day: "numeric",
-                        })
-                      }
-                      minTickGap={45}
-                      tick={{ fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      width={65}
-                      tickFormatter={(value) =>
-                        new Intl.NumberFormat("en-CA", {
-                          notation: "compact",
-                        }).format(value)
-                      }
-                      tick={{ fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      labelFormatter={(at) =>
-                        new Date(String(at)).toLocaleString("zh-CN")
-                      }
-                      formatter={(value) => [money(Number(value)), "净资产"]}
-                    />
-                    <Area
-                      dataKey="netWorth"
-                      type="linear"
-                      stroke="#315b4d"
-                      strokeWidth={2.5}
-                      fill="url(#wealth-fill)"
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="chart-empty">
-                <LineChart size={28} />
-                <b>
-                  {history.length ? "第一份估值已记录" : "从第一项资产开始"}
-                </b>
-                <span>后续更新会形成趋势，历史中可查看每次变动。</span>
-              </div>
-            )}
-          </section>
-          <section className="card allocation-card">
-            <div className="card-head">
-              <div>
-                <h2>资产分布</h2>
-                <p>金额来自下方实际账户</p>
-              </div>
-              <div className="segmented">
+            <div className="goal">
+              <div className="goal-top">
+                <span>{state.goal.name}</span>
                 <button
-                  className={
-                    state.preferences.allocation === "category"
-                      ? "selected"
-                      : ""
-                  }
-                  onClick={() => {
-                    setFilter("");
-                    change(
-                      (current) => ({
-                        ...current,
-                        preferences: {
-                          ...current.preferences,
-                          allocation: "category",
-                        },
-                      }),
-                      "按类别查看",
-                    );
-                  }}
+                  aria-label="编辑财富目标"
+                  onClick={() => open({ kind: "goal" })}
                 >
-                  类别
+                  <Pencil size={13} />
                 </button>
-                <button
-                  className={
-                    state.preferences.allocation === "owner" ? "selected" : ""
-                  }
-                  onClick={() => {
-                    setFilter("");
+                <b>{progress.toFixed(1)}%</b>
+              </div>
+              <div className="bar">
+                <i style={{ width: `${progress}%` }} />
+              </div>
+              <p>
+                距目标还差{" "}
+                {money(Math.max(state.goal.target - balance.netWorth, 0))}
+                <span>
+                  {money(state.goal.target)} · {state.goal.year} 年
+                </span>
+              </p>
+            </div>
+          </div>
+          <WealthPulse
+            state={state}
+            insights={
+              state.preferences.proactive === false ? [] : unreadInsights
+            }
+            onDiscuss={advisor}
+            onDismiss={(alertId) =>
+              change(
+                (current) => ({
+                  ...current,
+                  readAlerts: [...new Set([...current.readAlerts, alertId])],
+                }),
+                "处理主动提醒",
+              )
+            }
+          />
+          <div className="ownership-strip">
+            {owners.map((group) => (
+              <button
+                type="button"
+                key={group.key}
+                aria-label={`查看${group.name}持有资产`}
+                onClick={() => {
+                  if (
                     change(
                       (current) => ({
                         ...current,
@@ -792,267 +695,395 @@ export default function Home() {
                           allocation: "owner",
                         },
                       }),
-                      "按归属查看",
-                    );
-                  }}
+                      "按成员查看资产",
+                    )
+                  ) {
+                    setFilter(group.key);
+                    document
+                      .getElementById("assets")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+              >
+                <span>
+                  <i style={{ background: group.color }} />
+                  {group.name}持有
+                </span>
+                <b>{money(group.amount)}</b>
+                <small>占总资产 {group.percent.toFixed(1)}%</small>
+              </button>
+            ))}
+          </div>
+          <div className="dashboard-grid">
+            <section className="card chart-card">
+              <div className="card-head">
+                <div>
+                  <h2>净资产走势</h2>
+                  <p>每次估值变动留存历史 · CAD</p>
+                </div>
+                <div className="button-row">
+                  <select
+                    aria-label="图表时间范围"
+                    value={state.preferences.months}
+                    onChange={(e) =>
+                      change(
+                        (current) => ({
+                          ...current,
+                          preferences: {
+                            ...current.preferences,
+                            months: Number(e.target.value),
+                          },
+                        }),
+                        "切换图表范围",
+                      )
+                    }
+                  >
+                    <option value={3}>近 3 个月</option>
+                    <option value={6}>近 6 个月</option>
+                    <option value={12}>近 12 个月</option>
+                    <option value={24}>近 24 个月</option>
+                  </select>
+                  <button
+                    className="text-button"
+                    onClick={() => open({ kind: "history" })}
+                  >
+                    <History size={14} />
+                    历史
+                  </button>
+                </div>
+              </div>
+              {history.length > 1 ? (
+                <div className="chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={history}
+                      margin={{ top: 18, right: 10, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient
+                          id="wealth-fill"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0"
+                            stopColor="#a8c7b7"
+                            stopOpacity={0.5}
+                          />
+                          <stop
+                            offset="1"
+                            stopColor="#a8c7b7"
+                            stopOpacity={0.02}
+                          />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="#eef2ed" />
+                      <XAxis
+                        dataKey="at"
+                        tickFormatter={(at) =>
+                          new Date(at).toLocaleDateString("zh-CN", {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        }
+                        minTickGap={45}
+                        tick={{ fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        width={65}
+                        tickFormatter={(value) =>
+                          new Intl.NumberFormat("en-CA", {
+                            notation: "compact",
+                          }).format(value)
+                        }
+                        tick={{ fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        labelFormatter={(at) =>
+                          new Date(String(at)).toLocaleString("zh-CN")
+                        }
+                        formatter={(value) => [money(Number(value)), "净资产"]}
+                      />
+                      <Area
+                        dataKey="netWorth"
+                        type="linear"
+                        stroke="#315b4d"
+                        strokeWidth={2.5}
+                        fill="url(#wealth-fill)"
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="chart-empty">
+                  <LineChart size={28} />
+                  <b>
+                    {history.length ? "第一份估值已记录" : "从第一项资产开始"}
+                  </b>
+                  <span>后续更新会形成趋势，历史中可查看每次变动。</span>
+                </div>
+              )}
+            </section>
+            <section className="card allocation-card">
+              <div className="card-head">
+                <div>
+                  <h2>资产分布</h2>
+                  <p>金额来自下方实际账户</p>
+                </div>
+                <div className="segmented">
+                  <button
+                    className={
+                      state.preferences.allocation === "category"
+                        ? "selected"
+                        : ""
+                    }
+                    onClick={() => {
+                      setFilter("");
+                      change(
+                        (current) => ({
+                          ...current,
+                          preferences: {
+                            ...current.preferences,
+                            allocation: "category",
+                          },
+                        }),
+                        "按类别查看",
+                      );
+                    }}
+                  >
+                    类别
+                  </button>
+                  <button
+                    className={
+                      state.preferences.allocation === "owner" ? "selected" : ""
+                    }
+                    onClick={() => {
+                      setFilter("");
+                      change(
+                        (current) => ({
+                          ...current,
+                          preferences: {
+                            ...current.preferences,
+                            allocation: "owner",
+                          },
+                        }),
+                        "按归属查看",
+                      );
+                    }}
+                  >
+                    归属
+                  </button>
+                </div>
+              </div>
+              {balance.totalAssets > 0 ? (
+                <>
+                  <div className="donut">
+                    <ResponsiveContainer width="100%" height={190}>
+                      <PieChart>
+                        <Pie
+                          data={groups.filter((group) => group.amount > 0)}
+                          nameKey="name"
+                          dataKey="amount"
+                          innerRadius={57}
+                          outerRadius={78}
+                          paddingAngle={0}
+                          isAnimationActive={false}
+                        >
+                          {groups
+                            .filter((group) => group.amount > 0)
+                            .map((group) => (
+                              <Cell key={group.key} fill={group.color} />
+                            ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => money(Number(value))} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="donut-center">
+                      <b>{state.assets.length}</b>
+                      <span>资产账户</span>
+                    </div>
+                  </div>
+                  <div className="legend">
+                    {groups.map((group) => (
+                      <button
+                        key={group.key}
+                        onClick={() => {
+                          setFilter(group.key);
+                          document
+                            .getElementById("assets")
+                            ?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                      >
+                        <i style={{ background: group.color }} />
+                        <span>{group.name}</span>
+                        <b>{group.percent.toFixed(1)}%</b>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="chart-empty">添加资产后显示配置占比</div>
+              )}
+            </section>
+          </div>
+          <section className="card accounts-card" id="assets">
+            <div className="card-head">
+              <div>
+                <h2>家庭资产负债表</h2>
+                <p>编辑任何项目，总览、配置与目标同时更新</p>
+              </div>
+              <div className="button-row">
+                <button
+                  className="secondary"
+                  disabled={!state.assets.length}
+                  onClick={() => open({ kind: "valuations" })}
                 >
-                  归属
+                  批量核对
+                </button>
+                <button
+                  className="secondary"
+                  onClick={() => open({ kind: "debt" })}
+                >
+                  <Plus size={14} />
+                  负债
+                </button>
+                <button
+                  className="primary"
+                  onClick={() => open({ kind: "asset" })}
+                >
+                  <Plus size={14} />
+                  资产
                 </button>
               </div>
             </div>
-            {balance.totalAssets > 0 ? (
-              <>
-                <div className="donut">
-                  <ResponsiveContainer width="100%" height={190}>
-                    <PieChart>
-                      <Pie
-                        data={groups.filter((group) => group.amount > 0)}
-                        nameKey="name"
-                        dataKey="amount"
-                        innerRadius={57}
-                        outerRadius={78}
-                        paddingAngle={0}
-                        isAnimationActive={false}
-                      >
-                        {groups
-                          .filter((group) => group.amount > 0)
-                          .map((group) => (
-                            <Cell key={group.key} fill={group.color} />
-                          ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => money(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="donut-center">
-                    <b>{state.assets.length}</b>
-                    <span>资产账户</span>
-                  </div>
-                </div>
-                <div className="legend">
-                  {groups.map((group) => (
-                    <button
-                      key={group.key}
-                      onClick={() => {
-                        setFilter(group.key);
-                        document
-                          .getElementById("assets")
-                          ?.scrollIntoView({ behavior: "smooth" });
-                      }}
-                    >
-                      <i style={{ background: group.color }} />
-                      <span>{group.name}</span>
-                      <b>{group.percent.toFixed(1)}%</b>
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="chart-empty">添加资产后显示配置占比</div>
-            )}
-          </section>
-        </div>
-        <section className="card accounts-card" id="assets">
-          <div className="card-head">
-            <div>
-              <h2>家庭资产负债表</h2>
-              <p>编辑任何项目，总览、配置与目标同时更新</p>
-            </div>
-            <div className="button-row">
-              <button
-                className="secondary"
-                onClick={() => open({ kind: "debt" })}
+            <div className="table-toolbar">
+              <input
+                aria-label="搜索资产"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索账户、类别或成员…"
+              />
+              {filter && (
+                <button className="filter-chip" onClick={() => setFilter("")}>
+                  {state.preferences.allocation === "owner"
+                    ? ownerLabel(filter, state.members)
+                    : filter}{" "}
+                  ×
+                </button>
+              )}
+              <span>
+                {assets.length} / {state.assets.length} 项资产
+              </span>
+              <select
+                aria-label="资产排序"
+                value={assetSort}
+                onChange={(event) => setAssetSort(event.target.value)}
               >
-                <Plus size={14} />
-                负债
-              </button>
-              <button
-                className="primary"
-                onClick={() => open({ kind: "asset" })}
-              >
-                <Plus size={14} />
-                资产
-              </button>
+                <option value="original">录入顺序</option>
+                <option value="value-desc">价值从高到低</option>
+                <option value="name">按名称</option>
+                <option value="return-desc">本年回报从高到低</option>
+              </select>
+              {(filter || search) && (
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setFilter("");
+                    setSearch("");
+                  }}
+                >
+                  清除筛选
+                </button>
+              )}
             </div>
-          </div>
-          <div className="table-toolbar">
-            <input
-              aria-label="搜索资产"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索账户、类别或成员…"
-            />
-            {filter && (
-              <button className="filter-chip" onClick={() => setFilter("")}>
-                {state.preferences.allocation === "owner"
-                  ? ownerLabel(filter, state.members)
-                  : filter}{" "}
-                ×
-              </button>
-            )}
-            <span>
-              {assets.length} / {state.assets.length} 项资产
-            </span>
-            <select
-              aria-label="资产排序"
-              value={assetSort}
-              onChange={(event) => setAssetSort(event.target.value)}
-            >
-              <option value="original">录入顺序</option>
-              <option value="value-desc">价值从高到低</option>
-              <option value="name">按名称</option>
-              <option value="return-desc">本年回报从高到低</option>
-            </select>
-            {(filter || search) && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  setFilter("");
-                  setSearch("");
-                }}
-              >
-                清除筛选
-              </button>
-            )}
-          </div>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>账户 / 项目</th>
-                  <th>类别</th>
-                  <th>归属</th>
-                  <th className="numeric">当前价值 · CAD</th>
-                  <th className="numeric">本年回报</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assets.map((asset) => (
-                  <tr key={asset.id}>
-                    <td>
-                      <button
-                        className="name-button"
-                        onClick={() => open({ kind: "asset", id: asset.id })}
-                      >
-                        {asset.name}
-                      </button>
-                    </td>
-                    <td>{asset.category}</td>
-                    <td>
-                      <span className="owner-tag">
-                        {ownerLabel(asset.owner, state.members)}
-                      </span>
-                    </td>
-                    <td className="numeric">
-                      <button
-                        className="value-button"
-                        onClick={() => open({ kind: "asset", id: asset.id })}
-                      >
-                        {money(asset.value)}
-                      </button>
-                    </td>
-                    <td className="numeric">
-                      <button
-                        className={`return-button ${asset.annualReturn !== null && asset.annualReturn < 0 ? "negative" : ""}`}
-                        aria-label={`编辑${asset.name}本年回报`}
-                        onClick={() =>
-                          open({
-                            kind: "asset",
-                            id: asset.id,
-                            focusReturn: true,
-                          })
-                        }
-                      >
-                        {asset.annualReturn === null
-                          ? "填写回报"
-                          : `${asset.annualReturn > 0 ? "+" : ""}${asset.annualReturn}%`}
-                        <Pencil size={11} />
-                      </button>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          aria-label={`编辑${asset.name}`}
-                          onClick={() => open({ kind: "asset", id: asset.id })}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          aria-label={`删除${asset.name}`}
-                          onClick={() => remove("asset", asset.id, asset.name)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                {(filter || search) && (
-                  <tr>
-                    <td colSpan={3}>当前筛选小计 · {assets.length} 项</td>
-                    <td className="numeric" data-testid="filtered-assets-total">
-                      {money(filteredTotal)}
-                    </td>
-                    <td colSpan={2} />
-                  </tr>
-                )}
-                <tr>
-                  <td colSpan={3}>
-                    资产合计{filter || search ? "（全部账户）" : ""}
-                  </td>
-                  <td className="numeric">{money(balance.totalAssets)}</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          {!assets.length && (
-            <div className="table-empty">
-              {state.assets.length
-                ? "没有匹配的账户。"
-                : "还没有资产记录。添加银行账户、房产或任何自定义资产。"}
-            </div>
-          )}
-          <div className="debt-heading">
-            <h3>负债明细</h3>
-            <span>
-              {state.debts.length} 项 · {money(balance.totalDebts)}
-            </span>
-          </div>
-          {state.debts.length ? (
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>名称</th>
+                    <th>账户 / 项目</th>
+                    <th>类别</th>
                     <th>归属</th>
-                    <th className="numeric">当前余额 · CAD</th>
+                    <th className="numeric">当前价值 · CAD</th>
+                    <th className="numeric">本年回报</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {state.debts.map((debt) => (
-                    <tr key={debt.id}>
-                      <td>{debt.name}</td>
+                  {assets.map((asset) => (
+                    <tr key={asset.id}>
+                      <td>
+                        <button
+                          className="name-button"
+                          onClick={() => open({ kind: "asset", id: asset.id })}
+                        >
+                          {asset.name}
+                        </button>
+                        {(asset.valuationDate ||
+                          asset.liquidity ||
+                          asset.note) && (
+                          <small className="cell-note">
+                            {asset.valuationDate
+                              ? `核对 ${asset.valuationDate}`
+                              : "核对日期未填"}{" "}
+                            · {LIQUIDITY[asset.liquidity ?? "unknown"]}
+                            {asset.note ? ` · ${asset.note}` : ""}
+                          </small>
+                        )}
+                      </td>
+                      <td>{asset.category}</td>
                       <td>
                         <span className="owner-tag">
-                          {ownerLabel(debt.owner, state.members)}
+                          {ownerLabel(asset.owner, state.members)}
                         </span>
                       </td>
-                      <td className="numeric">{money(debt.value)}</td>
+                      <td className="numeric">
+                        <button
+                          className="value-button"
+                          onClick={() => open({ kind: "asset", id: asset.id })}
+                        >
+                          {money(asset.value)}
+                        </button>
+                      </td>
+                      <td className="numeric">
+                        <button
+                          className={`return-button ${asset.annualReturn !== null && asset.annualReturn < 0 ? "negative" : ""}`}
+                          aria-label={`编辑${asset.name}本年回报`}
+                          onClick={() =>
+                            open({
+                              kind: "asset",
+                              id: asset.id,
+                              focusReturn: true,
+                            })
+                          }
+                        >
+                          {asset.annualReturn === null
+                            ? "填写回报"
+                            : `${asset.annualReturn > 0 ? "+" : ""}${asset.annualReturn}%`}
+                          <Pencil size={11} />
+                        </button>
+                      </td>
                       <td>
                         <div className="row-actions">
                           <button
-                            aria-label={`编辑${debt.name}`}
-                            onClick={() => open({ kind: "debt", id: debt.id })}
+                            aria-label={`编辑${asset.name}`}
+                            onClick={() =>
+                              open({ kind: "asset", id: asset.id })
+                            }
                           >
                             <Pencil size={14} />
                           </button>
                           <button
-                            aria-label={`删除${debt.name}`}
-                            onClick={() => remove("debt", debt.id, debt.name)}
+                            aria-label={`删除${asset.name}`}
+                            onClick={() =>
+                              remove("asset", asset.id, asset.name)
+                            }
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1061,95 +1092,76 @@ export default function Home() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(filter || search) && (
+                    <tr>
+                      <td colSpan={3}>当前筛选小计 · {assets.length} 项</td>
+                      <td
+                        className="numeric"
+                        data-testid="filtered-assets-total"
+                      >
+                        {money(filteredTotal)}
+                      </td>
+                      <td colSpan={2} />
+                    </tr>
+                  )}
+                  <tr>
+                    <td colSpan={3}>
+                      资产合计{filter || search ? "（全部账户）" : ""}
+                    </td>
+                    <td className="numeric">{money(balance.totalAssets)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          ) : (
-            <p className="empty-note">
-              没有记录负债。房贷、信用卡和个人贷款都可以逐项加入。
-            </p>
-          )}
-        </section>
-        <CashflowTable state={state} onChange={change} />
-        <HouseholdReview state={state} />
-        <section className="card contributions-card" id="contributions">
-          <div className="card-head">
-            <div>
-              <h2>成员贡献</h2>
-              <p>实际投入与取出单独记录；贡献占比按累计投入计算</p>
-            </div>
-            <button
-              className="primary"
-              onClick={() => open({ kind: "contribution" })}
-            >
-              <Plus size={14} />
-              记录贡献
-            </button>
-          </div>
-          <div className="contribution-summary">
-            {contributions.map((row) => (
-              <div key={row.member}>
-                <span>{row.name}</span>
-                <b>{money(row.net)}</b>
-                <small>
-                  净贡献 · 投入 {money(row.deposits)} / 取出{" "}
-                  {money(row.withdrawals)}
-                </small>
-                <div className="share-track">
-                  <i style={{ width: `${row.percent}%` }} />
-                </div>
-                <em>累计投入占比 {row.percent.toFixed(1)}%</em>
+            {!assets.length && (
+              <div className="table-empty">
+                {state.assets.length
+                  ? "没有匹配的账户。"
+                  : "还没有资产记录。添加银行账户、房产或任何自定义资产。"}
               </div>
-            ))}
-          </div>
-          {state.contributions.length ? (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>成员</th>
-                    <th>关联账户 / 备注</th>
-                    <th>类型</th>
-                    <th className="numeric">金额 · CAD</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...state.contributions]
-                    .sort((a, b) => b.date.localeCompare(a.date))
-                    .map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.date}</td>
-                        <td>{ownerLabel(row.member, state.members)}</td>
+            )}
+            <div className="debt-heading">
+              <h3>负债明细</h3>
+              <span>
+                {state.debts.length} 项 · {money(balance.totalDebts)}
+              </span>
+            </div>
+            {state.debts.length ? (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>名称</th>
+                      <th>归属</th>
+                      <th className="numeric">当前余额 · CAD</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.debts.map((debt) => (
+                      <tr key={debt.id}>
+                        <td>{debt.name}</td>
                         <td>
-                          {state.assets.find(
-                            (asset) => asset.id === row.assetId,
-                          )?.name ?? "独立记录"}
-                          {row.note && (
-                            <small className="cell-note">{row.note}</small>
-                          )}
+                          <span className="owner-tag">
+                            {ownerLabel(debt.owner, state.members)}
+                          </span>
                         </td>
-                        <td>{row.kind === "deposit" ? "投入" : "取出"}</td>
-                        <td className="numeric">{money(row.amount)}</td>
+                        <td className="numeric">{money(debt.value)}</td>
                         <td>
                           <div className="row-actions">
                             <button
-                              aria-label={`编辑贡献${row.id}`}
+                              aria-label={`编辑${debt.name}`}
                               onClick={() =>
-                                open({ kind: "contribution", id: row.id })
+                                open({ kind: "debt", id: debt.id })
                               }
                             >
                               <Pencil size={14} />
                             </button>
                             <button
-                              aria-label={`删除贡献${row.id}`}
-                              onClick={() =>
-                                remove(
-                                  "contribution",
-                                  row.id,
-                                  `${ownerLabel(row.member, state.members)}的贡献`,
-                                )
-                              }
+                              aria-label={`删除${debt.name}`}
+                              onClick={() => remove("debt", debt.id, debt.name)}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1157,35 +1169,146 @@ export default function Home() {
                         </td>
                       </tr>
                     ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="empty-note">
+                没有记录负债。房贷、信用卡和个人贷款都可以逐项加入。
+              </p>
+            )}
+          </section>
+          <CashflowTable state={state} onChange={change} />
+          <HouseholdReview state={state}>
+            <HouseholdPlanning
+              state={state}
+              onChange={change}
+              onAsset={(id) => open({ kind: "asset", id })}
+              onDebt={(id) => open({ kind: "debt", id })}
+              onBatch={() => open({ kind: "valuations" })}
+            />
+          </HouseholdReview>
+          <section className="card contributions-card" id="contributions">
+            <div className="card-head">
+              <div>
+                <h2>成员贡献</h2>
+                <p>实际投入与取出单独记录；贡献占比按累计投入计算</p>
+              </div>
+              <button
+                className="primary"
+                onClick={() => open({ kind: "contribution" })}
+              >
+                <Plus size={14} />
+                记录贡献
+              </button>
             </div>
-          ) : (
-            <div className="table-empty">
-              记录首付、共同储蓄或定期投入，清楚看见各自贡献。关联账户时，资金变动会同步账户价值。
+            <div className="contribution-summary">
+              {contributions.map((row) => (
+                <div key={row.member}>
+                  <span>{row.name}</span>
+                  <b>{money(row.net)}</b>
+                  <small>
+                    净贡献 · 投入 {money(row.deposits)} / 取出{" "}
+                    {money(row.withdrawals)}
+                  </small>
+                  <div className="share-track">
+                    <i style={{ width: `${row.percent}%` }} />
+                  </div>
+                  <em>累计投入占比 {row.percent.toFixed(1)}%</em>
+                </div>
+              ))}
             </div>
-          )}
-        </section>
-        <FinancialFramework
-          plan={state.plan}
-          assets={state.assets}
-          debts={state.debts}
-          members={state.members}
-          budget={state.budget ?? []}
-          onChange={(plan) =>
-            change((current) => ({ ...current, plan }), "更新家庭规划")
-          }
-        />
-        <footer className="page-footer">
-          <span>
-            金额统一以 CAD 记录 · 最近保存{" "}
-            {state.updatedAt
-              ? new Date(state.updatedAt).toLocaleString("zh-CN")
-              : "尚未录入"}
-          </span>
-          <button onClick={() => open({ kind: "settings" })}>备份与同步</button>
-        </footer>
+            {state.contributions.length ? (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>成员</th>
+                      <th>关联账户 / 备注</th>
+                      <th>类型</th>
+                      <th className="numeric">金额 · CAD</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...state.contributions]
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.date}</td>
+                          <td>{ownerLabel(row.member, state.members)}</td>
+                          <td>
+                            {state.assets.find(
+                              (asset) => asset.id === row.assetId,
+                            )?.name ?? "独立记录"}
+                            {row.note && (
+                              <small className="cell-note">{row.note}</small>
+                            )}
+                          </td>
+                          <td>{row.kind === "deposit" ? "投入" : "取出"}</td>
+                          <td className="numeric">{money(row.amount)}</td>
+                          <td>
+                            <div className="row-actions">
+                              <button
+                                aria-label={`编辑贡献${row.id}`}
+                                onClick={() =>
+                                  open({ kind: "contribution", id: row.id })
+                                }
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                aria-label={`删除贡献${row.id}`}
+                                onClick={() =>
+                                  remove(
+                                    "contribution",
+                                    row.id,
+                                    `${ownerLabel(row.member, state.members)}的贡献`,
+                                  )
+                                }
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="table-empty">
+                记录首付、共同储蓄或定期投入，清楚看见各自贡献。关联账户时，资金变动会同步账户价值。
+              </div>
+            )}
+          </section>
+          <FinancialFramework
+            plan={state.plan}
+            assets={state.assets}
+            debts={state.debts}
+            members={state.members}
+            budget={state.budget ?? []}
+            onChange={(plan) =>
+              change((current) => ({ ...current, plan }), "更新家庭规划")
+            }
+          />
+          <footer className="page-footer">
+            <span>
+              金额统一以 CAD 记录 · 最近保存{" "}
+              {state.updatedAt
+                ? new Date(state.updatedAt).toLocaleString("zh-CN")
+                : "尚未录入"}
+            </span>
+            <button onClick={() => open({ kind: "settings" })}>
+              备份与同步
+            </button>
+          </footer>
+        </div>
       </section>
+      {modal?.kind === "valuations" && (
+        <ValuationTable state={state} onClose={close} onChange={change} />
+      )}
       {modal?.kind === "asset" &&
         (() => {
           const asset = state.assets.find((row) => row.id === modal.id);
@@ -1267,6 +1390,40 @@ export default function Home() {
               <p className="form-help">
                 回报支持负数、零或留空；手动记录回报不会改变账户估值。
               </p>
+              <div className="form-grid">
+                <label>
+                  估值核对日期
+                  <input
+                    name="valuationDate"
+                    type="date"
+                    max={todayToronto()}
+                    defaultValue={asset?.valuationDate ?? ""}
+                  />
+                </label>
+                <label>
+                  资金可动用情况
+                  <select
+                    name="liquidity"
+                    defaultValue={asset?.liquidity ?? "unknown"}
+                  >
+                    {Object.entries(LIQUIDITY).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                账户备注
+                <textarea
+                  name="note"
+                  maxLength={500}
+                  defaultValue={asset?.note ?? ""}
+                  placeholder="顾问可读取；记录用途或到期日，不要记录密码或完整账号"
+                  rows={2}
+                />
+              </label>
               <div className="dialog-actions">
                 <button type="button" className="secondary" onClick={close}>
                   取消
@@ -1313,6 +1470,34 @@ export default function Home() {
                   {options(debt?.owner)}
                 </select>
               </label>
+              <div className="form-grid">
+                <label>
+                  年利率（%）
+                  <input
+                    name="annualRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    defaultValue={debt?.annualRate ?? ""}
+                    placeholder="可留空，不等于零"
+                  />
+                </label>
+                <label>
+                  计划月还款（CAD）
+                  <input
+                    name="monthlyPayment"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={debt?.monthlyPayment ?? ""}
+                    placeholder="可留空"
+                  />
+                </label>
+              </div>
+              <p className="form-help">
+                用于共同安排中的成本核对，不自动修改每月现金流。
+              </p>
               <div className="dialog-actions">
                 <button type="button" className="secondary" onClick={close}>
                   取消
@@ -1480,6 +1665,7 @@ export default function Home() {
       )}
       {modal?.kind === "history" && (
         <Dialog title="完整财富历史" onClose={close} wide>
+          <HistoryComparison state={state} />
           <p className="form-help">
             保留每次变动时的资产、负债与贡献快照。日期相同的多次修改也分别记录。
           </p>
@@ -1674,13 +1860,53 @@ export default function Home() {
           householdId={store.cloudHousehold}
         />
       )}
-      <FloatingAdvisor
-        state={state}
-        saveStatus={store.cloudStatus}
-        loading={store.cloudLoading || !ready}
-        onActions={onActions}
-        onChange={(update) => commit(update, "保存顾问对话")}
-      />
+      {!privacy && (
+        <FloatingAdvisor
+          state={state}
+          saveStatus={store.cloudStatus}
+          loading={store.cloudLoading || !ready}
+          onActions={onActions}
+          onChange={(update) => commit(update, "保存顾问对话")}
+        />
+      )}
+      {undo && !privacy && (
+        <div className="undo-bar">
+          <span>
+            {undo.reason} ·{" "}
+            {financialFingerprint(state) === undo.expected
+              ? "本次财务修改可撤销"
+              : "后续数据已变，撤销已过期"}
+          </span>
+          <button
+            type="button"
+            disabled={financialFingerprint(state) !== undo.expected}
+            onClick={() => {
+              try {
+                commit(
+                  (current) => undoFinancial(current, undo),
+                  `撤销：${undo.reason}`,
+                  true,
+                );
+                setUndo(null);
+                setToast("已撤销，原操作与撤销均保留历史");
+              } catch (reason) {
+                store.setError(
+                  reason instanceof Error ? reason.message : "撤销失败",
+                );
+              }
+            }}
+          >
+            撤销上次修改
+          </button>
+          <button
+            type="button"
+            aria-label="关闭撤销提示"
+            onClick={() => setUndo(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {toast && (
         <div className="toast" role="status">
           <Check size={15} />

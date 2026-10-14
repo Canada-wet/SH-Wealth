@@ -3,6 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import {
   money,
+  cashReference,
   ownerLabel,
   type Asset,
   type BudgetItem,
@@ -452,9 +453,7 @@ export default function FinancialFramework({
   onChange: (plan: WealthState["plan"]) => void;
 }) {
   const { values, checks } = plan;
-  const cash = assets
-    .filter((asset) => /现金|储蓄|cash|hisa/i.test(asset.category))
-    .reduce((sum, asset) => sum + asset.value, 0);
+  const cash = cashReference(assets).amount;
   const list = (rows: (Asset | Debt)[]) =>
     rows
       .map(

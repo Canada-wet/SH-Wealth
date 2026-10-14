@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   budgetTotals,
@@ -26,6 +26,7 @@ export default function CashflowTable({
     undefined,
   );
   const [error, setError] = useState("");
+  const editBase = useRef("");
   const budget = state.budget ?? [];
   const total = budgetTotals(state);
   const save = (event: FormEvent) => {
@@ -42,19 +43,24 @@ export default function CashflowTable({
       };
       if (
         onChange(
-          (current) => ({
-            ...current,
-            budget: editing
-              ? (current.budget ?? []).map((item) =>
-                  item.id === editing.id ? row : item,
-                )
-              : [...(current.budget ?? []), row],
-          }),
+          (current) => {
+            if (JSON.stringify(current.budget ?? []) !== editBase.current)
+              throw new Error("现金流已更新，请关闭并重新打开编辑。");
+            return {
+              ...current,
+              budget: editing
+                ? (current.budget ?? []).map((item) =>
+                    item.id === editing.id ? row : item,
+                  )
+                : [...(current.budget ?? []), row],
+            };
+          },
           "更新每月现金流",
           true,
         )
       )
         setEditing(undefined);
+      else setError("现金流未保存。数据可能已更新，请关闭并重新打开编辑。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "金额无效");
     }
@@ -70,6 +76,7 @@ export default function CashflowTable({
           className="primary"
           onClick={() => {
             setError("");
+            editBase.current = JSON.stringify(budget);
             setEditing(null);
           }}
         >
@@ -120,6 +127,7 @@ export default function CashflowTable({
                         aria-label={`编辑现金流${row.name}`}
                         onClick={() => {
                           setError("");
+                          editBase.current = JSON.stringify(budget);
                           setEditing(row);
                         }}
                       >

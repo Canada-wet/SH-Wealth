@@ -75,7 +75,21 @@ it.skipIf(process.env.RUN_SUPABASE_INTEGRATION !== "1")(
         owner: "joint",
         value: 1234.56,
         annualReturn: -2.5,
+        valuationDate: "2026-10-14",
+        liquidity: "locked",
+        note: "Synthetic maturity note",
       });
+      state.debts = [
+        {
+          id: "synthetic-debt",
+          name: "Synthetic loan",
+          owner: "joint",
+          value: 100,
+          annualRate: 5,
+          monthlyPayment: 10,
+        },
+      ];
+      state.plan.values.cost_share_method = "income";
       state.contributions = [
         {
           id: "c",

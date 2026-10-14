@@ -6,8 +6,18 @@ export type Asset = {
   category: string;
   value: number;
   annualReturn: number | null;
+  valuationDate?: string;
+  liquidity?: "available" | "locked" | "illiquid" | "unknown";
+  note?: string;
 };
-export type Debt = { id: string; name: string; owner: Owner; value: number };
+export type Debt = {
+  id: string;
+  name: string;
+  owner: Owner;
+  value: number;
+  annualRate?: number | null;
+  monthlyPayment?: number | null;
+};
 export type Contribution = {
   id: string;
   member: Owner;
@@ -158,6 +168,27 @@ export function budgetTotals(state: WealthState) {
   );
   return { income, expenses, surplus: round(income - expenses), essential };
 }
+export function cashReference(assets: Asset[]) {
+  const cash = assets.filter((row) =>
+    /现金|储蓄|cash|hisa/i.test(row.category),
+  );
+  const included = cash.filter(
+    (row) => row.liquidity !== "locked" && row.liquidity !== "illiquid",
+  );
+  return {
+    amount: round(included.reduce((sum, row) => sum + row.value, 0)),
+    unverified: round(
+      included
+        .filter((row) => !row.liquidity || row.liquidity === "unknown")
+        .reduce((sum, row) => sum + row.value, 0),
+    ),
+    excluded: round(
+      cash
+        .filter((row) => !included.includes(row))
+        .reduce((sum, row) => sum + row.value, 0),
+    ),
+  };
+}
 export function totals(state: Pick<WealthState, "assets" | "debts">) {
   const totalAssets = round(
     state.assets.reduce((sum, asset) => sum + asset.value, 0),
@@ -263,6 +294,7 @@ export function saveAsset(state: WealthState, asset: Asset): WealthState {
     ? state.assets.map((row) =>
         row.id === asset.id
           ? {
+              ...row,
               ...asset,
               name: asset.name.trim(),
               category: asset.category.trim(),
@@ -282,11 +314,7 @@ export function saveContribution(
   if (contribution.amount <= 0) throw new Error("贡献金额需要大于零。");
   if (!["joint", "first", "second"].includes(contribution.member))
     throw new Error("请选择有效的贡献成员。");
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(contribution.date) ||
-    Number.isNaN(Date.parse(contribution.date))
-  )
-    throw new Error("请选择有效日期。");
+  if (!validDate(contribution.date)) throw new Error("请选择有效日期。");
   const previous = state.contributions.find(
     (row) => row.id === contribution.id,
   );
@@ -402,9 +430,7 @@ export function alertsFor(state: WealthState) {
     : Number(state.plan.values.essential_monthly) || 0;
   const months = Number(state.plan.values.emergency_months) || 0;
   const target = monthly * months;
-  const cash = state.assets
-    .filter((asset) => /现金|储蓄|cash|hisa/i.test(asset.category))
-    .reduce((sum, asset) => sum + asset.value, 0);
+  const cash = cashReference(state.assets).amount;
   if (target > cash)
     alerts.push({
       id: `emergency-${target}-${cash}`,
@@ -459,6 +485,16 @@ export function validateState(raw: unknown): asserts raw is WealthState {
         (row.annualReturn !== null &&
           (typeof row.annualReturn !== "number" ||
             !Number.isFinite(row.annualReturn))),
+    ) ||
+    state.assets.some(
+      (row) =>
+        (row.valuationDate !== undefined && !validDate(row.valuationDate)) ||
+        (row.liquidity !== undefined &&
+          !["available", "locked", "illiquid", "unknown"].includes(
+            row.liquidity,
+          )) ||
+        (row.note !== undefined &&
+          (typeof row.note !== "string" || row.note.length > 500)),
     )
   )
     throw new Error("资产数据无效。");
@@ -469,7 +505,10 @@ export function validateState(raw: unknown): asserts raw is WealthState {
       (row) =>
         !row.name?.trim() ||
         typeof row.owner !== "string" ||
-        !finite(row.value),
+        !finite(row.value) ||
+        (row.annualRate != null &&
+          (!finite(row.annualRate) || row.annualRate > 100)) ||
+        (row.monthlyPayment != null && !finite(row.monthlyPayment)),
     )
   )
     throw new Error("负债数据无效。");
@@ -483,7 +522,7 @@ export function validateState(raw: unknown): asserts raw is WealthState {
         row.amount === 0 ||
         !["deposit", "withdrawal"].includes(row.kind) ||
         typeof row.note !== "string" ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(row.date) ||
+        !validDate(row.date) ||
         (row.assetId !== null &&
           !state.assets.some((asset) => asset.id === row.assetId)),
     )
@@ -601,4 +640,13 @@ export function validateState(raw: unknown): asserts raw is WealthState {
         )))
   )
     throw new Error("会话历史无效。");
+}
+
+export function validDate(value: string) {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(value)) &&
+    new Date(value).toISOString().slice(0, 10) === value
+  );
 }

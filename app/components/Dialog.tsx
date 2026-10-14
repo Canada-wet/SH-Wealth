@@ -17,6 +17,15 @@ export default function Dialog({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const dirty = useRef(false);
+  const requestClose = () => {
+    if (
+      !onSubmit ||
+      !dirty.current ||
+      window.confirm("表单有未保存修改，确定放弃并关闭？")
+    )
+      onClose();
+  };
   useEffect(() => {
     const dialog = ref.current!;
     const previous = document.activeElement as HTMLElement;
@@ -30,9 +39,12 @@ export default function Dialog({
     <dialog
       ref={ref}
       className={`dialog ${wide ? "wide" : ""}`}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        requestClose();
+      }}
       onClick={(event) => {
-        if (event.target === ref.current) onClose();
+        if (event.target === ref.current) requestClose();
       }}
     >
       <div className="dialog-body">
@@ -42,12 +54,32 @@ export default function Dialog({
             type="button"
             className="icon-button"
             aria-label="关闭弹窗"
-            onClick={onClose}
+            onClick={requestClose}
           >
             <X size={19} />
           </button>
         </div>
-        <form onSubmit={onSubmit ?? ((event) => event.preventDefault())}>
+        <form
+          onInput={() => {
+            dirty.current = true;
+          }}
+          onChange={() => {
+            dirty.current = true;
+          }}
+          onClickCapture={(event) => {
+            const button = (event.target as HTMLElement).closest("button");
+            if (
+              onSubmit &&
+              button?.type === "button" &&
+              button.textContent?.trim() === "取消"
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              requestClose();
+            }
+          }}
+          onSubmit={onSubmit ?? ((event) => event.preventDefault())}
+        >
           {children}
           {error && (
             <p role="alert" className="form-error">
