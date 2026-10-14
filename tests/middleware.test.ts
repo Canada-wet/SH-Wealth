@@ -20,6 +20,14 @@ it("匿名请求页面跳转登录，但恢复入口保持可访问", async () =
       (await middleware(new NextRequest(`https://example.test${path}`))).status,
     ).toBe(200);
 });
+it("登录跳转保留原页面的查询参数", async () => {
+  const response = await middleware(
+    new NextRequest("https://example.test/markets?view=quotes"),
+  );
+  expect(
+    new URL(response.headers.get("location")!).searchParams.get("next"),
+  ).toBe("/markets?view=quotes");
+});
 it("服务端只接受已验证的允许账号，不接受其他账号或未确认邮箱", async () => {
   for (const [email, confirmed, status] of [
     ["henrywhy233@gmail.com", true, 200],

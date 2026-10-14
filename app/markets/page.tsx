@@ -1,6 +1,14 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, RefreshCw, Plus, X, TrendingUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  RefreshCw,
+  Plus,
+  X,
+  TrendingUp,
+  Pencil,
+  Download,
+} from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import { cloudClient } from "@/lib/cloud";
 import MarketNavigator from "@/app/components/MarketNavigator";
@@ -10,6 +18,15 @@ import {
   YieldResearch,
 } from "@/app/components/MarketResearch";
 import { readingChange, signed } from "@/lib/market-analysis";
+import useMarketData from "@/lib/useMarketData";
+import {
+  editWatchlist,
+  instrumentFallback,
+  marketSnapshot,
+  watchlistFingerprint,
+} from "@/lib/market-state";
+import QuoteFrame from "@/app/components/MarketFrame";
+import Dialog from "@/app/components/Dialog";
 import {
   DEFAULT_WATCHLIST,
   EXCHANGES,
@@ -82,44 +99,29 @@ function Reading({ row }: { row: MarketReading }) {
     </article>
   );
 }
-function QuoteFrame({
-  title,
-  src,
-  height,
-}: {
-  title: string;
-  src: string;
-  height: number;
-}) {
-  return (
-    <div className="market-frame">
-      <iframe
-        title={title}
-        src={src}
-        height={height}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        sandbox="allow-scripts allow-same-origin allow-popups"
-      />
-      <small>
-        行情由{" "}
-        <a
-          href="https://www.tradingview.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          TradingView
-        </a>{" "}
-        提供。若图表空白或提示不支持，请在提供商页面核对代码和数据授权。
-      </small>
-    </div>
-  );
-}
 export default function Markets() {
   const store = useWealth();
-  const [data, setData] = useState<MarketData | null>(null),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+  const {
+    data,
+    busy,
+    error: dataError,
+    cached,
+    needsLogin,
+    refresh,
+  } = useMarketData();
+  const [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<{
+      key: string;
+      baseline: string;
+      draft: MarketInstrument;
+    } | null>(null),
+    [editError, setEditError] = useState("");
+  const [removal, setRemoval] = useState<{
+    row: MarketInstrument;
+    index: number;
+    after: string;
+  } | null>(null);
   const [live, setLive] = useState(false),
     [search, setSearch] = useState(""),
     [selected, setSelected] = useState("NASDAQ:NVDA"),
@@ -129,8 +131,7 @@ export default function Markets() {
     [exchange, setExchange] = useState<MarketInstrument["exchange"]>("NASDAQ"),
     [name, setName] = useState(""),
     [reload, setReload] = useState(0);
-  const request = useRef<AbortController | null>(null),
-    fetching = useRef(false);
+  const chart = useRef<HTMLDetailsElement | null>(null);
   const list = normalizeWatchlist(
     store.state.preferences.marketWatchlist ?? DEFAULT_WATCHLIST,
   );
@@ -141,54 +142,25 @@ export default function Markets() {
   );
   const instrument =
     list.find((row) => instrumentKey(row) === selected) ?? list[0];
-  const refresh = useCallback(async () => {
-    if (fetching.current) return;
-    fetching.current = true;
-    setBusy(true);
-    setError("");
-    const controller = new AbortController();
-    request.current = controller;
-    try {
-      const response = await fetch("/api/market", {
-        cache: "no-store",
-        signal: AbortSignal.any([
-          controller.signal,
-          AbortSignal.timeout(25000),
-        ]),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "数据读取失败");
-      if (!controller.signal.aborted) setData(result);
-    } catch (reason) {
-      if (!controller.signal.aborted)
-        setError(reason instanceof Error ? reason.message : "数据读取失败");
-    } finally {
-      fetching.current = false;
-      setBusy(false);
-    }
-  }, []);
+  useEffect(() => {
+    if (!chartOpen) return;
+    const frame = requestAnimationFrame(() =>
+      chart.current?.scrollIntoView({ behavior: "instant", block: "start" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [selected, chartOpen]);
   useEffect(() => {
     try {
       setLive(localStorage.getItem("together-market-embeds") === "on");
     } catch {}
-    void refresh();
-    const timer = setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 300000);
-    const visible = () => {
-      if (!document.hidden) void refresh();
-    };
-    document.addEventListener("visibilitychange", visible);
     const sub = cloudClient()?.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") window.location.replace("/login");
+      if (event === "SIGNED_OUT")
+        window.location.replace("/login?next=%2Fmarkets&reauth=1");
     });
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", visible);
-      request.current?.abort();
       sub?.data.subscription.unsubscribe();
     };
-  }, [refresh]);
+  }, []);
   const save = (rows: MarketInstrument[]) => {
     try {
       if (store.cloudChoice)
@@ -196,17 +168,28 @@ export default function Markets() {
           "请先回到家庭财富页面处理本机与云端版本差异，再修改自选。",
         );
       const normalized = normalizeWatchlist(rows);
-      store.commit(
-        (current) => ({
+      store.commit((current) => {
+        if (
+          watchlistFingerprint(
+            normalizeWatchlist(
+              current.preferences.marketWatchlist ?? DEFAULT_WATCHLIST,
+            ),
+          ) !== watchlistFingerprint(list)
+        )
+          throw new Error("自选已在其他操作中变化，请核对后重试。");
+        return {
           ...current,
           preferences: { ...current.preferences, marketWatchlist: normalized },
-        }),
-        "更新市场自选清单",
-      );
+        };
+      }, "更新市场自选清单");
       setError("");
+      setRemoval(null);
+      setNotice("自选已保存到本机；云端结果请以上方同步状态为准。");
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "自选未保存");
+      const message = reason instanceof Error ? reason.message : "自选未保存";
+      setError(message);
+      if (editing) setEditError(message);
       return false;
     }
   };
@@ -216,6 +199,24 @@ export default function Markets() {
     try {
       localStorage.setItem("together-market-embeds", next ? "on" : "off");
     } catch {}
+  };
+  const exportSnapshot = () => {
+    if (!data) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(marketSnapshot(data, list), null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `market-snapshot-${data.fetchedAt.slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice(
+      "已请求下载官方市场快照，不含家庭账本、聊天或跨域证券报价；请在浏览器下载记录查看。",
+    );
   };
   return (
     <main className="market-shell">
@@ -235,6 +236,14 @@ export default function Markets() {
             <span>{store.cloudStatus}</span>
             <button
               className="secondary"
+              disabled={!data}
+              onClick={exportSnapshot}
+            >
+              <Download size={14} />
+              导出官方快照
+            </button>
+            <button
+              className="secondary"
               disabled={busy}
               onClick={() => void refresh()}
             >
@@ -250,10 +259,55 @@ export default function Markets() {
           <a href="#fx-research">汇率</a>
           <a href="#securities">自选证券</a>
         </nav>
+        {dataError && (
+          <div className="error-banner" role="alert">
+            {dataError}
+            {data && "；下方保留上次成功读取的数据，请核对日期。"}
+            {needsLogin ? (
+              <a href="/login?next=%2Fmarkets&reauth=1">重新登录市场看板 ↗</a>
+            ) : (
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() => void refresh()}
+              >
+                重试官方数据
+              </button>
+            )}
+          </div>
+        )}
+        {cached && (
+          <p className="market-cache-note" role="status">
+            当前显示上次缓存快照（{data?.fetchedAt}），不是刚读取的数据；
+            {busy ? "正在核对最新官方数据。" : "请查看源日期并尝试刷新。"}
+          </p>
+        )}
+        {notice && (
+          <p className="market-notice" role="status">
+            {notice}
+            {removal && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  if (watchlistFingerprint(list) !== removal.after) {
+                    setError("自选已变化，为避免覆盖其他修改，未撤销。");
+                    setRemoval(null);
+                    return;
+                  }
+                  const rows = [...list];
+                  rows.splice(removal.index, 0, removal.row);
+                  if (save(rows))
+                    setNotice(`已撤销移除 ${removal.row.ticker}。`);
+                }}
+              >
+                撤销移除
+              </button>
+            )}
+          </p>
+        )}
         {(error || store.error) && (
           <div className="error-banner" role="alert">
             {error || store.error}
-            {data && "；下方保留上次成功读取的数据，请核对日期。"}
           </div>
         )}
         {store.cloudChoice && (
@@ -268,9 +322,6 @@ export default function Markets() {
             。可点击对应官方来源核对，不以示例数字补齐。
           </p>
         ) : null}
-        <MarketOverview data={data} />
-        <MacroResearch data={data} />
-        <YieldResearch data={data} />
         <section className="card market-connection">
           <div>
             <h2>
@@ -290,6 +341,9 @@ export default function Markets() {
             {live ? "暂停外部行情" : "启用自动更新行情"}
           </button>
         </section>
+        <MarketOverview data={data} />
+        <MacroResearch data={data} />
+        <YieldResearch data={data} />
         <section
           className="card market-section"
           id="fx-research"
@@ -310,6 +364,7 @@ export default function Markets() {
               title="加币盘中外汇参考"
               src={widgetUrl("fx", [])}
               height={240}
+              fallback="https://www.tradingview.com/markets/currencies/"
             />
           ) : (
             <p className="empty-note">
@@ -367,11 +422,18 @@ export default function Markets() {
             <button
               className="text-button"
               disabled={!live}
-              onClick={() => setReload(reload + 1)}
+              onClick={() => setReload((value) => value + 1)}
             >
               重新连接行情
             </button>
           </div>
+          {!live && (
+            <div className="market-action-hint">
+              <p>
+                外部行情尚未开启，点击证券后可在图表区授权加载；未开启时不连接行情提供商。
+              </p>
+            </div>
+          )}
           <div className="table-toolbar">
             <input
               aria-label="搜索市场自选"
@@ -405,17 +467,42 @@ export default function Markets() {
                   </small>
                 </button>
                 <button
+                  aria-label={`编辑自选${row.exchange}:${row.ticker}`}
+                  disabled={
+                    !store.ready || store.cloudLoading || !!store.cloudChoice
+                  }
+                  onClick={() => {
+                    setEditError("");
+                    setEditing({
+                      key: instrumentKey(row),
+                      baseline: watchlistFingerprint(list),
+                      draft: { ...row },
+                    });
+                  }}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
                   aria-label={`移除自选${row.exchange}:${row.ticker}`}
                   disabled={
                     !store.ready || store.cloudLoading || !!store.cloudChoice
                   }
-                  onClick={() =>
-                    save(
-                      list.filter(
-                        (other) => instrumentKey(other) !== instrumentKey(row),
-                      ),
-                    )
-                  }
+                  onClick={() => {
+                    const rows = list.filter(
+                      (other) => instrumentKey(other) !== instrumentKey(row),
+                    );
+                    if (save(rows)) {
+                      setRemoval({
+                        row,
+                        index: list.findIndex(
+                          (other) =>
+                            instrumentKey(other) === instrumentKey(row),
+                        ),
+                        after: watchlistFingerprint(rows),
+                      });
+                      setNotice(`已移除 ${row.ticker}；可以撤销。`);
+                    }
+                  }}
                 >
                   <X size={12} />
                 </button>
@@ -429,6 +516,20 @@ export default function Markets() {
             className="market-add"
             onSubmit={(event) => {
               event.preventDefault();
+              const next = {
+                ticker: ticker.trim().toUpperCase(),
+                exchange,
+                name: name.trim() || ticker.trim().toUpperCase(),
+              };
+              if (
+                list.some((row) => instrumentKey(row) === instrumentKey(next))
+              ) {
+                setError("");
+                setNotice("该证券已经在自选中，无需重复添加。");
+                setSelected(instrumentKey(next));
+                setChartOpen(true);
+                return;
+              }
               if (
                 save([
                   ...list,
@@ -489,6 +590,7 @@ export default function Markets() {
               title="自选股票ETF行情"
               src={widgetUrl("quotes", filtered)}
               height={520}
+              fallback="https://www.tradingview.com/markets/stocks-usa/"
             />
           )}
           {list.some(
@@ -510,6 +612,7 @@ export default function Markets() {
           {instrument && (
             <details
               className="market-chart"
+              ref={chart}
               open={chartOpen}
               onToggle={(event) => setChartOpen(event.currentTarget.open)}
             >
@@ -527,19 +630,53 @@ export default function Markets() {
                   </option>
                 ))}
               </select>
-              {live && chartOpen && (
-                <QuoteFrame
-                  title="所选证券历史图表"
-                  src={widgetUrl("chart", list, tradingSymbol(instrument))}
-                  height={520}
-                />
+              {chartOpen &&
+                !live &&
+                !(
+                  instrument.exchange === "TSX" && instrument.ticker === "ZGIN"
+                ) && (
+                  <div className="market-action-hint">
+                    <h3>图表尚未连接行情服务</h3>
+                    <p>
+                      开启后仅发送证券代码，不发送家庭金额、自定义名称或聊天；提供商仍会收到网络信息。
+                    </p>
+                    <button className="primary" onClick={toggleLive}>
+                      开启行情并加载所选图表
+                    </button>
+                  </div>
+                )}
+              {chartOpen &&
+              instrument.exchange === "TSX" &&
+              instrument.ticker === "ZGIN" ? (
+                <div className="market-action-hint">
+                  <h3>当前行情源暂不覆盖 ZGIN</h3>
+                  <p>保留在自选中，不用空白窗口或其他基金替代。</p>
+                  <a
+                    className="secondary"
+                    href={instrumentFallback(instrument)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    查看 ZGIN 官方价格与净值 ↗
+                  </a>
+                </div>
+              ) : (
+                live &&
+                chartOpen && (
+                  <QuoteFrame
+                    title="所选证券历史图表"
+                    src={widgetUrl("chart", list, tradingSymbol(instrument))}
+                    height={520}
+                    fallback={instrumentFallback(instrument)}
+                  />
+                )
               )}
               <a
                 target="_blank"
                 rel="noopener noreferrer"
-                href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tradingSymbol(instrument))}`}
+                href={instrumentFallback(instrument)}
               >
-                在 TradingView 核对标的和行情 ↗
+                在提供商核对标的和行情 ↗
               </a>
             </details>
           )}
@@ -569,6 +706,96 @@ export default function Markets() {
           <p>市场看板仅提供信息，不执行交易，不替代券商成交价。</p>
         </footer>
       </div>
+      {editing && (
+        <Dialog
+          title="编辑市场自选"
+          error={editError}
+          onClose={() => setEditing(null)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            try {
+              if (editing.baseline !== watchlistFingerprint(list))
+                throw new Error(
+                  "编辑期间自选已被更新，请关闭后重新打开，未覆盖新数据。",
+                );
+              const draft = {
+                ...editing.draft,
+                ticker: editing.draft.ticker.trim().toUpperCase(),
+                name:
+                  editing.draft.name.trim() ||
+                  editing.draft.ticker.trim().toUpperCase(),
+              };
+              const rows = editWatchlist(list, editing.key, draft);
+              if (save(rows)) {
+                setSelected(instrumentKey(draft));
+                setEditing(null);
+              }
+            } catch (reason) {
+              setEditError(
+                reason instanceof Error ? reason.message : "编辑失败",
+              );
+            }
+          }}
+        >
+          <label>
+            证券代码
+            <input
+              required
+              maxLength={15}
+              value={editing.draft.ticker}
+              onChange={(e) =>
+                setEditing({
+                  ...editing,
+                  draft: { ...editing.draft, ticker: e.target.value },
+                })
+              }
+            />
+          </label>
+          <label>
+            交易所
+            <select
+              value={editing.draft.exchange}
+              onChange={(e) =>
+                setEditing({
+                  ...editing,
+                  draft: {
+                    ...editing.draft,
+                    exchange: e.target.value as MarketInstrument["exchange"],
+                  },
+                })
+              }
+            >
+              {EXCHANGES.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            显示名称
+            <input
+              maxLength={100}
+              value={editing.draft.name}
+              onChange={(e) =>
+                setEditing({
+                  ...editing,
+                  draft: { ...editing.draft, name: e.target.value },
+                })
+              }
+            />
+          </label>
+          <p>只修改市场自选，不修改家庭资产。自定义名称不发送给行情提供商。</p>
+          <div className="dialog-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setEditing(null)}
+            >
+              取消
+            </button>
+            <button className="primary">保存自选修改</button>
+          </div>
+        </Dialog>
+      )}
     </main>
   );
 }

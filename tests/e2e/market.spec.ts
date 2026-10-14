@@ -1,7 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { authenticate, cleanupAuthenticated } from "./auth-helper";
 import { emptyState, saveAsset } from "../../lib/wealth";
-import { MACRO, TREASURIES, type MarketData } from "../../lib/market";
+import {
+  DEFAULT_WATCHLIST,
+  MACRO,
+  TREASURIES,
+  type MarketData,
+} from "../../lib/market";
+import { readFile } from "node:fs/promises";
 const synthetic: MarketData = {
   fetchedAt: "2026-10-14T12:00:00Z",
   failures: [],
@@ -64,6 +70,145 @@ test.beforeEach(async ({ page }) => {
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("编辑期间另一页更新自选时拒绝覆盖新数据", async ({ page }) => {
+  await page.goto("/markets");
+  await page.getByRole("button", { name: "编辑自选NASDAQ:NVDA" }).click();
+  await page.getByLabel("显示名称", { exact: true }).fill("尚未保存的旧草稿");
+  await page.evaluate(
+    (rows) => {
+      const state = JSON.parse(localStorage.getItem("together-wealth-v3")!);
+      state.preferences.marketWatchlist = rows;
+      state.revision++;
+      const raw = JSON.stringify(state);
+      localStorage.setItem("together-wealth-v3", raw);
+      dispatchEvent(
+        new StorageEvent("storage", {
+          key: "together-wealth-v3",
+          newValue: raw,
+        }),
+      );
+    },
+    DEFAULT_WATCHLIST.map((row, index) =>
+      index === 0 ? { ...row, name: "来自另一页的新名称" } : row,
+    ),
+  );
+  await page.getByRole("button", { name: "保存自选修改" }).click();
+  await expect(page.getByRole("dialog")).toContainText("已被更新");
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("together-wealth-v3")!).preferences
+          .marketWatchlist[0].name,
+    ),
+  ).toBe("来自另一页的新名称");
+});
+test("点证券后可在原位置开启图表，重试实际重建窗口", async ({ page }) => {
+  await page.goto("/markets");
+  await page.getByRole("button", { name: "查看NASDAQ:META图表" }).click();
+  await expect(
+    page.getByRole("heading", { name: "图表尚未连接行情服务" }),
+  ).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+  await page.getByRole("button", { name: "开启行情并加载所选图表" }).click();
+  await expect(page.locator("iframe")).toHaveCount(3);
+  const frame = page.getByTitle("所选证券历史图表"),
+    old = await frame.elementHandle();
+  await page.getByRole("button", { name: "重试所选证券历史图表" }).click();
+  expect(await old!.evaluate((element) => element.isConnected)).toBe(false);
+  await expect(page.getByLabel("选择证券图表")).toHaveValue("NASDAQ:META");
+});
+test("无报价的ZGIN有官方替代入口，不再展开死的图表窗口", async ({ page }) => {
+  await page.goto("/markets");
+  await page.getByRole("button", { name: "查看TSX:ZGIN图表" }).click();
+  await expect(
+    page.getByRole("heading", { name: "当前行情源暂不覆盖 ZGIN" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "查看 ZGIN 官方价格与净值 ↗" }),
+  ).toHaveAttribute("href", /bmoetfs\.ca/);
+  await expect(page.getByTitle("所选证券历史图表")).toHaveCount(0);
+});
+test("已有自选可编辑，重复拒绝；删减可撤销且刷新持久化", async ({ page }) => {
+  await page.goto("/markets");
+  await page.getByRole("button", { name: "编辑自选NASDAQ:NVDA" }).click();
+  await page.getByLabel("证券代码", { exact: true }).fill("META");
+  await page.getByRole("button", { name: "保存自选修改" }).click();
+  await expect(page.getByRole("dialog")).toContainText("重复");
+  await page.getByLabel("证券代码", { exact: true }).fill("NVDA");
+  await page.getByLabel("显示名称", { exact: true }).fill("合成的自选显示名称");
+  await page.getByRole("button", { name: "保存自选修改" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "移除自选NASDAQ:NVDA" }).click();
+  await expect(page.locator(".market-watchlist>div")).toHaveCount(29);
+  await page.getByRole("button", { name: "撤销移除" }).click();
+  await expect(page.locator(".market-watchlist>div")).toHaveCount(30);
+  await page.reload();
+  const state = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("together-wealth-v3")!),
+  );
+  expect(state.preferences.marketWatchlist[0].name).toBe("合成的自选显示名称");
+  expect(state.assets[0].value).toBe(500);
+  expect(state.history).toHaveLength(0);
+});
+test("断网刷新恢复上次快照与真实时间，重试恢复新读取", async ({ page }) => {
+  await page.goto("/markets");
+  await expect(page.locator(".market-fx-grid")).toContainText("5 / CAD");
+  await page.route("**/api/market", (route) =>
+    route.fulfill({ status: 503, json: { error: "offline" } }),
+  );
+  await page.reload();
+  await expect(page.locator(".market-cache-note")).toContainText(
+    "上次缓存快照",
+  );
+  await expect(page.locator(".market-fx-grid")).toContainText("2026-10-13");
+  await page.route("**/api/market", (route) =>
+    route.fulfill({ json: synthetic }),
+  );
+  await page.getByRole("button", { name: "重试官方数据" }).click();
+  await expect(page.locator(".market-cache-note")).toHaveCount(0);
+  await page.route("**/api/market", (route) =>
+    route.fulfill({
+      json: {
+        ...synthetic,
+        fx: synthetic.fx.map((row, index) =>
+          index === 0 ? { ...row, value: null, date: null } : row,
+        ),
+        failures: ["合成外汇源失效"],
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "刷新官方数据" }).click();
+  await expect(page.locator(".market-fx-grid")).toContainText(
+    "保留上次有效观测",
+  );
+  await expect(page.locator(".market-fx-grid")).toContainText("5 / CAD");
+});
+test("官方快照真正下载，排除家庭账本、聊天和自定义名称", async ({ page }) => {
+  await page.goto("/markets");
+  await expect(
+    page.getByRole("button", { name: "导出官方快照" }),
+  ).toBeEnabled();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "导出官方快照" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("market-snapshot-2026-10-14.json");
+  const snapshot = JSON.parse(await readFile((await download.path())!, "utf8"));
+  expect(snapshot.kind).toBe("public-market-snapshot");
+  expect(snapshot.fx).toHaveLength(3);
+  expect(snapshot).not.toHaveProperty("assets");
+  expect(snapshot).not.toHaveProperty("messages");
+  expect(snapshot.watchlist[0]).not.toHaveProperty("name");
+});
+test("API会话失效时给出重新登录回看板入口", async ({ page }) => {
+  await page.route("**/api/market", (route) =>
+    route.fulfill({ status: 401, json: { error: "expired" } }),
+  );
+  await page.goto("/markets");
+  await expect(
+    page.getByRole("link", { name: "重新登录市场看板 ↗" }),
+  ).toHaveAttribute("href", /next=%2Fmarkets.*reauth=1/);
+});
 test("研究图表按共同期间绘制，窗口可切换，缺预期不编造惊喜指标", async ({
   page,
 }) => {

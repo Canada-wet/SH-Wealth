@@ -706,6 +706,66 @@ main {
 .market-frame {
   margin: 15px 0;
 }
+.market-frame-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: #f3f6f0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #52685c;
+}
+.market-frame-tools > span {
+  flex: 1;
+  min-width: 160px;
+}
+.market-frame-tools a {
+  white-space: nowrap;
+}
+.market-action-hint {
+  padding: 16px;
+  border: 1px dashed #a9bcaf;
+  border-radius: 10px;
+  background: #f4f7f1;
+  margin: 14px 0;
+  color: #52685c;
+  font-size: 12px;
+}
+.market-action-hint p {
+  margin: 6px 0 12px;
+  line-height: 1.8;
+}
+.market-action-hint a {
+  display: inline-block;
+  padding: 9px 12px;
+}
+.market-notice,
+.market-cache-note {
+  padding: 12px 14px;
+  margin: 12px 0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #52685c;
+  line-height: 1.8;
+  background: #eaf2ec;
+}
+.market-cache-note {
+  background: #fbf3e1;
+  color: #765c2c;
+}
+.market-notice button {
+  margin-left: 10px;
+}
+.market-watchlist > div button {
+  min-height: 34px;
+}
+.market-status button {
+  justify-content: center;
+}
 .market-frame iframe {
   width: 100%;
   display: block;

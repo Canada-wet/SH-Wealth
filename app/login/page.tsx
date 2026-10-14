@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LockKeyhole } from "lucide-react";
 import { cloudClient } from "@/lib/cloud";
 import { allowedEmail, safeReturnPath } from "@/lib/access";
@@ -10,8 +10,47 @@ export default function Login() {
   const [reset, setReset] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [checking, setChecking] = useState(true),
+    [showPassword, setShowPassword] = useState(false);
+  const submitting = useRef(false);
+  const interacted = useRef(false);
+  useEffect(() => {
+    let active = true;
+    const client = cloudClient();
+    if (
+      !client ||
+      new URLSearchParams(window.location.search).get("reauth") === "1"
+    ) {
+      setChecking(false);
+      return;
+    }
+    void client.auth
+      .getUser()
+      .then(({ data }) => {
+        if (
+          active &&
+          !submitting.current &&
+          !interacted.current &&
+          allowedEmail(data.user?.email) &&
+          data.user?.email_confirmed_at
+        )
+          window.location.replace(
+            safeReturnPath(
+              new URLSearchParams(window.location.search).get("next"),
+            ),
+          );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setChecking(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    interacted.current = true;
     setError("");
     setNotice("");
     if (!allowedEmail(email)) {
@@ -24,6 +63,7 @@ export default function Login() {
       return;
     }
     setBusy(true);
+    submitting.current = true;
     try {
       if (reset) {
         const result = await client.auth.resetPasswordForEmail(
@@ -44,8 +84,20 @@ export default function Login() {
           email: email.trim().toLowerCase(),
           password,
         });
-        if (result.error)
-          throw new Error("邮箱或密码不正确，请重试或重置密码。");
+        if (result.error) {
+          const failure = result.error;
+          throw new Error(
+            failure.status === 429
+              ? "登录尝试过于频繁，请稍后重试。"
+              : failure.status === 0 ||
+                  (failure.status ?? 0) >= 500 ||
+                  /fetch|network/i.test(failure.message)
+                ? "登录服务暂时无法连接，请检查网络后重试。"
+                : failure.code === "email_not_confirmed"
+                  ? "邮箱尚未完成验证，请联系管理员。"
+                  : "邮箱或密码不正确，请重试或重置密码。",
+          );
+        }
         if (!allowedEmail(result.data.user?.email)) {
           await client.auth.signOut();
           throw new Error("此账号没有访问权限。");
@@ -62,6 +114,7 @@ export default function Login() {
       );
     } finally {
       setBusy(false);
+      submitting.current = false;
     }
   };
   return (
@@ -75,7 +128,17 @@ export default function Login() {
         </div>
         <h1>{reset ? "找回你的访问权限" : "两个人，一个财富计划"}</h1>
         <p>私密家庭空间，仅限已授权的两位成员。</p>
-        <form onSubmit={submit}>
+        {checking && (
+          <small role="status">
+            正在检查已有登录；也可直接填写邮箱和密码。
+          </small>
+        )}
+        <form
+          onSubmit={submit}
+          onInput={() => {
+            interacted.current = true;
+          }}
+        >
           <label>
             邮箱
             <input
@@ -90,13 +153,22 @@ export default function Login() {
             <label>
               密码
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
+          )}
+          {!reset && (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setShowPassword((value) => !value)}
+            >
+              {showPassword ? "隐藏密码" : "显示密码"}
+            </button>
           )}
           {error && (
             <p className="auth-error" role="alert">
@@ -116,6 +188,7 @@ export default function Login() {
             className="text-button"
             disabled={busy}
             onClick={() => {
+              interacted.current = true;
               setReset(!reset);
               setError("");
               setNotice("");

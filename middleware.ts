@@ -47,7 +47,7 @@ export async function middleware(request: NextRequest) {
   const redirect = request.nextUrl.clone();
   redirect.pathname = "/login";
   redirect.search = "";
-  redirect.searchParams.set("next", path);
+  redirect.searchParams.set("next", path+request.nextUrl.search);
   const denied = NextResponse.redirect(redirect);
   response.cookies.getAll().forEach((cookie) => denied.cookies.set(cookie));
   denied.headers.set("Cache-Control", "private, no-store");

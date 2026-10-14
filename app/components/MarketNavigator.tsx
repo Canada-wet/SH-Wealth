@@ -1,3 +1,6 @@
+"use client";
+import { useState } from "react";
+import { cloudClient } from "@/lib/cloud";
 import {
   Landmark,
   LineChart,
@@ -7,6 +10,23 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 export default function MarketNavigator() {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const logout = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const client = cloudClient();
+      if (!client) throw new Error("登录服务尚未配置。");
+      const result = await client.auth.signOut({ scope: "local" });
+      if (result.error) throw new Error("暂时无法退出，请检查网络后重试。");
+      window.location.replace("/login?next=%2Fmarkets&reauth=1");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "退出失败，请重试。");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <>
       <aside className="sidebar market-sidebar">
@@ -45,6 +65,14 @@ export default function MarketNavigator() {
           <a href="/#overview">
             返回家庭工作台 <ArrowUpRight size={14} />
           </a>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() => void logout()}
+          >
+            {busy ? "正在退出…" : "退出当前设备登录"}
+          </button>
+          {error && <p role="alert">{error}</p>}
         </div>
       </aside>
       <nav className="market-mobile-nav" aria-label="手机主导航">
@@ -52,6 +80,14 @@ export default function MarketNavigator() {
         <a href="/markets" aria-current="page">
           市场看板
         </a>
+        <button
+          className="text-button"
+          disabled={busy}
+          onClick={() => void logout()}
+        >
+          退出登录
+        </button>
+        {error && <p role="alert">{error}</p>}
       </nav>
     </>
   );

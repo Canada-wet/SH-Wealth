@@ -2,6 +2,45 @@ import { test, expect } from "@playwright/test";
 import { authenticate, cleanupAuthenticated } from "./auth-helper";
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
 import { emptyState } from "../../lib/wealth";
+test("已有有效登录自动回到看板，退出只清理当前设备并可重新登录", async ({
+  page,
+}) => {
+  await authenticate(page, { seed: emptyState() });
+  await page.route("**/api/market", (route) =>
+    route.fulfill({
+      json: {
+        fetchedAt: "2026-10-14T12:00:00Z",
+        fx: [],
+        yields: [],
+        macro: [],
+        failures: [],
+      },
+    }),
+  );
+  await page.goto("/login?next=%2Fmarkets");
+  await expect(page).toHaveURL(/\/markets$/);
+  await expect(
+    page.getByRole("heading", { name: "市场看板", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", {
+      name:
+        test.info().project.name === "mobile" ? "退出登录" : "退出当前设备登录",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/login\?next=%2Fmarkets&reauth=1/);
+  await page.getByRole("button", { name: "显示密码", exact: true }).click();
+  await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute(
+    "type",
+    "text",
+  );
+  await page.getByRole("button", { name: "隐藏密码", exact: true }).click();
+  await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute(
+    "type",
+    "password",
+  );
+});
 test("访客无法进入工作台、白名单外账号不能登录、接口拒绝匿名", async ({
   page,
   request,
