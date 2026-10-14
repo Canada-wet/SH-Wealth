@@ -7,6 +7,7 @@ export default function AdvisorMarkdown({ text }: { text: string }) {
         remarkPlugins={[remarkGfm]}
         skipHtml
         components={{
+          img: () => null,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer">
               {children}

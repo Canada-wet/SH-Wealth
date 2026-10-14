@@ -63,6 +63,28 @@ it("未知最新话题不会假装联网，关闭不搜索", async () => {
   expect((await webResearch("今天央行利率", "off")).status).toBe("off");
   expect(fetch).not.toHaveBeenCalled();
 });
+it("模糊实时行情不能用旧知识冒充，家庭记录查询仍直接回答", () => {
+  expect(searchPlan("现在比特币价格多少")).toMatchObject({
+    needed: true,
+    enabled: false,
+  });
+  expect(searchPlan("当前利率是多少")).toMatchObject({
+    needed: true,
+    enabled: false,
+  });
+  expect(searchPlan("分析一下目前家庭财务状况").needed).toBe(false);
+  expect(searchPlan("今年本年回报是多少").needed).toBe(false);
+});
+it("网页混入的非引用链接被移除，官方引用保留在正文", () => {
+  const data = response();
+  (
+    data.output[1].content![0].annotations[0] as { end_index: number }
+  ).end_index = 0;
+  data.output[1].content![0].text = "资料 https://evil.test/ 引诱链接";
+  const result = parseWebResearch(data, "public", "2026-10-14T04:00:00Z");
+  expect(result.facts).not.toContain("https://evil.test");
+  expect(result.facts).toContain("https://www.bankofcanada.ca/");
+});
 it("搜索只发送固定公共查询，不携带原问题、账号、金额和历史", async () => {
   const fetch = vi
     .fn()

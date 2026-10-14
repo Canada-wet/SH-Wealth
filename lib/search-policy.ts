@@ -84,7 +84,7 @@ export function searchPlan(
   );
   const ledgerOnly =
     !topic &&
-    /净资产|总资产|账户|账本|余额|月结余|成员贡献|家庭.*资产|net.worth|balance/i.test(
+    /净资产|总资产|账户|账本|余额|月结余|成员贡献|家庭|财务状况|财政状况|收支|预算|本年回报|net.worth|balance/i.test(
       question,
     );
   const editOnly =
@@ -92,7 +92,8 @@ export function searchPlan(
       question.trim(),
     ) && !explicit;
   const freshUnknown =
-    !ledgerOnly && /最新|实时|今天|今年|latest|today/i.test(question);
+    !ledgerOnly &&
+    /最新|实时|今天|今年|现在|目前|当前|latest|today|current/i.test(question);
   const needed =
     mode === "on" ||
     explicit ||

@@ -124,6 +124,9 @@ export function parseWebResearch(
       (link, title: string, url: string) =>
         unique.some((source) => source.url === url) ? link : title,
     )
+    .replace(/https?:\/\/[^\s<>)]+/g, (url) =>
+      unique.some((source) => source.url === url) ? url : "未验证链接已移除",
+    )
     .slice(0, 6000);
   if (!facts.trim() || !unique.length)
     throw new Error("No verified source citations");
