@@ -1,0 +1,15 @@
+# Deploy only application source. Local secrets, caches and test artifacts stay local.
+/*
+!/app/
+!/lib/
+!/public/
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/next.config.ts
+!/next-env.d.ts
+!/vercel.json
+!/middleware.ts
+!/.vercelignore
+.env*
+*.pem
