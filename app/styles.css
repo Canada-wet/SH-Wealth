@@ -2497,6 +2497,55 @@ tbody tr:hover {
   font-size: 10px;
   line-height: 1.6;
 }
+.search-controls {
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  max-height: 190px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.search-controls summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.search-controls summary span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+}
+.search-controls p {
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 7px 0 0;
+}
+.search-toolbar {
+  display: flex;
+  gap: 9px;
+  margin: 9px 0;
+  flex-wrap: wrap;
+}
+.search-toolbar label {
+  font-size: 10px;
+  flex: 1;
+  min-width: 100px;
+}
+.search-toolbar select {
+  font-size: 10px;
+  display: block;
+  width: 100%;
+  padding: 6px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--cream);
+}
+.search-query {
+  overflow-wrap: anywhere;
+}
 .voice-controls {
   border-top: 1px solid var(--line);
   padding: 10px 16px;

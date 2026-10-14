@@ -67,6 +67,8 @@ export type WealthState = {
     allocation: "category" | "owner";
     months: number;
     proactive?: boolean;
+    webSearch?: "auto" | "on" | "off";
+    searchTopic?: keyof typeof import("./search-policy").SEARCH_TOPICS | "auto";
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -550,6 +552,21 @@ export function validateState(raw: unknown): asserts raw is WealthState {
     ![3, 6, 12, 24].includes(state.preferences.months) ||
     (state.preferences.proactive !== undefined &&
       typeof state.preferences.proactive !== "boolean") ||
+    (state.preferences.webSearch !== undefined &&
+      !["auto", "on", "off"].includes(state.preferences.webSearch)) ||
+    (state.preferences.searchTopic !== undefined &&
+      ![
+        "auto",
+        "rates",
+        "mortgage",
+        "gic",
+        "tfsa",
+        "rrsp",
+        "fhsa",
+        "fx",
+        "inflation",
+        "tax",
+      ].includes(state.preferences.searchTopic)) ||
     !Array.isArray(state.readAlerts) ||
     state.readAlerts.some((value) => typeof value !== "string")
   )

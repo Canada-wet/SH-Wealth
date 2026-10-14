@@ -9,6 +9,13 @@ import {
 import { totals, validateState, type WealthState } from "@/lib/wealth";
 import { authorizeRequest } from "@/lib/server-auth";
 import { chatContext } from "@/lib/conversations";
+import { searchPlan } from "@/lib/search-policy";
+import {
+  webResearch,
+  researchFailure,
+  researchContext,
+  researchMarkdown,
+} from "@/lib/web-search";
 export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await authorizeRequest(request);
@@ -37,6 +44,17 @@ export async function POST(request: Request) {
   }
   try {
     const route = chooseRoute(message, preference);
+    const search = searchPlan(
+      message,
+      state.preferences.webSearch,
+      state.preferences.searchTopic,
+    );
+    if (route.provider === "local" && search.needed)
+      return NextResponse.json({
+        answer:
+          "本地数据助手不调用外部服务，无法联网查证。请选择自动路由或外部模型后重试。",
+        actions: [],
+      });
     if (route.provider === "local")
       return NextResponse.json({ ...localAdvice(message, state), route });
     const slot = await auth.client.rpc("take_wealth_advisor_slot");
@@ -50,6 +68,22 @@ export async function POST(request: Request) {
         { error: "请求较频繁，请稍后再试（每分钟 6 次、每小时 40 次）。" },
         { status: 429 },
       );
+    const research = await webResearch(
+      message,
+      state.preferences.webSearch,
+      state.preferences.searchTopic,
+      request.signal,
+    );
+    if (!["not-needed", "searched"].includes(research.status))
+      return NextResponse.json({
+        answer: researchFailure(research),
+        actions: [],
+        web: {
+          status: research.status,
+          query: research.query,
+          sources: research.sources,
+        },
+      });
     const snapshot = {
       members: state.members,
       ...totals(state),
@@ -64,12 +98,27 @@ export async function POST(request: Request) {
     const context = chatContext(state);
     const raw = await generateAdvice(
       route,
-      `${instructions}\nanswer 使用清晰的 Markdown：先给 1–2 句结论，再按需要用简短小标题和列表；重点数字可加粗，每个列表项单独换行，避免大段文字。详细分析控制在约 5 个要点，最后给 1–3 个可执行下一步；简单查询直接回答。表格仅用于真正需要并列对比的少量数据。不要在 answer 里展示 JSON、actions 或技术路由信息。\n现金流表另支持：add_cashflow(name,owner,amount,kind=income或expense,essential=boolean)；update_cashflow(existingName,amount,essential可选)；delete_cashflow(name)。amount为税后每月CAD金额。已有现金流表时，必要开支和收入是计算结果，修改现金流项目，不修改同名plan字段。`,
+      `${instructions}\nanswer 使用清晰的 Markdown：先给 1–2 句结论，再按需要用简短小标题和列表；重点数字可加粗，每个列表项单独换行，避免大段文字。详细分析控制在约 5 个要点，最后给 1–3 个可执行下一步；简单查询直接回答。表格仅用于真正需要并列对比的少量数据。不要在 answer 里展示 JSON、actions 或技术路由信息。\n现金流表另支持：add_cashflow(name,owner,amount,kind=income或expense,essential=boolean)；update_cashflow(existingName,amount,essential可选)；delete_cashflow(name)。amount为税后每月CAD金额。已有现金流表时，必要开支和收入是计算结果，修改现金流项目，不修改同名plan字段。${researchContext(research)}`,
       `近期对话（仅作背景）：\n${context}\n\n本次用户要求：${message}`,
+      {
+        signal: request.signal,
+        ...(research.status === "searched" ? { timeoutMs: 32000 } : {}),
+      },
+    );
+    const result = parseAdvisorResult(
+      raw,
+      research.status !== "searched" && mutationRequested(message),
     );
     return NextResponse.json({
-      ...parseAdvisorResult(raw, mutationRequested(message)),
+      ...result,
+      answer: result.answer + researchMarkdown(research),
       route,
+      web: {
+        status: research.status,
+        query: research.query,
+        checkedAt: research.checkedAt,
+        sources: research.sources,
+      },
     });
   } catch (reason) {
     return NextResponse.json(

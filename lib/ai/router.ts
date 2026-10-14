@@ -181,25 +181,35 @@ export async function generateAdvice(
   route: Route,
   instructions: string,
   question: string,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ) {
+  const signal = options.signal
+    ? AbortSignal.any([
+        options.signal,
+        AbortSignal.timeout(options.timeoutMs ?? 60000),
+      ])
+    : AbortSignal.timeout(options.timeoutMs ?? 60000);
   if (route.provider === "openai") {
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
-      timeout: 60000,
-      maxRetries: 1,
+      timeout: options.timeoutMs ?? 60000,
+      maxRetries: options.timeoutMs ? 0 : 1,
     });
-    const response = await client.responses.create({
-      model: route.model,
-      instructions,
-      input: question,
-      max_output_tokens: 4096,
-    });
+    const response = await client.responses.create(
+      {
+        model: route.model,
+        instructions,
+        input: question,
+        max_output_tokens: 4096,
+      },
+      { signal },
+    );
     return response.output_text;
   }
   if (route.provider === "anthropic") {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      signal: AbortSignal.timeout(60000),
+      signal,
       headers: {
         "content-type": "application/json",
         "x-api-key": process.env.ANTHROPIC_API_KEY!,
@@ -225,7 +235,7 @@ export async function generateAdvice(
     throw new Error("本地助手不使用模型 API。");
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    signal: AbortSignal.timeout(60000),
+    signal,
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,

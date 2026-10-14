@@ -16,6 +16,7 @@ import { proactiveInsights } from "@/lib/insights";
 import { financialFingerprint, previewActions } from "@/lib/advisor-preview";
 import useChatDraft from "@/lib/useChatDraft";
 import VoiceControls from "./VoiceControls";
+import SearchControls from "./SearchControls";
 import {
   activeChat,
   allChats,
@@ -510,6 +511,13 @@ export default function FloatingAdvisor({
               </div>
             </div>
           )}
+          <SearchControls
+            state={state}
+            input={input}
+            disabled={busy || loading || Boolean(pending)}
+            onChange={onChange}
+            onError={setError}
+          />
           <VoiceControls
             key={currentChat.id}
             input={input}
