@@ -4,8 +4,8 @@
 
 1. **低成本自动路由**：日常问答、记账、简短周报优先 DeepSeek Flash；复杂退休、税务、情景与再平衡升级 GPT‑6 Astra。手动选择保留；服务失败不会静默追加昂贵模型调用。
 2. **更准确的复杂度判断**：余额中的四位数、目标年份不再单独触发复杂档。显示模型与路由原因，不宣称已测算实际美元费用。
-3. **语音输入**：顾问的“语音对话”可选择普通话、English、粤语；实际语言可用性取决于浏览器。点击、同意说明、授予麦克风权限后才开始；不持续监听，不自动发送。
-4. **回复朗读**：主动点击朗读最新回复，可停止；关闭顾问停止麦克风与朗读。不额外调用付费语音模型。
+3. **自然语音输入**：一次点击开麦，无需选择语种；自动识别并在停顿后提交，不需要先核对转写或按发送。识别文字随聊天保存；修改请求仍需核对页面预览。
+4. **自然语音回复**：用神经语音播报简短口语回答，完整分析保留在聊天中；可点“打断”，读完自动听下一句。回复时暂停收音；关闭、切走页面或超时结束。语音服务另计费，分析仍按 DeepSeek 优先路由。
 5. **编辑前预览与确认**：资产、负债、回报、贡献、现金流、目标和计划修改显示前后差异。确认后原子保存；取消不执行。伴侣修改数据后过期预览被拒绝。未确认操作刷新后不会执行。
 6. **按会话恢复草稿**：未发送文字只保存在此设备的浏览器中，刷新后恢复，各会话隔离。发送后清空；已发送聊天仍沿用 Supabase 同步。
 7. **停止与重试**：请求中可停止等待，问题保留在草稿中，再点击发送即可重试；同一未回复问题不重复添加。停止等待不保证服务商取消计算或计费。
@@ -15,6 +15,6 @@
 
 ## 语音与隐私边界
 
-这是浏览器语音识别 + 文字顾问 + 主动朗读，不是连续实时音频通话。部分浏览器会将音频发送给其语音识别服务商，App 不保存录音；识别文字经用户发送后才进入家庭聊天。金额与归属必须核对。不支持时可使用文字或系统键盘听写。语音权限与音频准确度仍需实际设备验证，自动测试使用可控的浏览器接口模拟。
+现在是停顿检测 + 自动语音识别 + 路由顾问 + 神经播报的连续轮次对话，不是原生全双工语音通话。识别与播报由 OpenAI 处理；App 不保存录音，只保存问答文字。不支持录音的浏览器可使用文字。真人麦克风、口音与噪声准确度仍需实际设备验证；测试覆盖可控浏览器接口模拟，以及真实中英文合成音频经过在线语音服务的请求。详见 [自然语音](natural-voice.md)。
 
-依据：[浏览器 SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition)、[SpeechSynthesis](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis)、[DeepSeek thinking 参数](https://api-docs.deepseek.com/guides/thinking_mode/)、[OpenAI GPT‑6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)。OpenAI Docs 指引用于核对现有 GPT‑6 API 接口；模型 ID 沿用已有配置。
+依据：[OpenAI 语音识别](https://developers.openai.com/api/docs/guides/speech-to-text)、[OpenAI 神经语音合成](https://developers.openai.com/api/docs/guides/text-to-speech)、[DeepSeek thinking 参数](https://api-docs.deepseek.com/guides/thinking_mode/)、[OpenAI GPT‑6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)。使用 OpenAI Docs 核对语音接口；财富推理模型沿用已有配置。

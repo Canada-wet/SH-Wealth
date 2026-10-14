@@ -17,6 +17,7 @@ import { financialFingerprint, previewActions } from "@/lib/advisor-preview";
 import useChatDraft from "@/lib/useChatDraft";
 import VoiceControls from "./VoiceControls";
 import SearchControls from "./SearchControls";
+import { spokenText, type VoiceReply } from "@/lib/voice";
 import {
   activeChat,
   allChats,
@@ -80,6 +81,7 @@ export default function FloatingAdvisor({
   latest.current = state;
   const messagesRef = useRef<HTMLDivElement>(null);
   const controller = useRef<AbortController | null>(null);
+  const requestBusy = useRef(false);
   useEffect(() => {
     try {
       setSelectedChatId(localStorage.getItem("together-selected-chat"));
@@ -129,10 +131,22 @@ export default function FloatingAdvisor({
         16;
     } else container.scrollTop = container.scrollHeight;
   }, [currentChat.messages, busy, open, historyOpen]);
-  const send = async (event?: FormEvent) => {
+  const send = async (
+    event?: FormEvent,
+    spoken?: string,
+    signal?: AbortSignal,
+  ): Promise<VoiceReply | undefined> => {
     event?.preventDefault();
-    const question = input.trim();
-    if (!question || busy || loading || pending || voiceListening) return;
+    const question = (spoken ?? input).trim();
+    if (
+      !question ||
+      requestBusy.current ||
+      loading ||
+      pending ||
+      (!spoken && voiceListening) ||
+      signal?.aborted
+    )
+      return;
     setError("");
     const snapshot = openChat(latest.current, currentChat.id);
     const chatId = activeChat(snapshot).id;
@@ -153,52 +167,80 @@ export default function FloatingAdvisor({
       setError(reason instanceof Error ? reason.message : "消息无法保存");
       return;
     }
-    setInput("");
+    if (!spoken) setInput("");
+    requestBusy.current = true;
     setBusy(true);
     controller.current = new AbortController();
-    const timer = setTimeout(() => controller.current?.abort(), 75000);
+    const requestController = controller.current;
+    const timer = setTimeout(() => requestController.abort(), 75000);
     try {
       const response = await fetch("/api/advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: controller.current.signal,
+        signal: signal
+          ? AbortSignal.any([requestController.signal, signal])
+          : requestController.signal,
         body: JSON.stringify({
           message: question,
           preference: snapshot.preferences.model,
           state: snapshot,
+          voice: Boolean(spoken),
         }),
       });
       const result = await response.json();
+      if (requestController.signal.aborted || signal?.aborted)
+        throw new Error("请求已停止。");
       if (!response.ok) throw new Error(result.error || "顾问暂时不可用。");
       const actions = Array.isArray(result.actions)
         ? (result.actions as AssistantAction[])
         : [];
+      let nextPending = null;
       if (actions.length) {
         if (financial !== financialFingerprint(latest.current))
           throw new Error(
             "对话期间家庭数据已有变化，请用最新数据重新发起修改。",
           );
-        setPending({
+        nextPending = {
           actions,
           rows: previewActions(latest.current, actions),
           fingerprint: financial,
           chatId,
-        });
+        };
       }
       const text = `${result.answer || "已完成分析。"}${actions.length ? `\n\n待确认 ${actions.length} 项变更：请核对预览，确认后才会保存。刷新页面后需重新发起，未确认变更不会执行。` : ""}${result.route ? `\n\n${result.route.provider === "local" ? "本地助手" : `${result.route.provider} · ${result.route.model}`} · ${result.route.reason}` : ""}`;
       onChange((current) =>
         appendChat(current, { id: id(), role: "assistant", text }, chatId),
       );
+      if (nextPending) setPending(nextPending);
+      return {
+        reply:
+          spokenText(
+            typeof result.spokenAnswer === "string" &&
+              result.spokenAnswer.trim()
+              ? result.spokenAnswer
+              : result.answer || "已完成分析。",
+          ) +
+          (actions.length
+            ? " 本次只是待确认的修改计划。请核对上方预览，确认后才会保存。"
+            : ""),
+        pending: Boolean(actions.length),
+      };
     } catch (reason) {
-      const message = controller.current?.signal.aborted
-        ? "请求已停止或超时；问题已保留，可重试。停止不保证服务商取消计费。"
-        : reason instanceof Error
-          ? reason.message
-          : "请求失败。";
+      const message =
+        requestController.signal.aborted || signal?.aborted
+          ? "请求已停止或超时；问题已保留，可重试。停止不保证服务商取消计费。"
+          : reason instanceof Error
+            ? reason.message
+            : "请求失败。";
       setError(message);
-      setInput(question);
+      setInput(
+        spoken && input.trim()
+          ? `${input}\n${question}`.slice(0, 6000)
+          : question,
+      );
     } finally {
       clearTimeout(timer);
+      requestBusy.current = false;
       setBusy(false);
     }
   };
@@ -241,7 +283,10 @@ export default function FloatingAdvisor({
   return (
     <div className="advisor-widget">
       {open && (
-        <section className="advisor-window" aria-label="家庭财富顾问">
+        <section
+          className={`advisor-window${voiceListening ? " voice-session" : ""}${pending ? " has-preview" : ""}`}
+          aria-label="家庭财富顾问"
+        >
           <div className="advisor-window-head">
             <div className="advisor-avatar">
               <Bot size={20} />
@@ -254,7 +299,7 @@ export default function FloatingAdvisor({
             </div>
             <button
               aria-label="查看聊天历史"
-              disabled={busy || Boolean(pending)}
+              disabled={busy || voiceListening || Boolean(pending)}
               aria-expanded={historyOpen}
               onClick={() => setHistoryOpen(!historyOpen)}
             >
@@ -262,7 +307,7 @@ export default function FloatingAdvisor({
             </button>
             <button
               aria-label="新建对话"
-              disabled={busy || loading || Boolean(pending)}
+              disabled={busy || voiceListening || loading || Boolean(pending)}
               onClick={() => {
                 try {
                   const next = onChange(newChat);
@@ -287,6 +332,7 @@ export default function FloatingAdvisor({
             <span>模型策略</span>
             <select
               aria-label="顾问模型策略"
+              disabled={voiceListening || busy || Boolean(pending)}
               value={state.preferences.model}
               onChange={(event) => {
                 try {
@@ -349,7 +395,7 @@ export default function FloatingAdvisor({
                   <button
                     type="button"
                     key={row.id}
-                    disabled={busy || loading}
+                    disabled={busy || voiceListening || loading}
                     onClick={() =>
                       setInput(
                         `只做分析与讨论，不执行数据变更。\n${row.prompt}`,
@@ -511,27 +557,27 @@ export default function FloatingAdvisor({
               </div>
             </div>
           )}
-          <SearchControls
-            state={state}
-            input={input}
-            disabled={busy || loading || Boolean(pending)}
-            onChange={onChange}
-            onError={setError}
-          />
+          {!pending && !voiceListening && (
+            <SearchControls
+              state={state}
+              input={input}
+              disabled={busy || voiceListening || loading || Boolean(pending)}
+              onChange={onChange}
+              onError={setError}
+            />
+          )}
           <VoiceControls
             key={currentChat.id}
-            input={input}
-            onTranscript={setInput}
+            onTurn={(text, signal) => send(undefined, text, signal)}
             onListeningChange={setVoiceListening}
-            reply={
-              currentChat.messages
-                .filter((row) => row.role === "assistant")
-                .at(-1)?.text || ""
-            }
-            disabled={busy || loading || historyOpen || Boolean(pending)}
+            pending={Boolean(pending)}
+            disabled={(!voiceListening && busy) || loading || historyOpen}
             active={open}
           />
-          <form className="advisor-compose" onSubmit={send}>
+          <form
+            className="advisor-compose"
+            onSubmit={(event) => void send(event)}
+          >
             <textarea
               aria-label="顾问消息"
               value={input}
@@ -571,7 +617,7 @@ export default function FloatingAdvisor({
               <Send size={17} />
             </button>
           </form>
-          {busy && (
+          {busy && !voiceListening && (
             <button
               type="button"
               className="advisor-stop"

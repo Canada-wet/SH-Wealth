@@ -39,11 +39,9 @@ test("草稿刷新恢复，待确认修改取消不写入，重新确认才保�
   await expect(
     page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
   ).toHaveText("+2%");
-  await page
-    .locator(".advisor-window")
-    .screenshot({
-      path: `test-results/advisor-preview-${test.info().project.name}.png`,
-    });
+  await page.locator(".advisor-window").screenshot({
+    path: `test-results/advisor-preview-${test.info().project.name}.png`,
+  });
   await page.getByRole("button", { name: "取消修改" }).click();
   await expect(
     page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
@@ -55,53 +53,124 @@ test("草稿刷新恢复，待确认修改取消不写入，重新确认才保�
     page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
   ).toHaveText("-3%");
 });
-test("语音仅形成可编辑草稿，原数据保持直到明确确认", async ({ page }) => {
+test("语音停顿自动提问，无语种选择，修改仍需明确确认且聊天可回看", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
-    class Recognition {
-      lang = "";
-      continuous = false;
-      interimResults = false;
-      onresult: ((event: unknown) => void) | null = null;
-      onend: (() => void) | null = null;
+    let samples = 0;
+    const track = { enabled: true, stop() {} };
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          getTracks: () => [track],
+          getAudioTracks: () => [track],
+        }),
+      },
+    });
+    class Recorder {
+      state = "inactive";
+      mimeType = "audio/webm";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      static isTypeSupported() {
+        return true;
+      }
       start() {
-        this.onresult?.({
-          results: [
-            Object.assign([{ transcript: "把共同储蓄本年回报改为 -5%" }], {
-              isFinal: true,
-            }),
-          ],
-        });
-        this.onend?.();
+        samples = 0;
+        this.state = "recording";
       }
       stop() {
-        this.onend?.();
-      }
-      abort() {
-        this.onend?.();
+        this.state = "inactive";
+        this.ondataavailable?.({
+          data: new Blob(["synthetic"], { type: this.mimeType }),
+        });
+        this.onstop?.();
       }
     }
-    Object.defineProperty(window, "SpeechRecognition", {
-      value: Recognition,
+    class Context {
+      state = "running";
+      destination = {};
+      async resume() {}
+      async close() {}
+      async decodeAudioData() {
+        return {};
+      }
+      createMediaStreamSource() {
+        return { connect() {}, disconnect() {} };
+      }
+      createAnalyser() {
+        return {
+          fftSize: 2048,
+          disconnect() {},
+          getFloatTimeDomainData(values: Float32Array) {
+            values.fill(samples++ < 10 ? 0.08 : 0);
+          },
+        };
+      }
+      createBufferSource() {
+        const sound = {
+          onended: null as (() => void) | null,
+          connect() {},
+          disconnect() {},
+          start() {
+            setTimeout(() => sound.onended?.(), 80);
+          },
+          stop() {
+            sound.onended?.();
+          },
+        };
+        return sound;
+      }
+    }
+    Object.defineProperty(window, "MediaRecorder", {
+      value: Recorder,
+      configurable: true,
+    });
+    Object.defineProperty(window, "AudioContext", {
+      value: Context,
       configurable: true,
     });
   });
+  await page.route("**/api/voice", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: route
+        .request()
+        .headers()
+        ["content-type"]?.startsWith("multipart")
+        ? "application/json"
+        : "audio/mpeg",
+      body: route.request().headers()["content-type"]?.startsWith("multipart")
+        ? JSON.stringify({ text: "把共同储蓄本年回报改为 -5%" })
+        : "synthetic audio",
+    }),
+  );
   await authenticate(page, { seed: fixture() });
   await page.goto("/");
   await page.getByRole("button", { name: "打开财富顾问" }).click();
-  await page.locator(".voice-controls > summary").click();
-  await page.locator(".voice-controls input[type=checkbox]").check();
-  await page.getByRole("button", { name: "开始语音输入" }).click();
-  await expect(page.getByLabel("顾问消息")).toHaveValue(
+  await expect(page.getByLabel("语音识别语言")).toHaveCount(0);
+  await page.getByRole("button", { name: "开始语音对话" }).click();
+  await expect(
+    page.getByRole("region", { name: "数据修改预览" }),
+  ).toBeVisible();
+  await expect(page.locator(".voice-phase")).toContainText("修改预览");
+  await expect(page.locator(".advisor-messages")).toContainText(
     "把共同储蓄本年回报改为 -5%",
   );
   await expect(
     page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
   ).toHaveText("+2%");
-  await page.getByRole("button", { name: "发送消息" }).click();
   await page.getByRole("button", { name: "确认并保存修改" }).click();
+  await page.getByRole("button", { name: "结束语音对话" }).click();
   await expect(
     page.getByRole("button", { name: "编辑共同储蓄本年回报" }),
   ).toHaveText("-5%");
+  await page.reload();
+  await page.getByRole("button", { name: "打开财富顾问" }).click();
+  await expect(page.locator(".advisor-messages")).toContainText(
+    "把共同储蓄本年回报改为 -5%",
+  );
 });
 test("资产排序筛选小计准确，假设与复盘不改变真实财富", async ({ page }) => {
   await authenticate(page, { seed: fixture() });
@@ -122,11 +191,9 @@ test("资产排序筛选小计准确，假设与复盘不改变真实财富", as
   await expect(page.locator(".scenario-result")).toContainText("$127,000.00");
   await expect(page.getByTestId("net-worth")).toHaveText("$120,000.00");
   await page.locator(".household-review > summary").click();
-  await page
-    .locator(".household-tools")
-    .screenshot({
-      path: `test-results/household-tools-${test.info().project.name}.png`,
-    });
+  await page.locator(".household-tools").screenshot({
+    path: `test-results/household-tools-${test.info().project.name}.png`,
+  });
   await expect(page.locator(".household-review")).toContainText(
     "1 项资产未填本年回报",
   );

@@ -30,6 +30,8 @@ E2E_USE_MOCK_AUTH=1 npm run test:e2e
 
 新增的十项日常体验优化（语音、确认、草稿、复盘、假设测算）：[功能说明](docs/experience-improvements.md)。自动模式日常优先 DeepSeek，复杂规划使用 GPT‑6；具体模型可通过服务端环境变量覆盖。
 
+自然语音：点击顾问内“开始对话”，无需选择语种；说完停顿约 1.2 秒自动提问，回复自动播报并继续听。口语回复简短，完整分析仍随聊天保存；修改数据暂停等待页面确认。语音和文字分析分开路由、计费。详见 [自然语音说明](docs/natural-voice.md)。
+
 ## 数据保存与共享
 
 数据统一保存在 `together-wealth-v3`，包含数值资产、可空本年回报、负债、贡献、现金流、成员、目标、规划、每次财务变动的完整快照、对话和模型偏好。写入成功后界面才显示已保存；浏览器容量不足或数据损坏会明确报错。上一版本保存为恢复备份，支持完整 JSON 导入导出。旧版本的存储自动迁移，删空的账户不会重新生成示例数据。旧版缺少准确日期的历史仍可查看与导出，不生成虚构时间戳。
@@ -39,7 +41,7 @@ E2E_USE_MOCK_AUTH=1 npm run test:e2e
 Supabase 配置：
 
 1. 将 `.env.example` 的配置放入 `.env.local` 或 `.env`。这些文件已加入 Git 忽略规则。
-2. 新项目先运行 `supabase/schema.sql`，再依次执行 `supabase/persistence.sql`、`supabase/push.sql`、`supabase/access.sql`、`supabase/shared-home.sql`、`supabase/channels.sql`。
+2. 新项目先运行 `supabase/schema.sql`，再依次执行 `supabase/persistence.sql`、`supabase/push.sql`、`supabase/access.sql`、`supabase/shared-home.sql`、`supabase/channels.sql`、`supabase/voice.sql`。
 3. 由管理员预先创建并确认两个授权账号，页面不开放注册。登录时自动创建或复用唯一家庭，并关联两位成员，不需要手动分享邀请代码。
 4. 后续保存自动同步；重新打开恢复已登录的家庭连接。实时事件、窗口恢复可见和轮询一起同步伴侣的更新。
 

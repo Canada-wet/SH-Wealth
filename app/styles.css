@@ -2604,6 +2604,80 @@ tbody tr:hover {
   margin: 7px 0 0;
   line-height: 1.6;
 }
+.natural-voice {
+  background: #f8faf6;
+  max-height: 190px;
+}
+.natural-voice .voice-toolbar {
+  align-items: center;
+  margin: 0 0 7px;
+}
+.natural-voice .voice-toolbar button {
+  font-size: 12px;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+.natural-voice .voice-toolbar .voice-live {
+  background: var(--green, #315c50);
+  color: white;
+  border-color: transparent;
+}
+.voice-phase {
+  flex: 1;
+  min-width: 120px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.voice-listening::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #438872;
+  box-shadow: 0 0 0 3px #e0eee7;
+}
+.voice-caption {
+  padding: 7px 9px;
+  margin: 7px 0;
+  border-left: 2px solid #8aab93;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 48px;
+  overflow-y: auto;
+}
+.voice-privacy {
+  display: block;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.voice-info summary {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.voice-info[open] .voice-privacy {
+  margin-top: 6px;
+}
+.voice-session .advisor-controls,
+.voice-session .route-hint,
+.voice-session .advisor-context,
+.voice-session .advisor-suggestions,
+.voice-session .advisor-compose,
+.has-preview .advisor-controls,
+.has-preview .route-hint,
+.has-preview .advisor-context,
+.has-preview .advisor-suggestions,
+.has-preview .advisor-compose {
+  display: none;
+}
+.voice-session .advisor-messages {
+  padding-bottom: 12px;
+}
 .advisor-preview {
   background: #f4f7ef;
   padding: 13px 16px;
