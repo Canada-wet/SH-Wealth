@@ -11,10 +11,12 @@ export default function Login() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [checking, setChecking] = useState(true),
-    [showPassword, setShowPassword] = useState(false);
+    [showPassword, setShowPassword] = useState(false),
+    [hydrated, setHydrated] = useState(false);
   const submitting = useRef(false);
   const interacted = useRef(false);
   useEffect(() => {
+    setHydrated(true);
     let active = true;
     const client = cloudClient();
     if (
@@ -130,7 +132,9 @@ export default function Login() {
         <p>私密家庭空间，仅限已授权的两位成员。</p>
         {checking && (
           <small role="status">
-            正在检查已有登录；也可直接填写邮箱和密码。
+            {hydrated
+              ? "正在检查已有登录；也可直接填写邮箱和密码。"
+              : "正在准备登录表单；若长时间停留，请启用 JavaScript 或刷新页面。"}
           </small>
         )}
         <form
@@ -145,6 +149,7 @@ export default function Login() {
               type="email"
               autoComplete="username"
               required
+              disabled={!hydrated || busy}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -156,6 +161,7 @@ export default function Login() {
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
+                disabled={!hydrated || busy}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -165,6 +171,7 @@ export default function Login() {
             <button
               className="text-button"
               type="button"
+              disabled={!hydrated || busy}
               onClick={() => setShowPassword((value) => !value)}
             >
               {showPassword ? "隐藏密码" : "显示密码"}
@@ -180,13 +187,13 @@ export default function Login() {
               {notice}
             </p>
           )}
-          <button className="primary" disabled={busy}>
+          <button className="primary" disabled={!hydrated || busy}>
             {busy ? "请稍候…" : reset ? "发送重置邮件" : "登录家庭空间"}
           </button>
           <button
             type="button"
             className="text-button"
-            disabled={busy}
+            disabled={!hydrated || busy}
             onClick={() => {
               interacted.current = true;
               setReset(!reset);

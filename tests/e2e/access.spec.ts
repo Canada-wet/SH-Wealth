@@ -2,6 +2,29 @@ import { test, expect } from "@playwright/test";
 import { authenticate, cleanupAuthenticated } from "./auth-helper";
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
 import { emptyState } from "../../lib/wealth";
+test("脚本未就绪前登录控件保持禁用，不会出现点击无效的假可用状态", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const tab = await context.newPage();
+  try {
+    await tab.goto(
+      (process.env.E2E_BASE_URL || "http://127.0.0.1:3101") +
+        "/login?next=%2Fmarkets&reauth=1",
+    );
+    await expect(tab.getByLabel("密码", { exact: true })).toBeDisabled();
+    await expect(
+      tab.getByRole("button", { name: "登录家庭空间", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      tab.getByText(
+        "正在准备登录表单；若长时间停留，请启用 JavaScript 或刷新页面。",
+      ),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
 test("已有有效登录自动回到看板，退出只清理当前设备并可重新登录", async ({
   page,
 }) => {
@@ -40,6 +63,19 @@ test("已有有效登录自动回到看板，退出只清理当前设备并可�
     "type",
     "password",
   );
+  const password =
+    process.env.E2E_USE_MOCK_AUTH === "1"
+      ? "offline-test-password"
+      : process.env.TEST_MEMBER_ONE_PASSWORD;
+  if (!password)
+    throw new Error("Private browser login fixture is not configured.");
+  await page.getByLabel("邮箱", { exact: true }).fill("henrywhy233@gmail.com");
+  await page.getByLabel("密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "登录家庭空间", exact: true }).click();
+  await expect(page).toHaveURL(/\/markets$/);
+  await expect(
+    page.getByRole("heading", { name: "市场看板", exact: true }),
+  ).toBeVisible();
 });
 test("访客无法进入工作台、白名单外账号不能登录、接口拒绝匿名", async ({
   page,

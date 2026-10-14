@@ -244,7 +244,7 @@ export default function Markets() {
             </button>
             <button
               className="secondary"
-              disabled={busy}
+              disabled={!store.ready || busy}
               onClick={() => void refresh()}
             >
               <RefreshCw size={14} />
@@ -336,6 +336,7 @@ export default function Markets() {
           </div>
           <button
             className={live ? "secondary" : "primary"}
+            disabled={!store.ready}
             onClick={toggleLive}
           >
             {live ? "暂停外部行情" : "启用自动更新行情"}
@@ -460,6 +461,7 @@ export default function Markets() {
                     setChartOpen(true);
                   }}
                   aria-label={`查看${row.exchange}:${row.ticker}图表`}
+                  disabled={!store.ready}
                 >
                   <b>{row.ticker}</b>
                   <small>

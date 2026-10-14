@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cloudClient } from "@/lib/cloud";
 import {
   Landmark,
@@ -11,7 +11,9 @@ import {
 } from "lucide-react";
 export default function MarketNavigator() {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   const logout = async () => {
     setBusy(true);
     setError("");
@@ -20,7 +22,7 @@ export default function MarketNavigator() {
       if (!client) throw new Error("登录服务尚未配置。");
       const result = await client.auth.signOut({ scope: "local" });
       if (result.error) throw new Error("暂时无法退出，请检查网络后重试。");
-      window.location.replace("/login?next=%2Fmarkets&reauth=1");
+      // The market page owns the SIGNED_OUT redirect; avoid a second navigation.
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "退出失败，请重试。");
     } finally {
@@ -67,7 +69,7 @@ export default function MarketNavigator() {
           </a>
           <button
             className="text-button"
-            disabled={busy}
+            disabled={!ready || busy}
             onClick={() => void logout()}
           >
             {busy ? "正在退出…" : "退出当前设备登录"}
@@ -82,7 +84,7 @@ export default function MarketNavigator() {
         </a>
         <button
           className="text-button"
-          disabled={busy}
+          disabled={!ready || busy}
           onClick={() => void logout()}
         >
           退出登录
