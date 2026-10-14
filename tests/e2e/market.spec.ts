@@ -64,6 +64,121 @@ test.beforeEach(async ({ page }) => {
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("研究图表按共同期间绘制，窗口可切换，缺预期不编造惊喜指标", async ({
+  page,
+}) => {
+  const rich = structuredClone(synthetic);
+  rich.yields.forEach((row) => {
+    row.trend = Array.from({ length: 24 }, (_, index) => ({
+      date: new Date(Date.UTC(2026, 8, 20 + index)).toISOString().slice(0, 10),
+      value: row.value! - 0.23 + index * 0.01,
+    }));
+  });
+  rich.macro.forEach((row) => {
+    row.trend = Array.from(
+      { length: row.frequency === "quarterly" ? 8 : 24 },
+      (_, index) => ({
+        date: new Date(
+          Date.UTC(
+            2024,
+            row.frequency === "quarterly" ? 6 + index * 3 : 9 + index,
+            1,
+          ),
+        )
+          .toISOString()
+          .slice(0, 10),
+        value: row.id === "PAYEMS" ? 10 + index : 1.5 + index * 0.03,
+      }),
+    );
+    row.trend.at(-1)!.value = row.value!;
+  });
+  await page.route("**/api/market", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(rich),
+    }),
+  );
+  await page.goto("/markets");
+  await expect(page.getByRole("img", { name: /通胀同比趋势/ })).toHaveAttribute(
+    "aria-label",
+    /2025-10-01至2026-09-01/,
+  );
+  await page.getByLabel("宏观历史窗口").selectOption("6");
+  await expect(page.getByRole("img", { name: /通胀同比趋势/ })).toHaveAttribute(
+    "aria-label",
+    /2026-04-01至2026-09-01/,
+  );
+  await page.getByLabel("宏观历史窗口").selectOption("24");
+  await expect(page.getByRole("img", { name: /通胀同比趋势/ })).toHaveAttribute(
+    "aria-label",
+    /2024-10-01至2026-09-01/,
+  );
+  await expect(
+    page.getByRole("img", { name: /美国国债收益率曲线/ }),
+  ).toBeVisible();
+  await expect(page.locator("#rates-research")).toContainText("2026-09-23");
+  await expect(page.locator(".research-average")).toContainText("+30.7 千人");
+  await expect(
+    page.getByRole("table", {
+      name: "宏观指标监测 · 变化以自身前期为基准，不是市场预期差",
+    }),
+  ).toContainText("百分点");
+  await expect(page.locator(".research-note")).toContainText(
+    "未接入市场一致预期",
+  );
+  await page
+    .locator("#macro-research .research-history-data")
+    .first()
+    .locator("summary")
+    .click();
+  await expect(
+    page
+      .locator("#macro-research .research-history-data")
+      .first()
+      .locator("tbody tr"),
+  ).toHaveCount(24);
+  await page.locator("#rates-research .research-history-data summary").click();
+  await expect(
+    page.locator("#rates-research .research-history-data tbody tr"),
+  ).toHaveCount(6);
+  await expect(
+    page.locator("#rates-research .research-history-data"),
+  ).toContainText("+20");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.locator(".market-shell").screenshot({
+    path: `test-results/research-${test.info().project.name}.png`,
+  });
+});
+test("独立看板保留导航和当前页状态，返回家庭资产定位正确且不改变账本", async ({
+  page,
+}) => {
+  await page.goto("/markets");
+  const mobile = test.info().project.name === "mobile";
+  await expect(
+    page.locator(
+      mobile
+        ? '.market-mobile-nav a[aria-current="page"]'
+        : '.market-sidebar a[aria-current="page"]',
+    ),
+  ).toHaveText("市场看板");
+  if (mobile)
+    await page
+      .locator(".market-mobile-nav")
+      .getByRole("link", { name: "家庭财富" })
+      .click();
+  else
+    await page
+      .locator(".market-sidebar")
+      .getByRole("link", { name: "资产与负债" })
+      .click();
+  await expect(page).toHaveURL(mobile ? /#overview$/ : /#assets$/);
+  await expect(page.locator(mobile ? "#overview" : "#assets")).toBeInViewport();
+  await expect(page.getByTestId("net-worth")).toContainText("500");
+});
 test("市场看板入口、币种方向、宏观口径和来源都明确，手机无溢出", async ({
   page,
 }) => {
@@ -83,9 +198,9 @@ test("市场看板入口、币种方向、宏观口径和来源都明确，手�
   await expect(page.locator(".market-conversion")).toContainText(
     "人民币 CNY：500",
   );
-  await expect(page.locator(".market-macro")).toContainText("+29千人");
-  await expect(page.locator(".market-macro")).toContainText("2026 Q2");
-  await expect(page.locator(".market-macro")).toContainText("环比折年率");
+  await expect(page.locator("#macro-research")).toContainText("+29千人");
+  await expect(page.locator("#macro-research")).toContainText("2026 Q2");
+  await expect(page.locator("#macro-research")).toContainText("环比折年率");
   expect(
     await page.locator(".market-reading a").first().getAttribute("href"),
   ).toContain("bankofcanada.ca");

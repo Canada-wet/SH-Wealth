@@ -28,6 +28,7 @@ import {
   WalletCards,
   Eye,
   EyeOff,
+  Globe2,
 } from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import {
@@ -121,6 +122,21 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [assetSort, setAssetSort] = useState("original");
   const [activeSection, setActiveSection] = useState("overview");
+  const initialSectionApplied = useRef(false);
+  useEffect(() => {
+    if (!ready || store.cloudLoading || initialSectionApplied.current) return;
+    initialSectionApplied.current = true;
+    const section = window.location.hash.slice(1);
+    if (
+      ["overview", "assets", "cashflow", "contributions", "framework"].includes(
+        section,
+      )
+    ) {
+      const target = document.getElementById(section);
+      target?.scrollIntoView?.({ behavior: "instant", block: "start" });
+      setActiveSection(section);
+    }
+  }, [ready, store.cloudLoading]);
   const editStamp = useRef("");
   const stamp = (current: WealthState) =>
     JSON.stringify({
@@ -463,10 +479,6 @@ export default function Home() {
           <span>t</span>ogether
         </a>
         <nav>
-          <a href="/markets">
-            <LineChart />
-            市场看板
-          </a>
           <a
             href="#overview"
             aria-current={activeSection === "overview" ? "location" : undefined}
@@ -505,6 +517,10 @@ export default function Home() {
           >
             <Landmark />
             家庭计划
+          </a>
+          <a href="/markets">
+            <Globe2 />
+            市场看板
           </a>
           <button onClick={() => advisor()}>
             <Sparkles />
