@@ -50,19 +50,27 @@ test("真实公开行情窗口：外汇、美股和所选历史图表", async ({
       }),
     ).toHaveAttribute("data-state", "ready", { timeout: 15000 });
   }
-  await page
-    .getByRole("article", { name: "NASDAQ:NVDA涨跌", exact: true })
-    .screenshot({
-      path: `test-results/pulse-live-${test.info().project.name}.png`,
-    });
-  await page
-    .locator("#watchlist-pulse")
-    .evaluate((element) =>
-      window.scrollTo({
-        top: element.getBoundingClientRect().top + window.scrollY - 80,
-        behavior: "instant",
-      }),
-    );
+  const first = page.getByRole("article", {
+    name: "NASDAQ:NVDA涨跌",
+    exact: true,
+  });
+  await first.scrollIntoViewIfNeeded();
+  await expect(first).toHaveAttribute("data-state", "ready", {
+    timeout: 15000,
+  });
+  // Far-away cards release their external source rather than keeping 29 live connections.
+  await expect
+    .poll(async () => page.locator(".market-quote-tile iframe[src]").count())
+    .toBeLessThan(29);
+  await first.screenshot({
+    path: `test-results/pulse-live-${test.info().project.name}.png`,
+  });
+  await page.locator("#watchlist-pulse").evaluate((element) =>
+    window.scrollTo({
+      top: element.getBoundingClientRect().top + window.scrollY - 80,
+      behavior: "instant",
+    }),
+  );
   await page.screenshot({
     path: `test-results/market-ui-live-${test.info().project.name}.png`,
   });

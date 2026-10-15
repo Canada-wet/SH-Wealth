@@ -6,6 +6,7 @@ import {
   fireEvent,
   cleanup,
   act,
+  waitFor,
 } from "@testing-library/react";
 import MarketPulse from "../app/components/MarketPulse";
 import MarketQuoteTile from "../app/components/MarketQuoteTile";
@@ -22,6 +23,7 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 it("速览搜索独立、Escape清空，密度偏好重开保持且不写入财富文档", () => {
   localStorage.setItem("together-wealth-v3", "unchanged");
@@ -73,24 +75,107 @@ it("研究主题与币种搜索交叉筛选，自定义未分类不丢失，可�
   fireEvent.click(screen.getByRole("button", { name: "重置速览筛选" }));
   expect(view.container.querySelectorAll("article")).toHaveLength(30);
 });
-it("快速缓存窗口在首次布局阶段回报就绪时也不会漏掉消息", () => {
+it("按需载入的缓存窗口在设置地址后立即回报就绪也不会漏消息", async () => {
   function EarlyReady() {
     useLayoutEffect(() => {
-      const frame = document.querySelector("iframe")!;
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          origin: "https://www.tradingview-widget.com",
-          source: frame.contentWindow,
-          data: { name: "tv-widget-ready" },
-        }),
-      );
+      const signal = () => {
+        const frame = document.querySelector("iframe")!;
+        if (!frame.getAttribute("src")) return;
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://www.tradingview-widget.com",
+            source: frame.contentWindow,
+            data: { name: "tv-widget-ready" },
+          }),
+        );
+      };
+      const observer = new MutationObserver(signal);
+      observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src"],
+      });
+      signal();
+      return () => observer.disconnect();
     }, []);
     return (
       <MarketQuoteTile row={DEFAULT_WATCHLIST[0]} ready onSelect={() => {}} />
     );
   }
   render(<EarlyReady />);
-  expect(screen.getByRole("article").getAttribute("data-state")).toBe("ready");
+  await waitFor(() =>
+    expect(screen.getByRole("article").getAttribute("data-state")).toBe(
+      "ready",
+    ),
+  );
+});
+it("可视区域才发请求、离开释放；超时明确提示，重试恢复并拒绝伪造尺寸", () => {
+  vi.useFakeTimers();
+  let visibility: IntersectionObserverCallback;
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(callback: IntersectionObserverCallback) {
+        visibility = callback;
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
+  const view = render(
+    <MarketQuoteTile row={DEFAULT_WATCHLIST[0]} ready onSelect={() => {}} />,
+  );
+  const card = screen.getByRole("article");
+  const frame = () => view.container.querySelector("iframe")!;
+  const visible = (value: boolean) =>
+    act(() =>
+      visibility(
+        [{ isIntersecting: value } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      ),
+    );
+  expect(frame().getAttribute("src")).toBeNull();
+  visible(true);
+  expect(frame().getAttribute("src")).toContain("single-quote");
+  expect(frame().getAttribute("loading")).toBe("eager");
+  act(() => vi.advanceTimersByTime(15000));
+  expect(card.getAttribute("data-state")).toBe("slow");
+  expect(screen.getByText(/连接超时或被浏览器拦截/)).toBeTruthy();
+  const old = frame();
+  fireEvent.click(screen.getByRole("button", { name: "重试涨跌NASDAQ:NVDA" }));
+  expect(frame()).not.toBe(old);
+  expect(card.getAttribute("data-state")).toBe("waiting");
+  const resize = (
+    height: number,
+    source = frame().contentWindow,
+    origin = "https://www.tradingview-widget.com",
+  ) =>
+    act(() =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source,
+          origin,
+          data: { name: "tv-widget-resize-iframe", data: { height } },
+        }),
+      ),
+    );
+  resize(120, old.contentWindow);
+  resize(120, frame().contentWindow, "https://evil.invalid");
+  resize(10000);
+  expect(frame().height).toBe("90");
+  resize(120);
+  expect(frame().height).toBe("120");
+  visible(false);
+  expect(frame().getAttribute("src")).toBeNull();
+  expect(card.getAttribute("data-state")).toBe("deferred");
+  visible(true);
+  expect(card.getAttribute("data-state")).toBe("waiting");
+  act(() => vi.advanceTimersByTime(14999));
+  expect(card.getAttribute("data-state")).toBe("waiting");
+  view.unmount();
+  expect(disconnect).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
 });
 it("报价状态只接收当前供应商窗口的消息，不让其他窗口伪造就绪", () => {
   const view = render(
@@ -129,6 +214,9 @@ it("速览明确授权后才加载，按同一清单筛选币种，支持选图�
   };
   const view = render(<MarketPulse {...props} />);
   expect(view.container.querySelector("iframe")).toBeNull();
+  expect(screen.getByText(/电脑上的开关不会自动同步/)).toBeTruthy();
+  expect(screen.getAllByRole("article")).toHaveLength(30);
+  expect(screen.getAllByText(/当前设备未开启行情/)).toHaveLength(30);
   fireEvent.click(screen.getByRole("button", { name: "开启自选涨跌速览" }));
   expect(onEnable).toHaveBeenCalledOnce();
   view.rerender(<MarketPulse {...props} live />);

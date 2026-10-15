@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RESEARCH_THEMES, researchTheme } from "@/lib/market-research";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import MarketQuoteTile from "./MarketQuoteTile";
@@ -22,6 +22,18 @@ export default function MarketPulse({
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState("all");
   const [density, setDensity] = useState("compact");
+  const section = useRef<HTMLElement>(null);
+  const requested = useRef(false);
+  useEffect(() => {
+    if (!live || !requested.current) return;
+    requested.current = false;
+    const frame = requestAnimationFrame(() =>
+      section.current
+        ?.querySelector(".market-quote-tile")
+        ?.scrollIntoView({ block: "start", behavior: "instant" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [live]);
   useEffect(() => {
     try {
       const saved = localStorage.getItem("together-market-layout-v1");
@@ -48,6 +60,7 @@ export default function MarketPulse({
   const covered = visible.filter((row) => !missing.includes(row));
   return (
     <section
+      ref={section}
       className="card market-section market-pulse"
       id="watchlist-pulse"
       aria-label="自选涨跌速览"
@@ -65,6 +78,26 @@ export default function MarketPulse({
           管理自选 ↓
         </a>
       </div>
+      {!live && rows.length > 0 && (
+        <div className="market-action-hint market-pulse-enable">
+          <p>
+            当前手机／浏览器尚未开启行情。电脑上的开关不会自动同步到这台设备；开启后显示价格与当日涨跌，不需要再加密钥。
+          </p>
+          <p>
+            仅发送公开证券代码，不发送家庭金额；同时开启本页其他外部行情窗口，行情可能延迟。
+          </p>
+          <button
+            className="primary"
+            disabled={!ready}
+            onClick={() => {
+              requested.current = true;
+              onEnable();
+            }}
+          >
+            开启自选涨跌速览
+          </button>
+        </div>
+      )}
       <div className="market-pulse-toolbar">
         <div role="group" aria-label="速览市场筛选">
           {[
@@ -176,7 +209,8 @@ export default function MarketPulse({
       </div>
       <p className="market-pulse-count" role="status">
         显示 {visible.length} / {rows.length} 个自选 · {covered.length}{" "}
-        个行情请求{missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
+        个报价入口 · {live ? "当前设备已开启" : "当前设备未开启"}
+        {missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
       </p>
       {theme !== "all" && (
         <p className="desk-help">
@@ -202,15 +236,6 @@ export default function MarketPulse({
             </button>
           )}
         </p>
-      ) : !live ? (
-        <div className="market-action-hint">
-          <p>
-            开启后，所有自选的涨跌集中展示，不用逐个打开图表。行情可能延迟；此开关同时控制其他外部行情窗口。
-          </p>
-          <button className="primary" disabled={!ready} onClick={onEnable}>
-            开启自选涨跌速览
-          </button>
-        </div>
       ) : (
         <div className="market-pulse-grid">
           {visible.map((row) => (
@@ -219,6 +244,7 @@ export default function MarketPulse({
               row={row}
               ready={ready}
               onSelect={onSelect}
+              enabled={live}
             />
           ))}
         </div>
@@ -234,7 +260,8 @@ export default function MarketPulse({
           >
             TradingView
           </a>{" "}
-          提供。正负号与提供商颜色共同标识涨跌；交易时段、延迟和休市状态以窗口内标注为准。卡片按需加载，手机可向下滚动查看。报价空白或代码不支持时请点来源核对，不补示例数字。
+          提供。正负号与提供商颜色共同标识涨跌；交易时段、延迟和休市状态以窗口内标注为准。仅连接可视区域附近的卡片，远离时释放连接，滚回自动重连，减轻手机负载。报价空白或代码不支持时请点来源核对，不补示例数字。微信等内置浏览器或内容拦截器可能阻止第三方窗口，可改用系统浏览器打开本
+          App。
         </small>
       </details>
     </section>

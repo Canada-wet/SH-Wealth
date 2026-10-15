@@ -16,6 +16,17 @@ export default defineConfig({
       name: "mobile",
       use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" },
     },
+    ...(process.env.E2E_WEBKIT === "1"
+      ? [
+          {
+            name: "mobile-safari",
+            use: {
+              ...devices["iPhone 13"],
+              defaultBrowserType: "webkit" as const,
+            },
+          },
+        ]
+      : []),
   ],
   webServer: remote
     ? undefined

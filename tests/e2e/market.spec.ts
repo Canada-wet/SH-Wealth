@@ -376,7 +376,7 @@ test("涨跌速览显示全部自选，不受下方搜索影响，筛选选图�
     const urls = await pulse
       .locator("iframe")
       .evaluateAll((frames) =>
-        frames.map((frame) => frame.getAttribute("src")!),
+        frames.map((frame) => frame.getAttribute("data-src")!),
       );
     return urls.flatMap(
       (src) =>

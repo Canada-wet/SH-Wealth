@@ -945,6 +945,9 @@ main {
   color: #62756c;
   margin: 12px 0;
 }
+.market-pulse-enable {
+  margin: 0 0 14px;
+}
 .market-pulse-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
@@ -953,6 +956,7 @@ main {
 }
 .market-quote-tile {
   min-width: 0;
+  scroll-margin-top: 86px;
   border: 1px solid #e0e6dd;
   border-radius: 12px;
   overflow: hidden;
