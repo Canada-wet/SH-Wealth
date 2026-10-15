@@ -8,6 +8,7 @@ export async function middleware(request: NextRequest) {
     path === "/login" ||
     path.startsWith("/auth/") ||
     path === "/api/advisor/digest" ||
+    path === "/api/market/briefing/daily" ||
     path === "/api/notifications/telegram" ||
     path === "/api/notifications/whatsapp"
   )

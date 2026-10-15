@@ -15,6 +15,7 @@ import MarketNavigator from "@/app/components/MarketNavigator";
 import MarketSectionNav from "@/app/components/MarketSectionNav";
 import MarketPulse from "@/app/components/MarketPulse";
 import MarketInvestmentDesk from "@/app/components/MarketInvestmentDesk";
+import MarketIntelligence from "@/app/components/MarketIntelligence";
 import { saveResearchNote } from "@/lib/market-research";
 import {
   MarketOverview,
@@ -326,6 +327,7 @@ export default function Markets() {
             。可点击对应官方来源核对，不以示例数字补齐。
           </p>
         ) : null}
+        <MarketIntelligence data={data} />
         <section className="card market-connection">
           <div>
             <h2>

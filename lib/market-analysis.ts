@@ -18,11 +18,19 @@ export function readingChange(row: MarketReading) {
   const previous =
     row.frequency === "daily"
       ? observations.at(-1)
-      : observations.find(
-          (p) =>
-            p.date ===
-            previousPeriod(row.date!, row.frequency === "quarterly" ? 3 : 1),
-        );
+      : row.frequency === "weekly"
+        ? observations.find(
+            (p) =>
+              p.date ===
+              new Date(Date.parse(`${date}T12:00:00Z`) - 7 * 86400000)
+                .toISOString()
+                .slice(0, 10),
+          )
+        : observations.find(
+            (p) =>
+              p.date ===
+              previousPeriod(row.date!, row.frequency === "quarterly" ? 3 : 1),
+          );
   if (!previous) return null;
   const fx = row.unit.includes("CAD");
   if (fx && previous.value <= 0) return null;
@@ -34,9 +42,11 @@ export function readingChange(row: MarketReading) {
     label:
       row.frequency === "daily"
         ? "较前一观测日"
-        : row.frequency === "monthly"
-          ? "较上月"
-          : "较上季",
+        : row.frequency === "weekly"
+          ? "较上周"
+          : row.frequency === "monthly"
+            ? "较上月"
+            : "较上季",
     date: previous.date,
   };
 }

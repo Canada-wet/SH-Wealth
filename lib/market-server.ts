@@ -8,6 +8,7 @@ import {
   type Observation,
 } from "./market";
 import { unstable_cache } from "next/cache";
+import { MARKET_INDICATORS } from "./market-indicators";
 async function publicFetch(url: string) {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(15000),
@@ -80,7 +81,7 @@ export async function fetchOfficialMarket(): Promise<MarketData> {
     trend: [],
     note: "当前数据源未返回可用数据，不使用示例数值",
   });
-  const [fx, yields, macro] = await Promise.all([
+  const [fx, yields, macro, indicators] = await Promise.all([
     (async () => {
       try {
         return parseBoc(
@@ -152,12 +153,41 @@ export async function fetchOfficialMarket(): Promise<MarketData> {
         }
       }),
     ),
+    Promise.all(
+      MARKET_INDICATORS.map(async (definition) => {
+        try {
+          const data = await fred([definition.id]);
+          const reading = macroReading(
+            { ...definition, transform: "level" },
+            data[definition.id],
+          );
+          if (reading.value === null) failures.push(definition.label);
+          return reading;
+        } catch {
+          failures.push(definition.label);
+          return missing(
+            definition.id,
+            definition.label,
+            definition.frequency,
+            definition.unit,
+            `https://fred.stlouisfed.org/series/${definition.id}`,
+          );
+        }
+      }),
+    ),
   ]);
-  return { fetchedAt: new Date().toISOString(), fx, yields, macro, failures };
+  return {
+    fetchedAt: new Date().toISOString(),
+    fx,
+    yields,
+    macro,
+    indicators,
+    failures,
+  };
 }
 // Only public, fixed market series are cached, never household state or auth.
 export const getOfficialMarket = unstable_cache(
   fetchOfficialMarket,
-  ["together-official-market-v1"],
+  ["together-official-market-v2"],
   { revalidate: 300 },
 );

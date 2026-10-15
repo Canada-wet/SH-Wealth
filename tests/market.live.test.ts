@@ -29,6 +29,15 @@ it.skipIf(process.env.RUN_MARKET_INTEGRATION !== "1")(
       true,
     );
     expect(data.macro).toHaveLength(5);
+    expect(data.indicators).toHaveLength(7);
+    expect(
+      data.indicators!.every(
+        (row) => row.value !== null && row.date && row.trend.length > 1,
+      ),
+    ).toBe(true);
+    expect(
+      readingChange(data.indicators!.find((row) => row.id === "ICSA")!),
+    ).not.toBeNull();
     expect(
       data.macro.every(
         (row) => row.value !== null && row.date && row.trend.length > 0,

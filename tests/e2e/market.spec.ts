@@ -8,9 +8,23 @@ import {
   type MarketData,
 } from "../../lib/market";
 import { readFile } from "node:fs/promises";
+import { MARKET_INDICATORS } from "../../lib/market-indicators";
+import { ruleMarketBrief } from "../../lib/market-briefing";
 const synthetic: MarketData = {
   fetchedAt: "2026-10-14T12:00:00Z",
   failures: [],
+  indicators: MARKET_INDICATORS.map((d, i) => ({
+    ...d,
+    value: [20, 24, 200000, 1300, 30000, 180, 75][i],
+    date:
+      d.frequency === "daily"
+        ? "2026-10-14"
+        : d.frequency === "weekly"
+          ? "2026-10-10"
+          : "2026-08-01",
+    trend: [],
+    source: `https://fred.stlouisfed.org/series/${d.id}`,
+  })),
   fx: [
     ["FXCNYCAD", "人民币 CNY", 5],
     ["FXUSDCAD", "美元 USD", 0.8],
@@ -70,6 +84,74 @@ test.beforeEach(async ({ page }) => {
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("每日简报自动生成一次、归档回看、指标切换与失败保留历史", async ({
+  page,
+}) => {
+  const older = ruleMarketBrief(synthetic, new Date("2026-10-14T14:00:00Z"));
+  const today = {
+    ...ruleMarketBrief(synthetic, new Date("2026-10-15T14:00:00Z")),
+    mode: "ai" as const,
+    provider: "deepseek",
+    model: "synthetic-cheap",
+    summary: "合成测试简报：结合波动、经济前瞻与产业数据，不是投资建议。",
+  };
+  let generated = false,
+    fail = false,
+    paidCalls = 0;
+  await page.route("**/api/market/briefing", (route) => {
+    if (fail) return route.fulfill({ status: 503 });
+    if (route.request().method() === "POST") {
+      generated = true;
+      paidCalls++;
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        today: "2026-10-15",
+        reports: generated ? [today, older] : [older],
+        canGenerate: true,
+      }),
+    });
+  });
+  await page.goto("/markets");
+  const section = page.getByRole("region", { name: "每日市场简报与指标" });
+  await expect(section).toContainText(today.summary);
+  expect(paidCalls).toBe(1);
+  await section.getByRole("button", { name: "检查今日简报" }).click();
+  expect(paidCalls).toBe(1);
+  await section.getByLabel("查看历史市场简报").selectOption("2026-10-14");
+  await expect(section).toContainText("规则摘要 · 非 AI");
+  await expect(section).toContainText("当前查看 2026-10-14 的归档");
+  await section.getByRole("button", { name: "AI 产业供需代理" }).click();
+  await expect(section).toContainText("计算机与电子产品新订单");
+  await expect(section).toContainText("不是全球 AI 供需指数");
+  await section.getByRole("button", { name: "经济前瞻" }).click();
+  await expect(section).toContainText("初请失业金人数");
+  await section.getByRole("button", { name: "情绪与波动" }).click();
+  await expect(section).toContainText("VIX / VIX3M = 0.83");
+  fail = true;
+  await section.getByRole("button", { name: "检查今日简报" }).click();
+  await expect(section.getByRole("alert")).toBeVisible();
+  await expect(section).toContainText("规则摘要 · 非 AI");
+  await page.reload();
+  fail = false;
+  await section.getByRole("button", { name: "检查今日简报" }).click();
+  await expect(section).toContainText(today.summary);
+  expect(paidCalls).toBe(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByRole("navigation", { name: "市场区块导航" })
+    .getByRole("link", { name: "每日简报" })
+    .click();
+  await page.screenshot({
+    path: `test-results/daily-market-brief-${test.info().project.name}.png`,
+  });
+});
 test("投资研究主题筛选、记录同步持久化与加币压力试算不改账本", async ({
   page,
 }) => {

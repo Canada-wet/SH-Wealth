@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 const sections = [
+  ["market-intelligence", "每日简报"],
   ["watchlist-pulse", "自选涨跌"],
   ["investment-desk", "投资研究"],
   ["market-overview", "市场概览"],

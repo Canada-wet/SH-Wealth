@@ -14,7 +14,7 @@ export function validMarketData(raw: unknown): raw is MarketData {
     (row.date === null ||
       (typeof row.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date))) &&
     typeof row.unit === "string" &&
-    ["daily", "monthly", "quarterly"].includes(row.frequency) &&
+    ["daily", "weekly", "monthly", "quarterly"].includes(row.frequency) &&
     typeof row.source === "string" &&
     /^https:\/\/(?:fred\.stlouisfed\.org|www\.bankofcanada\.ca)\//.test(
       row.source,
@@ -31,6 +31,10 @@ export function validMarketData(raw: unknown): raw is MarketData {
     [data.fx, data.yields, data.macro].every(
       (rows) => Array.isArray(rows) && rows.length <= 20 && rows.every(reading),
     ) &&
+    (data.indicators === undefined ||
+      (Array.isArray(data.indicators) &&
+        data.indicators.length <= 20 &&
+        data.indicators.every(reading))) &&
     Array.isArray(data.failures) &&
     data.failures.every((item) => typeof item === "string")
   );
@@ -76,7 +80,21 @@ export function mergeMarketData(
   const fx = merge(previous.fx, incoming.fx),
     yields = merge(previous.yields, incoming.yields),
     macro = merge(previous.macro, incoming.macro);
-  return { ...incoming, fx, yields, macro, failures: [...failures] };
+  return {
+    ...incoming,
+    fx,
+    yields,
+    macro,
+    ...(incoming.indicators !== undefined || previous.indicators !== undefined
+      ? {
+          indicators: merge(
+            previous.indicators ?? [],
+            incoming.indicators ?? [],
+          ),
+        }
+      : {}),
+    failures: [...failures],
+  };
 }
 export function marketSnapshot(data: MarketData, rows: MarketInstrument[]) {
   const copy = (readings: MarketReading[]) =>
@@ -113,6 +131,7 @@ export function marketSnapshot(data: MarketData, rows: MarketInstrument[]) {
     fx: copy(data.fx),
     yields: copy(data.yields),
     macro: copy(data.macro),
+    ...(data.indicators ? { indicators: copy(data.indicators) } : {}),
     failures: data.failures,
     watchlist: rows.map(({ ticker, exchange }) => ({ ticker, exchange })),
     note: "仅含公开官方数据与证券代码；不含第三方跨域报价、家庭账本或聊天。",

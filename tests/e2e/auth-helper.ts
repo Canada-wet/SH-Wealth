@@ -10,6 +10,19 @@ export async function authenticate(
   page: Page,
   options: { email?: string; householdId?: string; seed?: WealthState } = {},
 ) {
+  // New public-market briefings must not spend real model credits during UI fixtures.
+  if (process.env.RUN_MARKET_BRIEFING_INTEGRATION !== "1")
+    await page.route("**/api/market/briefing", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          reports: [],
+          today: "2026-10-15",
+          canGenerate: false,
+        }),
+      }),
+    );
   loadEnvConfig(process.cwd());
   const mock = process.env.E2E_USE_MOCK_AUTH === "1";
   const url = mock
@@ -125,18 +138,16 @@ export async function authenticate(
   const name = "sb-" + new URL(url).hostname.split(".")[0] + "-auth-token";
   const origin = new URL(process.env.E2E_BASE_URL || "http://127.0.0.1:3101");
   const parts = encoded.match(/.{1,3180}/g)!;
-  await page
-    .context()
-    .addCookies(
-      parts.map((value, index) => ({
-        name: parts.length === 1 ? name : name + "." + index,
-        value,
-        domain: origin.hostname,
-        path: "/",
-        sameSite: "Lax" as const,
-        secure: origin.protocol === "https:",
-      })),
-    );
+  await page.context().addCookies(
+    parts.map((value, index) => ({
+      name: parts.length === 1 ? name : name + "." + index,
+      value,
+      domain: origin.hostname,
+      path: "/",
+      sameSite: "Lax" as const,
+      secure: origin.protocol === "https:",
+    })),
+  );
   return home!;
 }
 export async function cleanupAuthenticated(page: Page) {

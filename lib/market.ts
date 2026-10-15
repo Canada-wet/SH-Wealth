@@ -145,7 +145,7 @@ export type MarketReading = {
   value: number | null;
   date: string | null;
   unit: string;
-  frequency: "daily" | "monthly" | "quarterly";
+  frequency: "daily" | "weekly" | "monthly" | "quarterly";
   source: string;
   trend: Observation[];
   previous?: number;
@@ -156,6 +156,7 @@ export type MarketData = {
   fx: MarketReading[];
   yields: MarketReading[];
   macro: MarketReading[];
+  indicators?: MarketReading[];
   failures: string[];
 };
 export const TREASURIES = [
@@ -252,7 +253,14 @@ function earlier(date: string, months: number) {
   return d.toISOString().slice(0, 10);
 }
 export function macroReading(
-  definition: (typeof MACRO)[number],
+  definition: {
+    id: string;
+    label: string;
+    unit: string;
+    frequency: MarketReading["frequency"];
+    transform: string;
+    note: string;
+  },
   observations: Observation[],
 ): MarketReading {
   const transformed = observations.flatMap((row) => {
