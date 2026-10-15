@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { RESEARCH_THEMES, researchTheme } from "@/lib/market-research";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import MarketQuoteTile from "./MarketQuoteTile";
 import { instrumentKey, type MarketInstrument } from "@/lib/market";
@@ -19,6 +20,7 @@ export default function MarketPulse({
 }) {
   const [scope, setScope] = useState("all");
   const [query, setQuery] = useState("");
+  const [theme, setTheme] = useState("all");
   const [density, setDensity] = useState("compact");
   useEffect(() => {
     try {
@@ -35,6 +37,7 @@ export default function MarketPulse({
   const visible = rows.filter(
     (row) =>
       (scope === "all" || (row.exchange === "TSX" ? "cad" : "usd") === scope) &&
+      (theme === "all" || researchTheme(row) === theme) &&
       `${row.ticker} ${row.exchange} ${row.name}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
@@ -132,6 +135,22 @@ export default function MarketPulse({
           )}
         </div>
         <label>
+          <span className="sr-only">研究主题</span>
+          <select
+            aria-label="速览研究主题"
+            value={theme}
+            onChange={(event) => setTheme(event.target.value)}
+          >
+            <option value="all">全部研究主题</option>
+            {Object.entries(RESEARCH_THEMES).map(([value, item]) => (
+              <option key={value} value={value}>
+                {item.label} ·{" "}
+                {rows.filter((row) => researchTheme(row) === value).length}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           <span className="sr-only">打开详细图表</span>
           <select
             aria-label="从速览查看图表"
@@ -159,17 +178,24 @@ export default function MarketPulse({
         显示 {visible.length} / {rows.length} 个自选 · {covered.length}{" "}
         个行情请求{missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
       </p>
+      {theme !== "all" && (
+        <p className="desk-help">
+          {RESEARCH_THEMES[theme as keyof typeof RESEARCH_THEMES].question}{" "}
+          主题为人工研究分组，不是标准行业分类、基金持仓穿透或资产权重。
+        </p>
+      )}
       {!visible.length ? (
         <p className="empty-note">
           {rows.length
             ? "没有匹配的自选，试试其他关键词或切回全部市场。"
             : "自选清单为空，请先在下方添加证券。"}
-          {(query || scope !== "all") && (
+          {(query || scope !== "all" || theme !== "all") && (
             <button
               className="text-button"
               onClick={() => {
                 setQuery("");
                 setScope("all");
+                setTheme("all");
               }}
             >
               重置速览筛选

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 const sections = [
   ["watchlist-pulse", "自选涨跌"],
+  ["investment-desk", "投资研究"],
   ["market-overview", "市场概览"],
   ["macro-research", "宏观研究"],
   ["rates-research", "收益率曲线"],

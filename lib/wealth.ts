@@ -1,3 +1,4 @@
+import { validResearchNotes } from "./market-research";
 export type Owner = "joint" | "first" | "second" | string;
 export type Asset = {
   id: string;
@@ -80,6 +81,7 @@ export type WealthState = {
     webSearch?: "auto" | "on" | "off";
     searchTopic?: keyof typeof import("./search-policy").SEARCH_TOPICS | "auto";
     marketWatchlist?: import("./market").MarketInstrument[];
+    marketResearch?: import("./market-research").ResearchNotes;
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -458,6 +460,11 @@ export function alertsFor(state: WealthState) {
 export function validateState(raw: unknown): asserts raw is WealthState {
   if (!raw || typeof raw !== "object") throw new Error("数据格式无效。");
   const state = raw as WealthState;
+  if (
+    state.preferences?.marketResearch !== undefined &&
+    !validResearchNotes(state.preferences.marketResearch)
+  )
+    throw new Error("市场研究记录无效。");
   if (
     state.preferences?.marketWatchlist !== undefined &&
     (!Array.isArray(state.preferences.marketWatchlist) ||

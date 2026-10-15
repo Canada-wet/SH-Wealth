@@ -14,6 +14,8 @@ import { cloudClient } from "@/lib/cloud";
 import MarketNavigator from "@/app/components/MarketNavigator";
 import MarketSectionNav from "@/app/components/MarketSectionNav";
 import MarketPulse from "@/app/components/MarketPulse";
+import MarketInvestmentDesk from "@/app/components/MarketInvestmentDesk";
+import { saveResearchNote } from "@/lib/market-research";
 import {
   MarketOverview,
   MacroResearch,
@@ -156,7 +158,7 @@ export default function Markets() {
       chart.current?.scrollIntoView({ behavior: "instant", block: "start" }),
     );
     return () => cancelAnimationFrame(frame);
-  }, [selected, chartOpen, chartFocus]);
+  }, [chartOpen, chartFocus]);
   useEffect(() => {
     try {
       setLive(localStorage.getItem("together-market-embeds") === "on");
@@ -358,6 +360,55 @@ export default function Markets() {
           ready={store.ready}
           onEnable={toggleLive}
           onSelect={openChart}
+        />
+        <MarketInvestmentDesk
+          rows={list}
+          selected={selected}
+          notes={store.state.preferences.marketResearch ?? {}}
+          ready={store.ready && !store.cloudChoice}
+          syncStatus={store.cloudStatus}
+          onSelect={setSelected}
+          onChart={openChart}
+          onSave={(row, baseline, draft) => {
+            try {
+              if (store.cloudChoice)
+                throw new Error("请先处理本机与云端版本差异，再保存研究记录。");
+              store.commit((current) => {
+                const currentList = normalizeWatchlist(
+                  current.preferences.marketWatchlist ?? DEFAULT_WATCHLIST,
+                );
+                if (
+                  !currentList.some(
+                    (item) => instrumentKey(item) === instrumentKey(row),
+                  )
+                )
+                  throw new Error(
+                    "此标的已被移出自选，请先核对最新清单。草稿仍保留。",
+                  );
+                return {
+                  ...current,
+                  preferences: {
+                    ...current.preferences,
+                    marketResearch: saveResearchNote(
+                      current.preferences.marketResearch ?? {},
+                      row,
+                      baseline,
+                      draft,
+                    ),
+                  },
+                };
+              }, `更新研究记录：${row.ticker}`);
+              setError("");
+              return true;
+            } catch (reason) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "研究记录未保存，草稿仍保留。",
+              );
+              return false;
+            }
+          }}
         />
         <MarketOverview data={data} />
         <MacroResearch data={data} />

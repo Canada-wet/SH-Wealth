@@ -70,6 +70,107 @@ test.beforeEach(async ({ page }) => {
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("投资研究主题筛选、记录同步持久化与加币压力试算不改账本", async ({
+  page,
+}) => {
+  await page.goto("/markets");
+  const pulse = page.getByRole("region", { name: "自选涨跌速览" });
+  await pulse.getByRole("button", { name: "开启自选涨跌速览" }).click();
+  await pulse.getByLabel("速览研究主题").selectOption("semis");
+  await expect(pulse.getByRole("article")).toHaveCount(6);
+  const nav = page.getByRole("navigation", { name: "市场区块导航" });
+  await nav.getByRole("link", { name: "投资研究", exact: true }).click();
+  const desk = page.getByRole("region", { name: "投资研究工作台" });
+  const financial = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("together-wealth-v3")!);
+    return { assets: state.assets, history: state.history, debts: state.debts };
+  });
+  await desk
+    .getByLabel("投资逻辑", { exact: true })
+    .fill("合成研究：检查订单与自由现金流");
+  await desk
+    .getByLabel("主要风险", { exact: true })
+    .fill("合成风险：客户资本开支收缩");
+  await desk
+    .getByLabel("失效条件", { exact: true })
+    .fill("合成失效：现金流连续走弱");
+  await desk.getByLabel("下次复盘日期").fill("2020-01-01");
+  await desk.getByLabel("研究标的", { exact: true }).selectOption("AMEX:YINN");
+  await expect(desk).toContainText("每日 3×");
+  await desk
+    .getByLabel("研究标的", { exact: true })
+    .selectOption("NASDAQ:NVDA");
+  await expect(desk.getByLabel("投资逻辑", { exact: true })).toHaveValue(
+    "合成研究：检查订单与自由现金流",
+  );
+  await desk.getByRole("button", { name: "保存研究记录" }).click();
+  await expect(desk.locator("form")).toContainText("已同步 Supabase");
+  const householdId = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("together-cloud-link")!)
+        .householdId as string,
+  );
+  const partner = await page.context().browser()!.newContext();
+  try {
+    const partnerPage = await partner.newPage();
+    await authenticate(partnerPage, {
+      householdId,
+      email: "sallyxie0378@gmail.com",
+    });
+    await partnerPage.route("**/api/market", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(synthetic),
+      }),
+    );
+    await partnerPage.goto("/markets");
+    await expect(
+      partnerPage.getByLabel("投资逻辑", { exact: true }),
+    ).toHaveValue("合成研究：检查订单与自由现金流");
+  } finally {
+    await partner.close();
+  }
+  await page.reload();
+  await expect(desk.getByLabel("投资逻辑", { exact: true })).toHaveValue(
+    "合成研究：检查订单与自由现金流",
+  );
+  await expect(
+    desk.getByRole("button", { name: "NVDA · 2020-01-01" }),
+  ).toBeVisible();
+  await desk.getByLabel("压力试算收益口径").selectOption("foreign");
+  await desk.getByLabel("汇率变化假设").fill("10");
+  await expect(desk.getByLabel("压力试算结果")).toContainText("-12.00%");
+  await desk.getByLabel("压力试算收益口径").selectOption("cad");
+  await expect(desk.getByLabel("压力试算结果")).toContainText("-20.00%");
+  await desk.getByRole("button", { name: "查看 NVDA 图表 ↓" }).click();
+  await expect(page.getByLabel("选择证券图表")).toBeInViewport();
+  await nav.getByRole("link", { name: "投资研究", exact: true }).click();
+  await desk.getByLabel("研究标的", { exact: true }).selectOption("TSX:ZQQ");
+  await expect(
+    desk.getByRole("heading", { name: "从关注，到有依据的判断" }),
+  ).toBeInViewport();
+  await expect(desk).toContainText("不重复叠加美元涨跌");
+  expect(
+    await page.evaluate(() => {
+      const state = JSON.parse(localStorage.getItem("together-wealth-v3")!);
+      return {
+        assets: state.assets,
+        history: state.history,
+        debts: state.debts,
+      };
+    }),
+  ).toEqual(financial);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await desk.getByLabel("研究标的", { exact: true }).selectOption("AMEX:YINN");
+  await page.screenshot({
+    path: `test-results/investment-research-${test.info().project.name}.png`,
+  });
+});
 test("工作台固定导航、独立搜索和密度切换适配手机并保留偏好", async ({
   page,
 }) => {

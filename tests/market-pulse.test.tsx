@@ -54,6 +54,25 @@ it("速览搜索独立、Escape清空，密度偏好重开保持且不写入财�
   ).toBe("comfortable");
   expect(localStorage.getItem("together-wealth-v3")).toBe("unchanged");
 });
+it("研究主题与币种搜索交叉筛选，自定义未分类不丢失，可一键重置", () => {
+  const view = render(
+    <MarketPulse
+      rows={DEFAULT_WATCHLIST}
+      live
+      ready
+      onEnable={() => {}}
+      onSelect={() => {}}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("速览研究主题"), {
+    target: { value: "semis" },
+  });
+  expect(view.container.querySelectorAll("article")).toHaveLength(6);
+  fireEvent.click(screen.getByRole("button", { name: "加拿大 · CAD" }));
+  expect(view.container.querySelectorAll("article")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "重置速览筛选" }));
+  expect(view.container.querySelectorAll("article")).toHaveLength(30);
+});
 it("快速缓存窗口在首次布局阶段回报就绪时也不会漏掉消息", () => {
   function EarlyReady() {
     useLayoutEffect(() => {
