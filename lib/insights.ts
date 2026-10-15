@@ -135,7 +135,7 @@ export function proactiveInsights(
   )
     add("goal-gap", {
       title: "目标节奏值得一起确认",
-      body: `不计收益、按目标年末平摊，月度参考 ${money(pulse.monthlyGoal)}；当前账面结余 ${money(pulse.surplus)}。这是核对基线，不是预测。`,
+      body: `不计收益、从下一个完整月到目标年末平摊，月度参考 ${money(pulse.monthlyGoal)}；当前账面结余 ${money(pulse.surplus)}。这是核对基线，不是预测。`,
       prompt:
         "比较我们的目标年末、净资产差额和当前月结余，解释不计收益的基线与不确定性，提出可讨论的选项。",
       priority: "next",

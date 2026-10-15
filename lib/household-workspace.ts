@@ -37,7 +37,9 @@ export function goalPace(state: WealthState, now = new Date()) {
   const [year, month] = todayToronto(now).split("-").map(Number);
   const months = Math.max(
     0,
-    (Number(state.goal.year) - year) * 12 + 12 - month + 1,
+    // Start with the next complete month; the current snapshot may already
+    // include this month's income, contributions and valuation changes.
+    (Number(state.goal.year) - year) * 12 + 12 - month,
   );
   const gap = Math.max(0, round(state.goal.target - totals(state).netWorth));
   const complete = Boolean(

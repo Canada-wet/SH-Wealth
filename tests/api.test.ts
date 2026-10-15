@@ -21,6 +21,7 @@ vi.mock("@/lib/ai/router", () => ({
 }));
 import { POST } from "../app/api/advisor/route";
 import { chooseRoute, generateAdvice } from "../lib/ai/router";
+import { defaultGrowthPlan } from "../lib/growth";
 const request = (body: unknown) =>
   new Request("http://localhost/api/advisor", {
     method: "POST",
@@ -28,6 +29,34 @@ const request = (body: unknown) =>
     headers: { "Content-Type": "application/json" },
   });
 describe("顾问API", () => {
+  it("外部顾问收到已保存的计算情景与行动边界，分析不产生修改", async () => {
+    vi.mocked(chooseRoute).mockReturnValueOnce({
+      provider: "deepseek",
+      model: "fixture",
+      reason: "fixture",
+      complexity: "simple",
+    });
+    vi.mocked(generateAdvice).mockResolvedValueOnce(
+      '{"answer":"先落实留存，再复盘。","actions":[]}',
+    );
+    const state = emptyState();
+    state.preferences.webSearch = "off";
+    state.preferences.growthPlan = {
+      ...defaultGrowthPlan(state),
+      monthlySaving: 500,
+      longTermMonthly: 200,
+    };
+    const result = await POST(
+      request({ message: "分析增长计划，不修改数据", state }),
+    );
+    expect(result.status).toBe(200);
+    expect((await result.json()).actions).toEqual([]);
+    const call = vi.mocked(generateAdvice).mock.calls.at(-1)!;
+    expect(call[1]).toContain('"growth":');
+    expect(call[1]).toContain('"monthlySaving":500');
+    expect(call[2]).toContain("不是实际收益");
+    expect(call[2]).toContain("不支持通过现有 actions");
+  });
   it("匿名和未授权邮箱在调用模型之前被拒绝", async () => {
     for (const status of [401, 403]) {
       access.authorize.mockResolvedValueOnce({ status, error: "denied" });

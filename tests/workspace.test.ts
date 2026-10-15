@@ -150,8 +150,8 @@ it("现金覆盖与计划排除锁定现金，未知资金另标，不改变图�
 it("目标基线与首页一致，缺失预算和过期目标不伪造结论", () => {
   const s = fixture();
   expect(goalPace(s, now)).toMatchObject({
-    months: 31,
-    required: 100,
+    months: 30,
+    required: 103.33,
     surplus: 2699.99,
     shortfall: 0,
   });

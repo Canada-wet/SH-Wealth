@@ -29,6 +29,7 @@ import {
   Eye,
   EyeOff,
   Globe2,
+  Target,
 } from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import {
@@ -76,6 +77,7 @@ import {
 import ValuationTable from "./components/ValuationTable";
 import HouseholdPlanning from "./components/HouseholdPlanning";
 import HistoryComparison from "./components/HistoryComparison";
+import WealthGrowth from "./components/WealthGrowth";
 
 type Modal =
   | {
@@ -128,9 +130,14 @@ export default function Home() {
     initialSectionApplied.current = true;
     const section = window.location.hash.slice(1);
     if (
-      ["overview", "assets", "cashflow", "contributions", "framework"].includes(
-        section,
-      )
+      [
+        "overview",
+        "growth",
+        "assets",
+        "cashflow",
+        "contributions",
+        "framework",
+      ].includes(section)
     ) {
       const target = document.getElementById(section);
       target?.scrollIntoView?.({ behavior: "instant", block: "start" });
@@ -179,12 +186,17 @@ export default function Home() {
       },
       { rootMargin: "-5% 0px -65% 0px", threshold: 0 },
     );
-    ["overview", "assets", "cashflow", "contributions", "framework"].forEach(
-      (id) => {
-        const el = document.getElementById(id);
-        if (el) observer.observe(el);
-      },
-    );
+    [
+      "overview",
+      "growth",
+      "assets",
+      "cashflow",
+      "contributions",
+      "framework",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
     return () => observer.disconnect();
   }, [ready, store.cloudLoading]);
   useEffect(() => {
@@ -487,6 +499,13 @@ export default function Home() {
             全景
           </a>
           <a
+            href="#growth"
+            aria-current={activeSection === "growth" ? "location" : undefined}
+          >
+            <Target />
+            增长行动
+          </a>
+          <a
             href="#assets"
             aria-current={activeSection === "assets" ? "location" : undefined}
           >
@@ -639,6 +658,7 @@ export default function Home() {
           <div className="mobile-nav">
             <a href="/markets">市场</a>
             <a href="#overview">总览</a>
+            <a href="#growth">增长</a>
             <a href="#assets">资产</a>
             <a href="#cashflow">收支</a>
             <a href="#contributions">贡献</a>
@@ -954,6 +974,14 @@ export default function Home() {
               )}
             </section>
           </div>
+          <WealthGrowth
+            state={state}
+            ready={ready && !store.cloudChoice && !store.cloudLoading}
+            syncStatus={store.cloudStatus}
+            onChange={(update, reason) => change(update, reason)}
+            onDiscuss={advisor}
+            onDebt={(id) => open({ kind: "debt", id })}
+          />
           <section className="card accounts-card" id="assets">
             <div className="card-head">
               <div>

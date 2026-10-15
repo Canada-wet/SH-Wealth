@@ -98,12 +98,16 @@ export default function FloatingAdvisor({
     }
   }, []);
   useEffect(() => {
-    const summary = document.querySelector(".pulse-next");
-    if (!summary || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) =>
-      setOverviewPromptVisible(entry.isIntersecting),
-    );
-    observer.observe(summary);
+    const summaries = document.querySelectorAll(".pulse-next, #growth");
+    if (!summaries.length || typeof IntersectionObserver === "undefined")
+      return;
+    const visibility = new Map<Element, boolean>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries)
+        visibility.set(entry.target, entry.isIntersecting);
+      setOverviewPromptVisible([...visibility.values()].some(Boolean));
+    });
+    summaries.forEach((summary) => observer.observe(summary));
     return () => observer.disconnect();
   }, [insights[0]?.id]);
   useEffect(() => {

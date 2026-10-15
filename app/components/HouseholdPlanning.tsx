@@ -49,7 +49,9 @@ export default function HouseholdPlanning({
             </span>
             <span>
               至 {state.goal.year} 年末
-              <b>{pace.months ? `约 ${pace.months} 个月` : "目标期限已到"}</b>
+              <b>
+                {pace.months ? `约 ${pace.months} 个完整月` : "无剩余完整月"}
+              </b>
             </span>
             <span>
               零收益基线所需月储蓄
@@ -64,7 +66,7 @@ export default function HouseholdPlanning({
               : `已录入预算月结余 ${money(pace.surplus)}${pace.shortfall === null ? "" : `；与所需月储蓄相比还差 ${money(pace.shortfall)}`}。`}
           </p>
           <small>
-            仅为账面零收益算术基线，不计回报、房贷本金变化、税费或漏记支出；预算结余不等于实际储蓄。
+            从下一个完整月开始至目标年末；仅为账面零收益基线，不计回报、房贷本金变化、税费或漏记支出；预算结余不等于实际储蓄。
           </small>
           <h3>共同开支怎么分</h3>
           <label>

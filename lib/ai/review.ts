@@ -2,17 +2,23 @@ import { chooseRoute, generateAdvice, type Preference } from "./router";
 import { parseAdvisorResult } from "../advisor-actions";
 import { householdPulse, proactiveInsights } from "../insights";
 import { money, totals, type WealthState } from "../wealth";
+import { growthContext, growthTasks } from "../growth";
 
 export function ruleReview(state: WealthState, now = new Date()) {
   const balance = totals(state);
   const pulse = householdPulse(state, now);
   const insights = proactiveInsights(state, now);
+  const growth = state.preferences.growthPlan
+    ? growthTasks(state, now)
+        .filter((task) => task.status !== "done")
+        .slice(0, 2)
+    : [];
   return `**本周记录概览**\n\n净资产 ${money(balance.netWorth)}；资产 ${money(balance.totalAssets)}，负债 ${money(balance.totalDebts)}。${pulse.complete ? `账面月结余 ${money(pulse.surplus)}，未必等于实际储蓄。` : "收支尚未完整录入，暂不估算月结余。"}\n\n${
     insights
       .slice(0, 3)
       .map((row) => `- **${row.title}**：${row.body}`)
       .join("\n") || "- 一起确认账户估值、本月收支与成员贡献。"
-  }\n\n数据规则复盘 · 基于记录，不是收益预测。`;
+  }${growth.length ? `\n\n**增长行动跟进**\n\n${growth.map((task) => `- ${task.title}：${task.body} 下一步：${task.next}`).join("\n")}` : ""}\n\n数据规则复盘 · 基于记录，不是收益预测。`;
 }
 
 export async function weeklyReview(state: WealthState, now = new Date()) {
@@ -43,6 +49,7 @@ export async function weeklyReview(state: WealthState, now = new Date()) {
         totals: totals(state),
         cashflow: householdPulse(state, now),
         goal: state.goal,
+        growth: growthContext(state, now),
         observations: proactiveInsights(state, now).map(
           ({ title, body, source }) => ({ title, body, source }),
         ),

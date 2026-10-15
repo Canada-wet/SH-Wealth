@@ -8,6 +8,7 @@ import {
   WalletCards,
   Globe2,
   ArrowUpRight,
+  Target,
 } from "lucide-react";
 export default function MarketNavigator() {
   const [busy, setBusy] = useState(false),
@@ -39,6 +40,10 @@ export default function MarketNavigator() {
           <a href="/#overview">
             <LineChart />
             全景
+          </a>
+          <a href="/#growth">
+            <Target />
+            增长行动
           </a>
           <a href="/#assets">
             <WalletCards />

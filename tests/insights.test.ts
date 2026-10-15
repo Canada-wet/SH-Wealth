@@ -13,6 +13,7 @@ vi.mock("../lib/ai/router", () => ({
 }));
 import { ruleReview, weeklyReview } from "../lib/ai/review";
 import { mutationRequested } from "../lib/advisor-actions";
+import { defaultGrowthPlan } from "../lib/growth";
 const now = new Date("2030-06-15T12:00:00Z");
 function fixture() {
   const state = saveAsset(emptyState(), {
@@ -64,9 +65,9 @@ describe("实时主动洞察", () => {
       expenses: 2000,
       surplus: 3000,
       coverage: 6,
-      months: 31,
+      months: 30,
     });
-    expect(pulse.monthlyGoal).toBeCloseTo(88000 / 31);
+    expect(pulse.monthlyGoal).toBeCloseTo(88000 / 30);
   });
   it("缺少收入或开支不虚构完整结余，零必要支出不产生无限覆盖", () => {
     const state = fixture();
@@ -136,6 +137,18 @@ describe("实时主动洞察", () => {
   });
 });
 describe("每周AI复盘", () => {
+  it("已保存增长计划进入规则周报及外部复盘事实，不增加写操作", async () => {
+    const state = fixture();
+    state.preferences.growthPlan = defaultGrowthPlan(state, now);
+    expect(ruleReview(state, now)).toContain("增长行动跟进");
+    router.choose.mockReturnValue({ provider: "deepseek", model: "fixture" });
+    router.generate.mockResolvedValue(
+      '{"answer":"先核对可动用现金。","actions":[]}',
+    );
+    await weeklyReview(state, now);
+    expect(router.generate.mock.calls[0][2]).toContain('"growth":');
+    expect(router.generate.mock.calls[0][2]).toContain('"savedScenario":');
+  });
   it("用户选择本地助手或关闭主动功能时，不调用外部模型", async () => {
     for (const enabled of [true, false]) {
       const state = fixture();

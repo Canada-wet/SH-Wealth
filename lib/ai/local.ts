@@ -1,4 +1,5 @@
 import { mutationRequested, type AssistantAction } from "../advisor-actions";
+import { growthAnalysis, growthTasks } from "../growth";
 import {
   contributionSummary,
   money,
@@ -73,6 +74,22 @@ export function localAdvice(message: string, state: WealthState) {
     return {
       answer:
         "本地助手可执行明确的账户修改，例如「把共同储蓄的价值改为 50000」「把共同储蓄本年回报改为 -2.5%」「记录 Lin 向共同储蓄投入 1000」。请使用已有账户的准确名称，或通过表格录入。复杂规划请在模型选项连接外部 AI。",
+      actions,
+    };
+  }
+  if (/增长|留存|行动|复盘|储蓄计划/.test(message)) {
+    const plan = state.preferences.growthPlan;
+    const analysis = plan ? growthAnalysis(state, plan) : null;
+    return {
+      answer: `**本轮增长重点**\n\n${plan && analysis ? `已保存的留存计划为 ${money(plan.monthlySaving)}/月；至 ${state.goal.year} 年末，零收益基线 ${money(analysis.baseline)}，自填回报假设情景 ${money(analysis.projected)}。这不是实际收益或达标保证。` : "尚未保存增长情景，请先在「增长行动」确认每月能稳定留下的金额；预算结余不等于实际储蓄。"}\n\n${growthTasks(
+        state,
+      )
+        .filter((task) => task.status !== "done")
+        .slice(0, 3)
+        .map(
+          (task) => `- **${task.title}**：${task.body}\n  下一步：${task.next}`,
+        )
+        .join("\n\n")}\n\n规则计算 · 只读讨论，未执行转账或数据修改。`,
       actions,
     };
   }

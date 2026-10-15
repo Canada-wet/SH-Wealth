@@ -55,10 +55,10 @@ export default function WealthPulse({
           <span>目标月度参考</span>
           <b>
             {pulse.monthlyGoal === null
-              ? "目标期限已到"
+              ? "无剩余完整月"
               : money(pulse.monthlyGoal)}
           </b>
-          <small>不计收益 · 按目标年末平摊差额</small>
+          <small>不计收益 · 从下月起至目标年末</small>
         </a>
       </div>
       {first && (
@@ -73,6 +73,9 @@ export default function WealthPulse({
             <p>{first.body}</p>
           </div>
           <div className="pulse-actions">
+            <a className="text-button" href="#growth">
+              制定增长行动 →
+            </a>
             <button
               className="secondary"
               onClick={() => onDiscuss(first.prompt)}
