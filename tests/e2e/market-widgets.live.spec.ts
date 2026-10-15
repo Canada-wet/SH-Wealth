@@ -7,7 +7,20 @@ test.skip(
   process.env.RUN_MARKET_WIDGETS !== "1",
   "Explicit opt-in for external public quote windows",
 );
-test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test.afterEach(async ({ page }, info) => {
+  if (
+    info.status !== info.expectedStatus &&
+    (await page.locator(".market-quote-tile").count())
+  )
+    await page
+      .locator(".market-quote-tile")
+      .first()
+      .screenshot({
+        path: `test-results/pulse-failed-${info.project.name}.png`,
+      })
+      .catch(() => {});
+  await cleanupAuthenticated(page);
+});
 test("真实公开行情窗口：外汇、美股和所选历史图表", async ({ page }) => {
   test.setTimeout(60000);
   await authenticate(page, { seed: emptyState() });

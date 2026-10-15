@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   instrumentKey,
   pulseWidgetUrl,
@@ -19,7 +19,8 @@ export default function MarketQuoteTile({
   const frame = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState("waiting");
   const src = pulseWidgetUrl(row);
-  useEffect(() => {
+  // A cached frame may signal readiness before deferred effects run.
+  useLayoutEffect(() => {
     setStatus("waiting");
     const receive = (event: MessageEvent) => {
       if (

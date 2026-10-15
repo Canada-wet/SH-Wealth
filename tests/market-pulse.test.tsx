@@ -10,7 +10,27 @@ import {
 import MarketPulse from "../app/components/MarketPulse";
 import MarketQuoteTile from "../app/components/MarketQuoteTile";
 import { DEFAULT_WATCHLIST } from "../lib/market";
+import { useLayoutEffect } from "react";
 afterEach(cleanup);
+it("快速缓存窗口在首次布局阶段回报就绪时也不会漏掉消息", () => {
+  function EarlyReady() {
+    useLayoutEffect(() => {
+      const frame = document.querySelector("iframe")!;
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://www.tradingview-widget.com",
+          source: frame.contentWindow,
+          data: { name: "tv-widget-ready" },
+        }),
+      );
+    }, []);
+    return (
+      <MarketQuoteTile row={DEFAULT_WATCHLIST[0]} ready onSelect={() => {}} />
+    );
+  }
+  render(<EarlyReady />);
+  expect(screen.getByRole("article").getAttribute("data-state")).toBe("ready");
+});
 it("报价状态只接收当前供应商窗口的消息，不让其他窗口伪造就绪", () => {
   const view = render(
     <MarketQuoteTile row={DEFAULT_WATCHLIST[0]} ready onSelect={() => {}} />,
