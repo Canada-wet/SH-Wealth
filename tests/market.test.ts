@@ -3,6 +3,7 @@ import {
   DEFAULT_WATCHLIST,
   normalizeWatchlist,
   widgetUrl,
+  pulseWidgetUrl,
   tradingSymbol,
   parseFred,
   macroReading,
@@ -10,6 +11,23 @@ import {
 } from "../lib/market";
 import { parseBoc } from "../lib/market-server";
 import { emptyState, validateState } from "../lib/wealth";
+it("涨跌速览含全部唯一自选和正确报价币种，不发送自定义私密名称", () => {
+  const config = JSON.parse(
+    decodeURIComponent(
+      new URL(
+        pulseWidgetUrl({ ...DEFAULT_WATCHLIST[0], name: "PRIVATE_LABEL" }),
+      ).hash.slice(1),
+    ),
+  );
+  expect(config.symbol).toBe("NASDAQ:NVDA");
+  expect(
+    pulseWidgetUrl(DEFAULT_WATCHLIST.find((row) => row.ticker === "CGL.C")!),
+  ).toContain("single-quote");
+  expect(JSON.stringify(config)).not.toContain("PRIVATE_LABEL");
+  expect(() =>
+    pulseWidgetUrl({ ...DEFAULT_WATCHLIST[0], ticker: "<script>" }),
+  ).toThrow();
+});
 it("默认清单完整去重，SPCX确认为SpaceX，TSX类份额保持CAD", () => {
   expect(DEFAULT_WATCHLIST).toHaveLength(30);
   expect(

@@ -1,0 +1,131 @@
+"use client";
+import { useState } from "react";
+import MarketQuoteTile from "./MarketQuoteTile";
+import { instrumentKey, type MarketInstrument } from "@/lib/market";
+
+export default function MarketPulse({
+  rows,
+  live,
+  ready,
+  onEnable,
+  onSelect,
+}: {
+  rows: MarketInstrument[];
+  live: boolean;
+  ready: boolean;
+  onEnable: () => void;
+  onSelect: (row: MarketInstrument) => void;
+}) {
+  const [scope, setScope] = useState("all");
+  const visible = rows.filter(
+    (row) =>
+      scope === "all" || (row.exchange === "TSX" ? "cad" : "usd") === scope,
+  );
+  const missing = visible.filter(
+    (row) => row.exchange === "TSX" && row.ticker === "ZGIN",
+  );
+  const covered = visible.filter((row) => !missing.includes(row));
+  return (
+    <section
+      className="card market-section market-pulse"
+      id="watchlist-pulse"
+      aria-label="自选涨跌速览"
+    >
+      <div className="card-head">
+        <div>
+          <p className="eyebrow">WATCHLIST · DAILY PULSE</p>
+          <h2>自选涨跌速览</h2>
+          <p>
+            最新价格 · 当日涨跌额 · 当日涨跌幅。与前收盘比较，不是你的持仓收益。
+          </p>
+        </div>
+        <a className="text-button" href="#securities">
+          管理自选 ↓
+        </a>
+      </div>
+      <div className="market-pulse-toolbar">
+        <div role="group" aria-label="速览市场筛选">
+          {[
+            ["all", "全部"],
+            ["usd", "美股 · USD"],
+            ["cad", "加拿大 · CAD"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className="secondary"
+              aria-pressed={scope === value}
+              onClick={() => setScope(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label>
+          打开详细图表
+          <select
+            aria-label="从速览查看图表"
+            value=""
+            disabled={!ready || !visible.length}
+            onChange={(event) => {
+              const row = rows.find(
+                (item) => instrumentKey(item) === event.target.value,
+              );
+              if (row) onSelect(row);
+            }}
+          >
+            <option value="" disabled>
+              选择证券…
+            </option>
+            {visible.map((row) => (
+              <option key={instrumentKey(row)} value={instrumentKey(row)}>
+                {row.ticker} · {row.exchange}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="market-pulse-count">
+        显示 {visible.length} / {rows.length} 个自选 · {covered.length}{" "}
+        个行情窗口标的{missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
+      </p>
+      {!visible.length ? (
+        <p className="empty-note">
+          {rows.length
+            ? "此市场暂无自选证券，可切回全部。"
+            : "自选清单为空，请先在下方添加证券。"}
+        </p>
+      ) : !live ? (
+        <div className="market-action-hint">
+          <p>
+            开启后，所有自选的涨跌集中展示，不用逐个打开图表。行情可能延迟；此开关同时控制其他外部行情窗口。
+          </p>
+          <button className="primary" disabled={!ready} onClick={onEnable}>
+            开启自选涨跌速览
+          </button>
+        </div>
+      ) : (
+        <div className="market-pulse-grid">
+          {visible.map((row) => (
+            <MarketQuoteTile
+              key={instrumentKey(row)}
+              row={row}
+              ready={ready}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
+      <small>
+        美股以 USD、TSX 以 CAD 报价，不跨币种合计。行情由{" "}
+        <a
+          href="https://www.tradingview.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          TradingView
+        </a>{" "}
+        提供。正负号与提供商颜色共同标识涨跌；交易时段、延迟和休市状态以窗口内标注为准。卡片按需加载，手机可向下滚动查看。报价空白或代码不支持时请点来源核对，不补示例数字。
+      </small>
+    </section>
+  );
+}

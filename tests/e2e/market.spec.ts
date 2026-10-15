@@ -70,6 +70,48 @@ test.beforeEach(async ({ page }) => {
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("涨跌速览显示全部自选，不受下方搜索影响，筛选选图与清单增删联动", async ({
+  page,
+}) => {
+  await page.goto("/markets");
+  const pulse = page.getByRole("region", { name: "自选涨跌速览" });
+  await expect(pulse).toContainText("显示 30 / 30");
+  await expect(pulse.locator("iframe")).toHaveCount(0);
+  await pulse.getByRole("button", { name: "开启自选涨跌速览" }).click();
+  const symbols = async () => {
+    const urls = await pulse
+      .locator("iframe")
+      .evaluateAll((frames) =>
+        frames.map((frame) => frame.getAttribute("src")!),
+      );
+    return urls.flatMap(
+      (src) =>
+        JSON.parse(decodeURIComponent(new URL(src).hash.slice(1))).symbol,
+    );
+  };
+  expect(await symbols()).toHaveLength(29);
+  await page.getByLabel("搜索市场自选").fill("NVDA");
+  expect(await symbols()).toHaveLength(29);
+  await pulse.getByRole("button", { name: "加拿大 · CAD" }).click();
+  expect(
+    (await symbols()).every((symbol: string) => symbol.startsWith("TSX:")),
+  ).toBe(true);
+  await expect(pulse.getByText("当前源暂无覆盖，不表示零涨跌。")).toBeVisible();
+  await pulse.getByLabel("从速览查看图表").selectOption("TSX:ZSP");
+  await expect(page.getByLabel("选择证券图表")).toHaveValue("TSX:ZSP");
+  await page.getByLabel("搜索市场自选").fill("");
+  await page.getByRole("button", { name: "移除自选TSX:ZSP" }).click();
+  await expect(pulse).toContainText("/ 29 个自选");
+  await page.getByRole("button", { name: "撤销移除" }).click();
+  await expect(pulse).toContainText("/ 30 个自选");
+  await page.getByRole("button", { name: "暂停外部行情" }).click();
+  await expect(page.locator("iframe")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
 test("编辑期间另一页更新自选时拒绝覆盖新数据", async ({ page }) => {
   await page.goto("/markets");
   await page.getByRole("button", { name: "编辑自选NASDAQ:NVDA" }).click();
@@ -110,7 +152,7 @@ test("点证券后可在原位置开启图表，重试实际重建窗口", async
   ).toBeVisible();
   await expect(page.locator("iframe")).toHaveCount(0);
   await page.getByRole("button", { name: "开启行情并加载所选图表" }).click();
-  await expect(page.locator("iframe")).toHaveCount(3);
+  await expect(page.locator("iframe")).toHaveCount(32);
   const frame = page.getByTitle("所选证券历史图表"),
     old = await frame.elementHandle();
   await page.getByRole("button", { name: "重试所选证券历史图表" }).click();
@@ -387,7 +429,7 @@ test("外部行情按明确开关加载，隔离URL仅含代码，暂停移除�
   await page.goto("/markets");
   await expect(page.locator("iframe")).toHaveCount(0);
   await page.getByRole("button", { name: "启用自动更新行情" }).click();
-  await expect(page.locator("iframe")).toHaveCount(2);
+  await expect(page.locator("iframe")).toHaveCount(31);
   const src = await page.getByTitle("自选股票ETF行情").getAttribute("src");
   expect(src).toContain("tradingview-widget.com");
   expect(src).not.toMatch(/apikey|household|assets|messages/);

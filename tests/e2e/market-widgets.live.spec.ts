@@ -25,6 +25,23 @@ test("真实公开行情窗口：外汇、美股和所选历史图表", async ({
   );
   await page.goto("/markets");
   await page.getByRole("button", { name: "启用自动更新行情" }).click();
+  for (const row of DEFAULT_WATCHLIST.filter((row) => row.ticker !== "ZGIN")) {
+    const title = `当前涨跌${row.exchange}:${row.ticker}`;
+    await page.getByTitle(title, { exact: true }).scrollIntoViewIfNeeded();
+    // The provider's new component uses a closed shadow tree: verify its
+    // authenticated ready message, then inspect screenshots, not body text.
+    await expect(
+      page.getByRole("article", {
+        name: `${row.exchange}:${row.ticker}涨跌`,
+        exact: true,
+      }),
+    ).toHaveAttribute("data-state", "ready", { timeout: 15000 });
+  }
+  await page
+    .getByRole("article", { name: "NASDAQ:NVDA涨跌", exact: true })
+    .screenshot({
+      path: `test-results/pulse-live-${test.info().project.name}.png`,
+    });
   const fx = page.frameLocator('iframe[title="加币盘中外汇参考"]');
   const quotes = page.frameLocator('iframe[title="自选股票ETF行情"]');
   await expect(fx.locator("body")).toContainText(/\d+\.\d+/, {

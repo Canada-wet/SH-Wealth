@@ -695,6 +695,117 @@ main {
 .market-section {
   margin-bottom: 22px;
 }
+.market-pulse-toolbar,
+.market-pulse-toolbar > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.market-pulse-toolbar {
+  justify-content: space-between;
+  margin: 18px 0 10px;
+}
+.market-pulse-toolbar button {
+  min-height: 40px;
+}
+.market-pulse-toolbar button[aria-pressed="true"] {
+  background: #315b4d;
+  color: white;
+}
+.market-pulse-toolbar label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #62756c;
+}
+.market-pulse-toolbar select {
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid #dce4dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #26483d;
+}
+.market-pulse-count {
+  font-size: 12px;
+  color: #62756c;
+  margin: 12px 0;
+}
+.market-pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.market-quote-tile {
+  min-width: 0;
+  border: 1px solid #e0e6dd;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.market-quote-heading {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid #edf0e9;
+  background: #f7f9f4;
+  color: #294e40;
+  text-align: left;
+  cursor: pointer;
+  gap: 10px;
+}
+.market-quote-heading b {
+  font-size: 14px;
+}
+.market-quote-heading small {
+  font-size: 10px;
+}
+.market-quote-tile iframe {
+  width: 100%;
+  display: block;
+  border: 0;
+}
+.market-quote-status {
+  display: block;
+  padding: 0 12px 6px;
+  font-size: 9px;
+  color: #73816d;
+}
+.market-quote-missing {
+  height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #788777;
+  font-size: 12px;
+  padding: 12px;
+}
+.market-quote-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-top: 1px solid #edf0e9;
+  font-size: 10px;
+  color: #62756c;
+}
+.market-quote-footer a {
+  color: #315b4d;
+  text-decoration: underline;
+}
+.market-quote-footer button {
+  min-height: 32px;
+  font-size: 10px;
+}
 .market-badge {
   padding: 6px 10px;
   border-radius: 20px;

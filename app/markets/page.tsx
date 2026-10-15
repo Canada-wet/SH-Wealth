@@ -12,6 +12,7 @@ import {
 import useWealth from "@/lib/useWealth";
 import { cloudClient } from "@/lib/cloud";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import MarketPulse from "@/app/components/MarketPulse";
 import {
   MarketOverview,
   MacroResearch,
@@ -253,6 +254,7 @@ export default function Markets() {
           </div>
         </header>
         <nav className="research-section-nav" aria-label="市场区块导航">
+          <a href="#watchlist-pulse">自选涨跌</a>
           <a href="#market-overview">市场概览</a>
           <a href="#macro-research">宏观研究</a>
           <a href="#rates-research">收益率曲线</a>
@@ -342,6 +344,16 @@ export default function Markets() {
             {live ? "暂停外部行情" : "启用自动更新行情"}
           </button>
         </section>
+        <MarketPulse
+          rows={list}
+          live={live}
+          ready={store.ready}
+          onEnable={toggleLive}
+          onSelect={(row) => {
+            setSelected(instrumentKey(row));
+            setChartOpen(true);
+          }}
+        />
         <MarketOverview data={data} />
         <MacroResearch data={data} />
         <YieldResearch data={data} />

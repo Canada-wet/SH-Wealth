@@ -66,6 +66,10 @@ export function normalizeWatchlist(rows: MarketInstrument[]) {
   );
 }
 export const FX_SYMBOLS = ["FX_IDC:CADCNY", "FX_IDC:CADUSD", "FX_IDC:CADJPY"];
+export function pulseWidgetUrl(row: MarketInstrument) {
+  const [safe] = normalizeWatchlist([row]);
+  return `https://www.tradingview-widget.com/embed-widget/single-quote/?locale=zh_CN#${encodeURIComponent(JSON.stringify({ symbol: tradingSymbol(safe), width: "100%", colorTheme: "light", isTransparent: false }))}`;
+}
 export function widgetUrl(
   kind: "quotes" | "fx" | "chart",
   rows: MarketInstrument[],
