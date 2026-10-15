@@ -65,11 +65,63 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://www.tradingview-widget.com/**", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: "<html><body>隔离的行情测试窗口</body></html>",
+      body: '<html><meta charset="utf-8"><body>隔离的行情测试窗口</body></html>',
     }),
   );
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("工作台固定导航、独立搜索和密度切换适配手机并保留偏好", async ({
+  page,
+}) => {
+  await page.goto("/markets");
+  const pulse = page.getByRole("region", { name: "自选涨跌速览" });
+  await pulse.getByRole("button", { name: "开启自选涨跌速览" }).click();
+  await pulse.getByLabel("搜索涨跌速览").fill("META");
+  await expect(pulse.getByRole("article")).toHaveCount(1);
+  await expect(page.locator(".market-watchlist>div")).toHaveCount(30);
+  await pulse.getByLabel("搜索涨跌速览").press("Escape");
+  await expect(pulse.getByRole("article")).toHaveCount(30);
+  await pulse.getByRole("button", { name: "舒适", exact: true }).click();
+  await page.reload();
+  await expect(pulse).toHaveAttribute("data-density", "comfortable");
+  await pulse.getByRole("button", { name: "紧凑", exact: true }).click();
+  await pulse.getByLabel("搜索涨跌速览").fill("no-match-xyz");
+  await expect(pulse).toContainText("没有匹配的自选");
+  await pulse.getByRole("button", { name: "重置速览筛选" }).click();
+  await expect(pulse.getByRole("article")).toHaveCount(30);
+  const nav = page.getByRole("navigation", { name: "市场区块导航" });
+  await nav.getByRole("link", { name: "宏观研究" }).click();
+  await expect(nav.getByRole("link", { name: "宏观研究" })).toHaveAttribute(
+    "aria-current",
+    "location",
+  );
+  const position = await nav.boundingBox();
+  expect(position!.y).toBeGreaterThanOrEqual(-1);
+  expect(position!.y).toBeLessThan(20);
+  await nav.getByRole("link", { name: "自选涨跌" }).click();
+  await expect(
+    pulse.getByRole("heading", { name: "自选涨跌速览" }),
+  ).toBeInViewport();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await pulse.getByLabel("搜索涨跌速览").fill("NVDA");
+  for (let index = 0; index < 2; index++) {
+    await pulse
+      .getByRole("button", { name: "速览打开NASDAQ:NVDA图表" })
+      .click();
+    await expect(page.getByLabel("选择证券图表")).toBeInViewport();
+    await page.getByRole("link", { name: "↑ 返回涨跌速览" }).click();
+    await expect(
+      pulse.getByRole("heading", { name: "自选涨跌速览" }),
+    ).toBeInViewport();
+  }
+  await page.screenshot({
+    path: `test-results/market-workspace-${test.info().project.name}.png`,
+  });
+});
 test("涨跌速览显示全部自选，不受下方搜索影响，筛选选图与清单增删联动", async ({
   page,
 }) => {

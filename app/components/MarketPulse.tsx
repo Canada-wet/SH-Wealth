@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Search, X, SlidersHorizontal } from "lucide-react";
 import MarketQuoteTile from "./MarketQuoteTile";
 import { instrumentKey, type MarketInstrument } from "@/lib/market";
 
@@ -17,9 +18,26 @@ export default function MarketPulse({
   onSelect: (row: MarketInstrument) => void;
 }) {
   const [scope, setScope] = useState("all");
+  const [query, setQuery] = useState("");
+  const [density, setDensity] = useState("compact");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("together-market-layout-v1");
+      if (saved === "comfortable") setDensity(saved);
+    } catch {}
+  }, []);
+  const chooseDensity = (value: string) => {
+    setDensity(value);
+    try {
+      localStorage.setItem("together-market-layout-v1", value);
+    } catch {}
+  };
   const visible = rows.filter(
     (row) =>
-      scope === "all" || (row.exchange === "TSX" ? "cad" : "usd") === scope,
+      (scope === "all" || (row.exchange === "TSX" ? "cad" : "usd") === scope) &&
+      `${row.ticker} ${row.exchange} ${row.name}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
   );
   const missing = visible.filter(
     (row) => row.exchange === "TSX" && row.ticker === "ZGIN",
@@ -30,6 +48,7 @@ export default function MarketPulse({
       className="card market-section market-pulse"
       id="watchlist-pulse"
       aria-label="自选涨跌速览"
+      data-density={density}
     >
       <div className="card-head">
         <div>
@@ -54,14 +73,66 @@ export default function MarketPulse({
               key={value}
               className="secondary"
               aria-pressed={scope === value}
+              aria-label={label}
+              disabled={!ready}
               onClick={() => setScope(value)}
+            >
+              {label}
+              <span aria-hidden="true">
+                {
+                  rows.filter(
+                    (row) =>
+                      value === "all" ||
+                      (row.exchange === "TSX" ? "cad" : "usd") === value,
+                  ).length
+                }
+              </span>
+            </button>
+          ))}
+        </div>
+        <div
+          className="market-density"
+          role="group"
+          aria-label="卡片显示密度"
+          title="仅保存在当前浏览器"
+        >
+          <SlidersHorizontal size={14} aria-hidden="true" />
+          {[
+            ["compact", "紧凑"],
+            ["comfortable", "舒适"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className="text-button"
+              disabled={!ready}
+              aria-pressed={density === value}
+              onClick={() => chooseDensity(value)}
             >
               {label}
             </button>
           ))}
         </div>
+      </div>
+      <div className="market-pulse-searchbar">
+        <div className="market-pulse-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            aria-label="搜索涨跌速览"
+            placeholder="搜索代码、名称或交易所"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuery("");
+            }}
+          />
+          {query && (
+            <button aria-label="清空速览搜索" onClick={() => setQuery("")}>
+              <X size={15} />
+            </button>
+          )}
+        </div>
         <label>
-          打开详细图表
+          <span className="sr-only">打开详细图表</span>
           <select
             aria-label="从速览查看图表"
             value=""
@@ -84,15 +155,26 @@ export default function MarketPulse({
           </select>
         </label>
       </div>
-      <p className="market-pulse-count">
+      <p className="market-pulse-count" role="status">
         显示 {visible.length} / {rows.length} 个自选 · {covered.length}{" "}
-        个行情窗口标的{missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
+        个行情请求{missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
       </p>
       {!visible.length ? (
         <p className="empty-note">
           {rows.length
-            ? "此市场暂无自选证券，可切回全部。"
+            ? "没有匹配的自选，试试其他关键词或切回全部市场。"
             : "自选清单为空，请先在下方添加证券。"}
+          {(query || scope !== "all") && (
+            <button
+              className="text-button"
+              onClick={() => {
+                setQuery("");
+                setScope("all");
+              }}
+            >
+              重置速览筛选
+            </button>
+          )}
         </p>
       ) : !live ? (
         <div className="market-action-hint">
@@ -115,17 +197,20 @@ export default function MarketPulse({
           ))}
         </div>
       )}
-      <small>
-        美股以 USD、TSX 以 CAD 报价，不跨币种合计。行情由{" "}
-        <a
-          href="https://www.tradingview.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          TradingView
-        </a>{" "}
-        提供。正负号与提供商颜色共同标识涨跌；交易时段、延迟和休市状态以窗口内标注为准。卡片按需加载，手机可向下滚动查看。报价空白或代码不支持时请点来源核对，不补示例数字。
-      </small>
+      <details className="market-pulse-disclosure">
+        <summary>行情口径与使用说明 · 非持仓收益</summary>
+        <small>
+          美股以 USD、TSX 以 CAD 报价，不跨币种合计。行情由{" "}
+          <a
+            href="https://www.tradingview.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            TradingView
+          </a>{" "}
+          提供。正负号与提供商颜色共同标识涨跌；交易时段、延迟和休市状态以窗口内标注为准。卡片按需加载，手机可向下滚动查看。报价空白或代码不支持时请点来源核对，不补示例数字。
+        </small>
+      </details>
     </section>
   );
 }

@@ -6,6 +6,7 @@ import {
   type MarketInstrument,
 } from "@/lib/market";
 import { instrumentFallback } from "@/lib/market-state";
+import { RefreshCw, ExternalLink } from "lucide-react";
 export default function MarketQuoteTile({
   row,
   ready,
@@ -50,7 +51,7 @@ export default function MarketQuoteTile({
       >
         <b>{row.ticker}</b>
         <small>
-          {row.exchange} · {row.exchange === "TSX" ? "CAD" : "USD"} ↗
+          {row.exchange} · {row.exchange === "TSX" ? "CAD" : "USD"} ↓
         </small>
       </button>
       {missing ? (
@@ -70,13 +71,14 @@ export default function MarketQuoteTile({
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
       )}
-      {!missing && (
-        <small className="market-quote-status" role="status">
-          {status === "ready"
-            ? "组件已就绪 · 报价以卡片内为准"
-            : status === "unavailable"
-              ? "暂无报价，请核对来源"
-              : "等待报价组件，空白时可重试"}
+      {!missing && status !== "ready" && (
+        <small
+          className="market-quote-status"
+          role={status === "unavailable" ? "status" : undefined}
+        >
+          {status === "unavailable"
+            ? "暂无报价，请核对来源"
+            : "正在连接 · 可在下方重试"}
         </small>
       )}
       <div className="market-quote-footer">
@@ -84,8 +86,14 @@ export default function MarketQuoteTile({
           href={instrumentFallback(row)}
           target="_blank"
           rel="noopener noreferrer"
+          aria-label={
+            missing
+              ? "查看官方价格与净值 ↗"
+              : `核对${instrumentKey(row)}行情来源`
+          }
         >
-          {missing ? "查看官方价格与净值 ↗" : "来源 / 核对 ↗"}
+          <ExternalLink size={12} aria-hidden="true" />
+          {missing ? "官方价格与净值" : "来源"}
         </a>
         {!missing && (
           <button
@@ -93,7 +101,8 @@ export default function MarketQuoteTile({
             onClick={() => setAttempt((value) => value + 1)}
             aria-label={`重试涨跌${instrumentKey(row)}`}
           >
-            空白？重试
+            <RefreshCw size={12} aria-hidden="true" />
+            重新连接
           </button>
         )}
       </div>

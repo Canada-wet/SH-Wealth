@@ -55,6 +55,17 @@ test("真实公开行情窗口：外汇、美股和所选历史图表", async ({
     .screenshot({
       path: `test-results/pulse-live-${test.info().project.name}.png`,
     });
+  await page
+    .locator("#watchlist-pulse")
+    .evaluate((element) =>
+      window.scrollTo({
+        top: element.getBoundingClientRect().top + window.scrollY - 80,
+        behavior: "instant",
+      }),
+    );
+  await page.screenshot({
+    path: `test-results/market-ui-live-${test.info().project.name}.png`,
+  });
   const fx = page.frameLocator('iframe[title="加币盘中外汇参考"]');
   const quotes = page.frameLocator('iframe[title="自选股票ETF行情"]');
   await expect(fx.locator("body")).toContainText(/\d+\.\d+/, {

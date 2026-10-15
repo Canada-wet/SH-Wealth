@@ -12,6 +12,7 @@ import {
 import useWealth from "@/lib/useWealth";
 import { cloudClient } from "@/lib/cloud";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import MarketSectionNav from "@/app/components/MarketSectionNav";
 import MarketPulse from "@/app/components/MarketPulse";
 import {
   MarketOverview,
@@ -133,6 +134,12 @@ export default function Markets() {
     [name, setName] = useState(""),
     [reload, setReload] = useState(0);
   const chart = useRef<HTMLDetailsElement | null>(null);
+  const [chartFocus, setChartFocus] = useState(0);
+  const openChart = (row: MarketInstrument) => {
+    setSelected(instrumentKey(row));
+    setChartOpen(true);
+    setChartFocus((value) => value + 1);
+  };
   const list = normalizeWatchlist(
     store.state.preferences.marketWatchlist ?? DEFAULT_WATCHLIST,
   );
@@ -149,7 +156,7 @@ export default function Markets() {
       chart.current?.scrollIntoView({ behavior: "instant", block: "start" }),
     );
     return () => cancelAnimationFrame(frame);
-  }, [selected, chartOpen]);
+  }, [selected, chartOpen, chartFocus]);
   useEffect(() => {
     try {
       setLive(localStorage.getItem("together-market-embeds") === "on");
@@ -253,14 +260,7 @@ export default function Markets() {
             </button>
           </div>
         </header>
-        <nav className="research-section-nav" aria-label="市场区块导航">
-          <a href="#watchlist-pulse">自选涨跌</a>
-          <a href="#market-overview">市场概览</a>
-          <a href="#macro-research">宏观研究</a>
-          <a href="#rates-research">收益率曲线</a>
-          <a href="#fx-research">汇率</a>
-          <a href="#securities">自选证券</a>
-        </nav>
+        <MarketSectionNav />
         {dataError && (
           <div className="error-banner" role="alert">
             {dataError}
@@ -328,13 +328,21 @@ export default function Markets() {
           <div>
             <h2>
               <TrendingUp size={18} />
-              行情连接
+              {live ? "行情已开启" : "连接市场行情"}
             </h2>
-            <p>
-              股票 / ETF
-              为提供商允许的延迟行情；外汇为市场参考。仅发送公开证券代码，不发送资产金额、成员或聊天；提供商仍会收到网络
-              / 浏览器信息。
+            <p className="market-connection-hint">
+              {live
+                ? "价格与日涨跌自动更新，延迟以提供商标注为准。"
+                : "开启后集中查看自选报价，默认不会连接外部提供商。"}
             </p>
+            <details className="market-privacy">
+              <summary>数据与隐私说明</summary>
+              <p>
+                股票 / ETF
+                为提供商允许的延迟行情；外汇为市场参考。仅发送公开证券代码，不发送资产金额、成员或聊天；提供商仍会收到网络
+                / 浏览器信息。
+              </p>
+            </details>
           </div>
           <button
             className={live ? "secondary" : "primary"}
@@ -349,10 +357,7 @@ export default function Markets() {
           live={live}
           ready={store.ready}
           onEnable={toggleLive}
-          onSelect={(row) => {
-            setSelected(instrumentKey(row));
-            setChartOpen(true);
-          }}
+          onSelect={openChart}
         />
         <MarketOverview data={data} />
         <MacroResearch data={data} />
@@ -468,10 +473,7 @@ export default function Markets() {
                 }
               >
                 <button
-                  onClick={() => {
-                    setSelected(instrumentKey(row));
-                    setChartOpen(true);
-                  }}
+                  onClick={() => openChart(row)}
                   aria-label={`查看${row.exchange}:${row.ticker}图表`}
                   disabled={!store.ready}
                 >
@@ -540,8 +542,7 @@ export default function Markets() {
               ) {
                 setError("");
                 setNotice("该证券已经在自选中，无需重复添加。");
-                setSelected(instrumentKey(next));
-                setChartOpen(true);
+                openChart(next);
                 return;
               }
               if (
@@ -691,6 +692,9 @@ export default function Markets() {
                 href={instrumentFallback(instrument)}
               >
                 在提供商核对标的和行情 ↗
+              </a>
+              <a className="market-return-pulse" href="#watchlist-pulse">
+                ↑ 返回涨跌速览
               </a>
             </details>
           )}

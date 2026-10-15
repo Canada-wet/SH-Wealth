@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { it, expect, vi, afterEach } from "vitest";
+import { it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   render,
   screen,
@@ -11,7 +11,49 @@ import MarketPulse from "../app/components/MarketPulse";
 import MarketQuoteTile from "../app/components/MarketQuoteTile";
 import { DEFAULT_WATCHLIST } from "../lib/market";
 import { useLayoutEffect } from "react";
-afterEach(cleanup);
+import { JSDOM } from "jsdom";
+beforeEach(() =>
+  vi.stubGlobal(
+    "localStorage",
+    new JSDOM("", { url: "http://localhost" }).window.localStorage,
+  ),
+);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
+it("速览搜索独立、Escape清空，密度偏好重开保持且不写入财富文档", () => {
+  localStorage.setItem("together-wealth-v3", "unchanged");
+  const props = {
+    rows: DEFAULT_WATCHLIST,
+    live: true,
+    ready: true,
+    onEnable: vi.fn(),
+    onSelect: vi.fn(),
+  };
+  const view = render(<MarketPulse {...props} />);
+  fireEvent.change(screen.getByLabelText("搜索涨跌速览"), {
+    target: { value: "nvidia" },
+  });
+  expect(view.container.querySelectorAll("article")).toHaveLength(1);
+  expect(screen.getByTitle("当前涨跌NASDAQ:NVDA")).toBeTruthy();
+  fireEvent.keyDown(screen.getByLabelText("搜索涨跌速览"), { key: "Escape" });
+  expect(view.container.querySelectorAll("article")).toHaveLength(30);
+  fireEvent.change(screen.getByLabelText("搜索涨跌速览"), {
+    target: { value: "不存在的代码" },
+  });
+  expect(view.container.querySelector("iframe")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "重置速览筛选" }));
+  fireEvent.click(screen.getByRole("button", { name: "舒适" }));
+  expect(localStorage.getItem("together-market-layout-v1")).toBe("comfortable");
+  view.unmount();
+  const next = render(<MarketPulse {...props} />);
+  expect(
+    next.container.querySelector("section")?.getAttribute("data-density"),
+  ).toBe("comfortable");
+  expect(localStorage.getItem("together-wealth-v3")).toBe("unchanged");
+});
 it("快速缓存窗口在首次布局阶段回报就绪时也不会漏掉消息", () => {
   function EarlyReady() {
     useLayoutEffect(() => {
