@@ -9,6 +9,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/auth/") ||
     path === "/api/advisor/digest" ||
     path === "/api/market/briefing/daily" ||
+    path === "/api/learning/daily" ||
     path === "/api/notifications/telegram" ||
     path === "/api/notifications/whatsapp"
   )
@@ -48,7 +49,7 @@ export async function middleware(request: NextRequest) {
   const redirect = request.nextUrl.clone();
   redirect.pathname = "/login";
   redirect.search = "";
-  redirect.searchParams.set("next", path+request.nextUrl.search);
+  redirect.searchParams.set("next", path + request.nextUrl.search);
   const denied = NextResponse.redirect(redirect);
   response.cookies.getAll().forEach((cookie) => denied.cookies.set(cookie));
   denied.headers.set("Cache-Control", "private, no-store");

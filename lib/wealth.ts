@@ -1,5 +1,6 @@
 import { validResearchNotes } from "./market-research";
 import { validGrowthPlan } from "./growth-schema";
+import { validPortfolioLinks } from "./portfolio-links";
 export type Owner = "joint" | "first" | "second" | string;
 export type Asset = {
   id: string;
@@ -84,6 +85,7 @@ export type WealthState = {
     marketWatchlist?: import("./market").MarketInstrument[];
     marketResearch?: import("./market-research").ResearchNotes;
     growthPlan?: import("./growth-schema").GrowthPlan;
+    portfolioLinks?: import("./portfolio-links").PortfolioLink[];
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -460,6 +462,11 @@ export function alertsFor(state: WealthState) {
   return alerts;
 }
 export function validateState(raw: unknown): asserts raw is WealthState {
+  if (
+    (raw as WealthState)?.preferences?.portfolioLinks !== undefined &&
+    !validPortfolioLinks((raw as WealthState).preferences.portfolioLinks)
+  )
+    throw new Error("账户与市场关联数据无效。");
   if (!raw || typeof raw !== "object") throw new Error("数据格式无效。");
   const state = raw as WealthState;
   if (

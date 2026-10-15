@@ -111,6 +111,14 @@ export default function FloatingAdvisor({
     return () => observer.disconnect();
   }, [insights[0]?.id]);
   useEffect(() => {
+    try {
+      const intent = sessionStorage.getItem("together-advisor-intent");
+      if (intent) {
+        sessionStorage.removeItem("together-advisor-intent");
+        setInput(intent.slice(0, 6000));
+        setOpen(true);
+      }
+    } catch {}
     const show = (event: Event) => {
       setOpen(true);
       const prompt = (event as CustomEvent<string>).detail;

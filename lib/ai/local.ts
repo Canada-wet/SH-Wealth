@@ -1,5 +1,6 @@
 import { mutationRequested, type AssistantAction } from "../advisor-actions";
 import { growthAnalysis, growthTasks } from "../growth";
+import { portfolioInsights } from "../portfolio-links";
 import {
   contributionSummary,
   money,
@@ -77,6 +78,14 @@ export function localAdvice(message: string, state: WealthState) {
       actions,
     };
   }
+  if (/持仓|市场关联|外币敞口|portfolio/i.test(message))
+    return {
+      answer:
+        portfolioInsights(state)
+          .map((r) => `**${r.title}**\n\n${r.body}\n\n下一步：${r.next}`)
+          .join("\n\n") + "\n\n本地助手未读取当前行情；关联不改账。",
+      actions: [],
+    };
   if (/增长|留存|行动|复盘|储蓄计划/.test(message)) {
     const plan = state.preferences.growthPlan;
     const analysis = plan ? growthAnalysis(state, plan) : null;

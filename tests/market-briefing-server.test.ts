@@ -39,7 +39,9 @@ function database(
     error: saveError,
   }));
   const chain = { eq: vi.fn(() => chain), select: save };
-  const update = vi.fn(() => chain);
+  const update = vi.fn(
+    (_row: { report: import("../lib/market-briefing").MarketBrief }) => chain,
+  );
   const read = {
     eq: () => read,
     order: () => read,

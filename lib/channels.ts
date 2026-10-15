@@ -201,11 +201,24 @@ export async function sendChannelNotice(
   recipient: string,
   key: string,
   test = false,
+  lessonDay?: string,
 ) {
   if (!channelReadiness(channel).ready)
     throw new ChannelSendError("failed", channelReadiness(channel).reason);
-  const link = appLink();
-  const text = `${test ? "Together 测试通知" : "本周家庭财富复盘已准备好"}。请登录私密家庭空间查看详情：${link}\n本消息不包含资产金额。`;
+  if (
+    lessonDay &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(lessonDay) || channel === "whatsapp")
+  )
+    throw new ChannelSendError("failed", "此渠道未配置每日心理学通知模板。");
+  const link = lessonDay
+    ? new URL(`/learn?day=${lessonDay}`, appLink()).href
+    : appLink();
+  const subject = test
+    ? "Together · 通知连接测试"
+    : lessonDay
+      ? "Together · 每日决策心理学"
+      : "Together · 本周家庭财富复盘";
+  const text = `${test ? "Together 测试通知" : lessonDay ? "今天的投资、工作与生活心理学卡片已准备好" : "本周家庭财富复盘已准备好"}。请登录私密家庭空间查看详情：${link}\n本消息不包含资产金额。`;
   if (channel === "email") {
     if (!process.env.RESEND_API_KEY) {
       const port = Number(process.env.SMTP_PORT);
@@ -227,9 +240,7 @@ export async function sendChannelNotice(
         const info = await transport.sendMail({
           from: process.env.EMAIL_FROM || process.env.SMTP_USER,
           to: recipient,
-          subject: test
-            ? "Together · 通知连接测试"
-            : "Together · 本周家庭财富复盘",
+          subject,
           text,
           messageId: `<${channelHash(key)}@${new URL(link).hostname}>`,
         });
@@ -262,9 +273,7 @@ export async function sendChannelNotice(
       {
         from: process.env.EMAIL_FROM,
         to: [recipient],
-        subject: test
-          ? "Together · 通知连接测试"
-          : "Together · 本周家庭财富复盘",
+        subject,
         text,
       },
     );

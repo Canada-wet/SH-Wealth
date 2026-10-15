@@ -8,7 +8,7 @@ export function pushReady() {
 }
 export async function sendPush(
   subscription: webpush.PushSubscription,
-  payload: { title: string; body: string },
+  payload: { title: string; body: string; url?: string; tag?: string },
 ) {
   if (!pushReady()) throw new Error("Web Push 未配置。");
   webpush.setVapidDetails(

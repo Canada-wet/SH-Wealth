@@ -4960,6 +4960,326 @@ tbody tr:hover {
   color: var(--green);
   margin: 7px 0;
 }
+.sidebar {
+  overflow-y: auto;
+}
+.sidebar-bottom {
+  padding-top: 18px;
+}
+.version-link {
+  display: block;
+  color: #657b69;
+  font-size: 11px;
+  padding: 8px 0;
+}
+.portfolio-workspace,
+.learning-page {
+  line-height: 1.75;
+}
+.portfolio-workspace .section-head,
+.learning-page .section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.portfolio-workspace h2,
+.learning-page h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.portfolio-workspace h2 {
+  flex-wrap: wrap;
+}
+.portfolio-workspace .section-head p,
+.learning-page .section-head p {
+  margin-top: 8px;
+  color: #65756a;
+  font-size: 12px;
+}
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.portfolio-metrics > div {
+  display: grid;
+  gap: 4px;
+  background: #f3f6f1;
+  border-radius: 12px;
+  padding: 16px;
+}
+.portfolio-metrics b {
+  font-size: 22px;
+}
+.portfolio-metrics small,
+.portfolio-metrics span {
+  font-size: 11px;
+  color: #63756a;
+}
+.portfolio-editor {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 20px 0;
+  background: #fbfcf8;
+}
+.portfolio-editor > p,
+.portfolio-workspace .muted {
+  font-size: 12px;
+  color: #63756a;
+  margin: 12px 0;
+}
+.portfolio-edit-row {
+  display: grid;
+  grid-template-columns:
+    minmax(130px, 1fr) minmax(120px, 1fr) 90px minmax(130px, 1fr)
+    36px;
+  gap: 10px;
+  align-items: flex-end;
+  margin: 14px 0;
+}
+.portfolio-edit-row > * {
+  min-width: 0;
+}
+.portfolio-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+}
+.portfolio-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+}
+.portfolio-insights article {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.portfolio-insights p {
+  font-size: 12px;
+  margin: 8px 0;
+}
+.portfolio-insights small {
+  display: block;
+  font-size: 11px;
+  color: #63756a;
+}
+.portfolio-insights a {
+  font-size: 11px;
+  display: inline-block;
+  margin-top: 8px;
+  text-decoration: underline;
+}
+.portfolio-workspace details {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.portfolio-workspace summary,
+.learning-page summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+.portfolio-stress {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 18px 0;
+}
+.portfolio-stress > div {
+  grid-column: 1/-1;
+  background: #edf3ed;
+  padding: 16px;
+  border-radius: 10px;
+}
+.portfolio-stress p {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.learning-page {
+  max-width: 1320px;
+}
+.learning-page .card {
+  padding: 26px;
+  margin-bottom: 20px;
+}
+.learning-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 24px 0;
+  flex-wrap: wrap;
+}
+.learning-toolbar [role="group"] {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.learning-toolbar button[aria-pressed="true"] {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+.learning-toolbar label {
+  min-width: 200px;
+}
+.lesson-model {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: #657b69;
+}
+.lesson-card h2 {
+  font-size: 23px;
+  margin-top: 6px;
+}
+.lesson-finding {
+  font-size: 16px;
+  line-height: 1.9;
+  max-width: 760px;
+  margin: 20px 0;
+}
+.lesson-applications {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 22px 0;
+}
+.lesson-applications > div {
+  background: #f3f6f1;
+  padding: 18px;
+  border-radius: 12px;
+}
+.lesson-applications p {
+  font-size: 13px;
+  margin-top: 8px;
+}
+.lesson-exercise {
+  border-left: 3px solid #ad9568;
+  background: #faf7ef;
+  padding: 18px;
+  margin: 20px 0;
+}
+.lesson-exercise p,
+.lesson-card details p,
+.learning-subscription p {
+  font-size: 13px;
+  margin: 10px 0;
+}
+.lesson-card details {
+  margin: 20px 0;
+}
+.lesson-card details a {
+  text-decoration: underline;
+  font-size: 13px;
+}
+.lesson-card .section-head > button {
+  flex-shrink: 0;
+}
+.learning-subscription .push-settings {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 20px;
+}
+.learning-page .muted,
+.admin-status {
+  font-size: 12px;
+  color: #63756a;
+  margin: 16px 0;
+}
+.release-card ul {
+  padding-left: 20px;
+  font-size: 14px;
+}
+.release-card li {
+  margin: 10px 0;
+}
+.version-badge {
+  display: inline-flex;
+  background: var(--green);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+}
+.learning-page .form-error {
+  padding: 14px;
+  border: 1px solid #e6d6c3;
+  border-radius: 10px;
+}
+.learning-page,
+.portfolio-workspace {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+@media (max-width: 1050px) {
+  .portfolio-edit-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .portfolio-edit-row > button {
+    justify-self: end;
+    grid-column: 2;
+  }
+  .lesson-applications {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .portfolio-workspace .section-head,
+  .learning-page .section-head {
+    flex-direction: column;
+  }
+  .portfolio-metrics {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .portfolio-metrics > div {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 12px;
+  }
+  .portfolio-metrics span {
+    grid-column: 1/-1;
+  }
+  .portfolio-insights,
+  .portfolio-stress {
+    grid-template-columns: 1fr;
+  }
+  .portfolio-editor {
+    padding: 12px;
+  }
+  .portfolio-edit-row {
+    grid-template-columns: 1fr;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+  }
+  .portfolio-edit-row > button {
+    grid-column: 1;
+  }
+  .learning-page .card {
+    padding: 18px;
+  }
+  .lesson-card h2 {
+    font-size: 21px;
+  }
+  .market-mobile-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .market-mobile-nav > * {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   :root {
     scroll-behavior: auto;

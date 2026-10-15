@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { cloudClient } from "@/lib/cloud";
+import { APP_VERSION } from "@/lib/releases";
 import {
   Landmark,
   LineChart,
@@ -10,11 +11,22 @@ import {
   ArrowUpRight,
   Target,
 } from "lucide-react";
-export default function MarketNavigator() {
+export default function MarketNavigator({
+  active = "markets",
+}: {
+  active?: "markets" | "learn" | "updates";
+}) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [ready, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
+  useEffect(() => {
+    setReady(true);
+    if (active === "markets") return;
+    const sub = cloudClient()?.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") window.location.replace("/login");
+    });
+    return () => sub?.data.subscription.unsubscribe();
+  }, [active]);
   const logout = async () => {
     setBusy(true);
     setError("");
@@ -61,14 +73,33 @@ export default function MarketNavigator() {
             <Landmark />
             家庭计划
           </a>
-          <a href="/markets" aria-current="page">
+          <a
+            href="/markets"
+            aria-current={active === "markets" ? "page" : undefined}
+          >
             <Globe2 />
             市场看板
           </a>
+          <a
+            href="/learn"
+            aria-current={active === "learn" ? "page" : undefined}
+          >
+            <Target />
+            每日心理学
+          </a>
+          <a
+            href="/updates"
+            aria-current={active === "updates" ? "page" : undefined}
+          >
+            <Users />
+            版本更新 · Admin
+          </a>
         </nav>
         <div className="sidebar-bottom market-sidebar-note">
-          <span>MARKET RESEARCH</span>
-          <p>公共市场数据与家庭账本分开。看行情，不自动改估值。</p>
+          <a className="version-link" href="/updates">
+            Together v{APP_VERSION} · Admin
+          </a>
+          <p>市场与家庭决策联动，不自动改估值。</p>
           <a href="/#overview">
             返回家庭工作台 <ArrowUpRight size={14} />
           </a>
@@ -84,8 +115,20 @@ export default function MarketNavigator() {
       </aside>
       <nav className="market-mobile-nav" aria-label="手机主导航">
         <a href="/#overview">家庭财富</a>
-        <a href="/markets" aria-current="page">
+        <a
+          href="/markets"
+          aria-current={active === "markets" ? "page" : undefined}
+        >
           市场看板
+        </a>
+        <a href="/learn" aria-current={active === "learn" ? "page" : undefined}>
+          心理学
+        </a>
+        <a
+          href="/updates"
+          aria-current={active === "updates" ? "page" : undefined}
+        >
+          v{APP_VERSION}
         </a>
         <button
           className="text-button"

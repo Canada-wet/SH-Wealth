@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/advisor/digest", "schedule": "0 13 * * 1" },
-    { "path": "/api/market/briefing/daily", "schedule": "0 14 * * *" }
+    { "path": "/api/market/briefing/daily", "schedule": "0 14 * * *" },
+    { "path": "/api/learning/daily", "schedule": "0 15 * * *" }
   ]
 }

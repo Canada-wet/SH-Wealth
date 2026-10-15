@@ -16,6 +16,7 @@ import MarketSectionNav from "@/app/components/MarketSectionNav";
 import MarketPulse from "@/app/components/MarketPulse";
 import MarketInvestmentDesk from "@/app/components/MarketInvestmentDesk";
 import MarketIntelligence from "@/app/components/MarketIntelligence";
+import MarketWealth from "@/app/components/MarketWealth";
 import { saveResearchNote } from "@/lib/market-research";
 import {
   MarketOverview,
@@ -138,6 +139,32 @@ export default function Markets() {
     [reload, setReload] = useState(0);
   const chart = useRef<HTMLDetailsElement | null>(null);
   const [chartFocus, setChartFocus] = useState(0);
+  const initialAnchor = useRef(false);
+  useEffect(() => {
+    if (!store.ready || store.cloudLoading || initialAnchor.current) return;
+    initialAnchor.current = true;
+    const target = window.location.hash.slice(1);
+    if (
+      ![
+        "market-intelligence",
+        "market-wealth",
+        "watchlist-pulse",
+        "investment-desk",
+        "market-overview",
+        "macro-research",
+        "rates-research",
+        "fx-research",
+        "securities",
+      ].includes(target)
+    )
+      return;
+    const frame = requestAnimationFrame(() =>
+      document
+        .getElementById(target)
+        ?.scrollIntoView({ block: "start", behavior: "instant" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [store.ready, store.cloudLoading]);
   const openChart = (row: MarketInstrument) => {
     setSelected(instrumentKey(row));
     setChartOpen(true);
@@ -362,6 +389,13 @@ export default function Markets() {
           ready={store.ready}
           onEnable={toggleLive}
           onSelect={openChart}
+        />
+        <MarketWealth
+          state={store.state}
+          data={data}
+          list={list}
+          disabled={!store.ready || store.cloudLoading || !!store.cloudChoice}
+          onChange={(update) => store.commit(update, "保存账户与市场关联")}
         />
         <MarketInvestmentDesk
           rows={list}

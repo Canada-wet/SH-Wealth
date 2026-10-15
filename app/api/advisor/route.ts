@@ -12,6 +12,8 @@ import { chatContext } from "@/lib/conversations";
 import { searchPlan } from "@/lib/search-policy";
 import { readSpokenAnswer } from "@/lib/voice";
 import { growthContext } from "@/lib/growth";
+import { portfolioContext, portfolioInsights } from "@/lib/portfolio-links";
+import { getOfficialMarket } from "@/lib/market-server";
 import {
   webResearch,
   researchFailure,
@@ -91,6 +93,11 @@ export async function POST(request: Request) {
           sources: research.sources,
         },
       });
+    const market =
+      /市场|持仓|汇率|股票|ETF|portfolio|market/i.test(message) &&
+      state.preferences.portfolioLinks?.length
+        ? await getOfficialMarket().catch(() => null)
+        : null;
     const snapshot = {
       members: state.members,
       ...totals(state),
@@ -101,6 +108,17 @@ export async function POST(request: Request) {
       goal: state.goal,
       plan: state.plan.values,
       growth: growthContext(state),
+      portfolio: portfolioContext(state),
+      marketImpact: market
+        ? {
+            fetchedAt: market.fetchedAt,
+            observations: portfolioInsights(state, market),
+            failures: market.failures,
+          }
+        : {
+            observations: portfolioInsights(state),
+            note: "本次未读取最新市场观测，不推断当前行情。",
+          },
     };
     const instructions = `你是 Together 家庭财富助手。基于实时数据回答，金额均为 CAD。只输出 JSON：{"answer":"中文回复","actions":[]}。\n只有用户明确要求变更数据才返回 actions；假设、建议或分析题不改变数据。缺少信息先澄清，禁止猜测金额、成员或目标项目。资产名称重复时使用准确 assetId。实际投入记录为贡献，不当作投资回报；关联贡献会自动改变账户价值，不要同时发送账户估值更新以免重复计算。独立历史出资用 assetId=null。\n支持 actions：\nadd_asset(name,category,owner,value,annualReturn可选)；update_asset(existingName,assetId可选,name/category/owner/value/annualReturn均可选)，annualReturn为数字百分比或null清空；delete_asset(name,assetId可选)；add_debt(name,owner,value)；update_debt(existingName,value,owner可选)；delete_debt(name)；add_contribution(member,assetId可选,amount,kind=deposit或withdrawal,date=YYYY-MM-DD,note可选)；delete_contribution(contributionId)；set_goal(name/target/year可选)；set_plan_field(key,value)。每项 action 必须包含 type。value/target/amount 必须为数字，member/owner 优先使用first/second/joint。year使用字符串。plan key只允许：${[...PLAN_FIELDS].join(",")}。\n回复说明计划执行的变更，页面才负责实际保存；不能声称尚未完成的保存。一般财务解释需清晰务实。\n家庭实时快照：${JSON.stringify(snapshot)}`;
     const context = chatContext(state);

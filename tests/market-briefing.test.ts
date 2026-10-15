@@ -129,7 +129,7 @@ it("AI叙述必须引用已有非空序列，拒绝未知ID、超长和坏JSON",
         })),
       }),
       briefingFacts(indicatorFixture),
-    ).points.map((point) => point.title),
+    ).points.map((point: { title: string }) => point.title),
   ).toEqual(["情绪与波动", "经济前瞻", "AI 产业代理"]);
   for (const invalid of [
     { ...raw, points: [] },

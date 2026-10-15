@@ -78,6 +78,7 @@ import ValuationTable from "./components/ValuationTable";
 import HouseholdPlanning from "./components/HouseholdPlanning";
 import HistoryComparison from "./components/HistoryComparison";
 import WealthGrowth from "./components/WealthGrowth";
+import { APP_VERSION } from "@/lib/releases";
 
 type Modal =
   | {
@@ -545,8 +546,15 @@ export default function Home() {
             <Sparkles />
             财富顾问
           </button>
+          <a href="/learn">
+            <Sparkles />
+            每日心理学
+          </a>
         </nav>
         <div className="sidebar-bottom">
+          <a className="version-link" href="/updates">
+            v{APP_VERSION} · 版本更新 · Admin
+          </a>
           <button
             className="data-nav"
             onClick={() => open({ kind: "settings" })}
@@ -665,6 +673,8 @@ export default function Home() {
             <a href="#framework">计划</a>
             <button onClick={() => open({ kind: "members" })}>成员</button>
             <button onClick={() => open({ kind: "settings" })}>数据</button>
+            <a href="/learn">心理学</a>
+            <a href="/updates">版本</a>
           </div>
           <div className="hero">
             <div>

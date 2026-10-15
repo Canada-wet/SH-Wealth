@@ -92,8 +92,10 @@ export default function PushSettings({ householdId }: { householdId: string }) {
   };
   return (
     <div className="push-settings">
-      <h3>每周浏览器提醒</h3>
-      <p>连接共同空间后，可在页面关闭时收到家庭财富周报。</p>
+      <h3>浏览器通知通道</h3>
+      <p>
+        连接共同空间后，可收到家庭财富周报；每日心理学还需在学习页单独订阅。
+      </p>
       <button
         type="button"
         className="secondary"

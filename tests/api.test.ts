@@ -3,8 +3,10 @@ import { emptyState, saveAsset } from "../lib/wealth";
 const access = vi.hoisted(() => ({
   authorize: vi.fn(),
   slot: vi.fn(async () => ({ data: true, error: null })),
+  market: vi.fn(),
 }));
 vi.mock("@/lib/server-auth", () => ({ authorizeRequest: access.authorize }));
+vi.mock("@/lib/market-server", () => ({ getOfficialMarket: access.market }));
 access.authorize.mockImplementation(async () => ({
   status: 200,
   user: { id: "fixture" },
@@ -29,6 +31,56 @@ const request = (body: unknown) =>
     headers: { "Content-Type": "application/json" },
   });
 describe("顾问API", () => {
+  it("已关联账户的市场提问使用服务端官方观测，不接受客户端伪造行情", async () => {
+    vi.mocked(chooseRoute).mockReturnValueOnce({
+      provider: "deepseek",
+      model: "fixture",
+      reason: "fixture",
+      complexity: "simple",
+    });
+    vi.mocked(generateAdvice).mockResolvedValueOnce(
+      '{"answer":"先核对敞口。","actions":[]}',
+    );
+    access.market.mockResolvedValueOnce({
+      fetchedAt: "2026-10-15T16:00:00Z",
+      fx: [],
+      yields: [],
+      macro: [],
+      failures: [],
+    });
+    const state = saveAsset(emptyState(), {
+      id: "a",
+      name: "合成账户",
+      owner: "first",
+      category: "投资",
+      value: 1000,
+      annualReturn: null,
+    });
+    state.preferences.webSearch = "off";
+    state.preferences.portfolioLinks = [
+      {
+        id: "link",
+        assetId: "a",
+        instrument: { ticker: "NVDA", exchange: "NASDAQ", name: "NVIDIA" },
+        weight: 50,
+        currency: "unknown",
+      },
+    ];
+    const result = await POST(
+      request({
+        message: "分析持仓的风险，不改数据",
+        state,
+        market: { quote: 999999 },
+      }),
+    );
+    expect(result.status).toBe(200);
+    expect((await result.json()).actions).toEqual([]);
+    expect(access.market).toHaveBeenCalledOnce();
+    const text = vi.mocked(generateAdvice).mock.calls.at(-1)![1];
+    expect(text).toContain('"linked":500');
+    expect(text).toContain("ETF未穿透");
+    expect(text).not.toContain("999999");
+  });
   it("外部顾问收到已保存的计算情景与行动边界，分析不产生修改", async () => {
     vi.mocked(chooseRoute).mockReturnValueOnce({
       provider: "deepseek",

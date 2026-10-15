@@ -3,6 +3,7 @@ import { parseAdvisorResult } from "../advisor-actions";
 import { householdPulse, proactiveInsights } from "../insights";
 import { money, totals, type WealthState } from "../wealth";
 import { growthContext, growthTasks } from "../growth";
+import { portfolioContext } from "../portfolio-links";
 
 export function ruleReview(state: WealthState, now = new Date()) {
   const balance = totals(state);
@@ -13,12 +14,18 @@ export function ruleReview(state: WealthState, now = new Date()) {
         .filter((task) => task.status !== "done")
         .slice(0, 2)
     : [];
+  const portfolio = state.preferences.portfolioLinks?.length
+    ? `\n\n**账户与市场关联**\n\n${portfolioContext(state)
+        .observations.slice(0, 2)
+        .map((r) => `- ${r.title}：${r.body}`)
+        .join("\n")}\n关联不是自动估值，本周规则复盘未读取当前证券报价。`
+    : "";
   return `**本周记录概览**\n\n净资产 ${money(balance.netWorth)}；资产 ${money(balance.totalAssets)}，负债 ${money(balance.totalDebts)}。${pulse.complete ? `账面月结余 ${money(pulse.surplus)}，未必等于实际储蓄。` : "收支尚未完整录入，暂不估算月结余。"}\n\n${
     insights
       .slice(0, 3)
       .map((row) => `- **${row.title}**：${row.body}`)
       .join("\n") || "- 一起确认账户估值、本月收支与成员贡献。"
-  }${growth.length ? `\n\n**增长行动跟进**\n\n${growth.map((task) => `- ${task.title}：${task.body} 下一步：${task.next}`).join("\n")}` : ""}\n\n数据规则复盘 · 基于记录，不是收益预测。`;
+  }${growth.length ? `\n\n**增长行动跟进**\n\n${growth.map((task) => `- ${task.title}：${task.body} 下一步：${task.next}`).join("\n")}` : ""}${portfolio}\n\n数据规则复盘 · 基于记录，不是收益预测。`;
 }
 
 export async function weeklyReview(state: WealthState, now = new Date()) {
@@ -50,6 +57,7 @@ export async function weeklyReview(state: WealthState, now = new Date()) {
         cashflow: householdPulse(state, now),
         goal: state.goal,
         growth: growthContext(state, now),
+        portfolio: portfolioContext(state),
         observations: proactiveInsights(state, now).map(
           ({ title, body, source }) => ({ title, body, source }),
         ),
