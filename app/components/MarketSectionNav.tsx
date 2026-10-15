@@ -50,13 +50,14 @@ export default function MarketSectionNav() {
   }, [active]);
   return (
     <nav className="research-section-nav" aria-label="市场区块导航" ref={nav}>
-      {sections.map(([id, label]) => (
+      {sections.map(([id, label], index) => (
         <a
           key={id}
           href={`#${id}`}
           aria-current={active === id ? "location" : undefined}
           onClick={() => setActive(id)}
         >
+          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
           {label}
         </a>
       ))}

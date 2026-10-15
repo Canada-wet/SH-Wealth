@@ -117,6 +117,12 @@ test("每日简报自动生成一次、归档回看、指标切换与失败保�
   await page.goto("/markets");
   const section = page.getByRole("region", { name: "每日市场简报与指标" });
   await expect(section).toContainText(today.summary);
+  await expect(
+    section.locator(".market-brief-points article:visible"),
+  ).toHaveCount(1);
+  await expect(
+    section.getByRole("heading", { name: "情绪与波动", exact: true }),
+  ).toBeVisible();
   expect(paidCalls).toBe(1);
   await section.getByRole("button", { name: "检查今日简报" }).click();
   expect(paidCalls).toBe(1);
@@ -124,9 +130,18 @@ test("每日简报自动生成一次、归档回看、指标切换与失败保�
   await expect(section).toContainText("规则摘要 · 非 AI");
   await expect(section).toContainText("当前查看 2026-10-14 的归档");
   await section.getByRole("button", { name: "AI 产业供需代理" }).click();
+  await expect(
+    section.getByRole("heading", { name: "AI 产业代理", exact: true }),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("heading", { name: "情绪与波动", exact: true }),
+  ).not.toBeVisible();
   await expect(section).toContainText("计算机与电子产品新订单");
   await expect(section).toContainText("不是全球 AI 供需指数");
   await section.getByRole("button", { name: "经济前瞻" }).click();
+  await expect(
+    section.getByRole("heading", { name: "经济前瞻", exact: true }),
+  ).toBeVisible();
   await expect(section).toContainText("初请失业金人数");
   await section.getByRole("button", { name: "情绪与波动" }).click();
   await expect(section).toContainText("VIX / VIX3M = 0.83");
@@ -151,6 +166,10 @@ test("每日简报自动生成一次、归档回看、指标切换与失败保�
   await page.screenshot({
     path: `test-results/daily-market-brief-${test.info().project.name}.png`,
   });
+  await section.getByRole("link", { name: "查看自选涨跌" }).click();
+  await expect(
+    page.getByRole("heading", { name: "自选涨跌速览", exact: true }),
+  ).toBeInViewport();
 });
 test("投资研究主题筛选、记录同步持久化与加币压力试算不改账本", async ({
   page,
@@ -251,6 +270,46 @@ test("投资研究主题筛选、记录同步持久化与加币压力试算不�
   await desk.getByLabel("研究标的", { exact: true }).selectOption("AMEX:YINN");
   await page.screenshot({
     path: `test-results/investment-research-${test.info().project.name}.png`,
+  });
+});
+test("简报主题联动布局在窄手机、平板和桌面无横向溢出", async ({ page }) => {
+  const report = ruleMarketBrief(synthetic, new Date("2026-10-15T14:00:00Z"));
+  await page.route("**/api/market/briefing", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        today: report.day,
+        reports: [report],
+        canGenerate: false,
+      }),
+    }),
+  );
+  await page.goto("/markets");
+  const section = page.getByRole("region", { name: "每日市场简报与指标" });
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const label of ["情绪与波动", "经济前瞻", "AI 产业供需代理"]) {
+      const button = section.getByRole("button", { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        section.locator(".market-brief-points article:visible"),
+      ).toHaveCount(1);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+  await section.getByRole("button", { name: "情绪与波动" }).click();
+  await page.setViewportSize({
+    width: test.info().project.name === "mobile" ? 390 : 1440,
+    height: 900,
+  });
+  await section.screenshot({
+    path: `test-results/market-brief-layout-${test.info().project.name}.png`,
   });
 });
 test("工作台固定导航、独立搜索和密度切换适配手机并保留偏好", async ({

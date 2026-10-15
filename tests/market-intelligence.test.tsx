@@ -97,3 +97,62 @@ it("读取失败保留先前归档，不把错误冒充今日成功", async () =
   );
   expect(screen.getByText(report.summary)).toBeTruthy();
 });
+it("主题切换同步解读与指标，保留来源展开状态且不触发模型请求", async () => {
+  const report = ruleMarketBrief(data, new Date("2026-10-15T14:00:00Z"));
+  const request = vi.fn(async () =>
+    Response.json({
+      today: report.day,
+      reports: [report],
+      canGenerate: true,
+    }),
+  );
+  vi.stubGlobal("fetch", request);
+  const { container } = render(<MarketIntelligence data={data} />);
+  await waitFor(() => expect(screen.getByText(report.summary)).toBeTruthy());
+  const sentiment = container.querySelector<HTMLElement>(
+    "#market-topic-sentiment",
+  )!;
+  const ai = container.querySelector<HTMLElement>("#market-topic-ai")!;
+  expect(sentiment.hidden).toBe(false);
+  expect(ai.hidden).toBe(true);
+  const evidence = sentiment.querySelector("details")!;
+  fireEvent.click(evidence.querySelector("summary")!);
+  expect(evidence.open).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "AI 产业供需代理" }));
+  expect(sentiment.hidden).toBe(true);
+  expect(ai.hidden).toBe(false);
+  expect(screen.getByRole("heading", { name: "AI 产业代理" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "情绪与波动" })).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "AI 产业供需代理" })
+      .getAttribute("aria-pressed"),
+  ).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "情绪与波动" }));
+  expect(evidence.open).toBe(true);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(
+    screen.getByRole("link", { name: "查看自选涨跌" }).getAttribute("href"),
+  ).toBe("#watchlist-pulse");
+});
+it("缺失主题有明确空态，切换历史不会把当前指标冒充归档数据", async () => {
+  const report = ruleMarketBrief(data, new Date("2026-10-14T14:00:00Z"));
+  report.points = report.points.filter((point) => point.title !== "经济前瞻");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({
+        today: "2026-10-15",
+        reports: [report],
+        canGenerate: false,
+      }),
+    ),
+  );
+  render(<MarketIntelligence data={data} />);
+  await waitFor(() => expect(screen.getByText(report.summary)).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "经济前瞻" }));
+  expect(screen.getByText(/这份简报暂无此主题/)).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "初请失业金人数" })).toBeTruthy();
+  expect(screen.getByText(/不同于简报生成时快照/)).toBeTruthy();
+  expect(screen.getByText(/当前查看 2026-10-14 的归档/)).toBeTruthy();
+});

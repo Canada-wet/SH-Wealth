@@ -239,12 +239,12 @@ export default function Markets() {
               <ArrowLeft size={15} />
               回到家庭财富
             </a>
-            <p className="eyebrow">TOGETHER · RESEARCH DESK</p>
+            <p className="eyebrow">TOGETHER / MARKET INTELLIGENCE</p>
             <h1>市场看板</h1>
-            <p>宏观周期、利率结构与跨市场观察；不自动改动家庭资产估值。</p>
+            <p>读懂市场，形成自己的判断。</p>
           </div>
           <div className="market-status">
-            <span>{store.cloudStatus}</span>
+            <span className="market-sync-status">{store.cloudStatus}</span>
             <button
               className="secondary"
               disabled={!data}

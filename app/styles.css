@@ -296,11 +296,17 @@ main {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--line);
-  background: #fff;
+  border: 1px solid transparent;
+  background: transparent;
   border-radius: 8px;
   padding: 7px 12px;
   font-size: 12px;
+  gap: 6px;
+}
+.research-section-nav a > span {
+  opacity: 0.55;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 .research-section-nav a[aria-current="location"] {
   background: var(--green);
@@ -683,11 +689,12 @@ main {
   justify-content: space-between;
   align-items: flex-start;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 .markets-header h1 {
-  font-size: 32px;
-  margin: 9px 0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+  margin: 7px 0;
 }
 .markets-header p:not(.eyebrow) {
   color: var(--muted);
@@ -698,7 +705,7 @@ main {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   color: var(--green);
 }
 .market-status {
@@ -707,13 +714,17 @@ main {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: flex-end;
-  gap: 12px;
+  gap: 8px;
   color: var(--muted);
   font-size: 11px;
 }
 .market-status > span {
   flex-basis: 100%;
   text-align: right;
+}
+.market-sync-status {
+  line-height: 1.8;
+  margin-bottom: 8px;
 }
 .market-status button {
   display: flex;
@@ -4093,24 +4104,33 @@ tbody tr:hover {
   align-items: center;
   gap: 8px;
 }
+.markets-page .market-intelligence {
+  padding: 24px;
+  border-top: 3px solid var(--green);
+}
+.market-intelligence .card-head {
+  margin-bottom: 16px;
+  padding-bottom: 0;
+}
 .market-brief-layout {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 28px;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
 }
 .market-brief-layout > * {
   min-width: 0;
 }
 .market-indicator-panel {
   border-left: 1px solid var(--line);
-  padding-left: 28px;
+  padding-left: 24px;
 }
 .market-brief-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .market-brief-toolbar select {
   min-width: 130px;
@@ -4121,28 +4141,71 @@ tbody tr:hover {
   border-radius: 8px;
   background: white;
   color: var(--ink);
+  min-height: 40px;
+}
+.market-brief-jump {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  font-size: 12px;
+  color: var(--green);
+}
+.market-brief-jump:hover {
+  text-decoration: underline;
+}
+.market-brief-lead {
+  background: #edf3ef;
+  padding: 16px 18px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.market-brief-lead > span {
+  display: block;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 .market-brief-summary {
-  font-size: 14px;
-  line-height: 1.9;
-  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.85;
+  font-weight: 500;
+  margin: 0;
+}
+.market-brief-lead .desk-help {
+  margin: 8px 0 0;
+}
+.market-column-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+.market-column-label span {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
 }
 .market-brief-points {
   display: grid;
   gap: 16px;
 }
 .market-brief-points article {
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 4px 0;
 }
 .market-brief-points h3,
 .market-indicator-list h3 {
-  font-size: 13px;
-  margin: 0 0 6px;
+  font-size: 14px;
+  margin: 0 0 10px;
 }
 .market-brief-points p,
 .market-brief-next p {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.9;
   margin: 0 0 8px;
   white-space: pre-wrap;
@@ -4152,9 +4215,11 @@ tbody tr:hover {
 .market-indicator-list summary,
 .market-brief-policy summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--green);
   line-height: 1.8;
+  min-height: 36px;
+  padding: 7px 0;
 }
 .market-brief-evidence {
   display: grid;
@@ -4167,47 +4232,76 @@ tbody tr:hover {
   color: var(--green);
 }
 .market-brief-next {
-  padding: 14px;
-  background: #f0f5ef;
-  border-radius: 10px;
-  margin: 18px 0 14px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 16px;
 }
 .market-brief-next b {
   display: block;
-  margin-bottom: 5px;
+  padding-top: 3px;
   font-size: 12px;
 }
 .market-indicator-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  background: #f1f3ed;
+  padding: 4px;
+  border-radius: 10px;
+  margin-bottom: 22px;
 }
 .market-indicator-tabs button {
-  padding: 8px 10px;
-  font-size: 11px;
-  min-height: 40px;
+  padding: 10px;
+  font-size: 12px;
+  min-height: 44px;
+  border: 1px solid transparent;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1.5;
+  border-radius: 7px;
+}
+.market-indicator-tabs button > span {
+  opacity: 0.6;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 .market-indicator-tabs button[aria-pressed="true"] {
-  background: var(--green);
-  color: white;
-  border-color: var(--green);
+  background: white;
+  color: var(--green);
+  border-color: #dbe5dc;
+  box-shadow: 0 2px 4px #173f2e08;
+}
+.market-snapshot-note {
+  margin: -4px 0 12px;
 }
 .market-indicator-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 .market-indicator-list article {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 12px 14px;
 }
 .market-indicator-list article > div {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+.market-indicator-list h3 {
+  font-size: 12px;
+  margin: 0;
 }
 .market-indicator-list b {
-  font-size: 19px;
+  font-size: 20px;
   font-variant-numeric: tabular-nums;
 }
 .market-indicator-list small,
@@ -4217,8 +4311,14 @@ tbody tr:hover {
   line-height: 1.8;
   margin: 5px 0;
 }
+.market-indicator-change {
+  display: inline-block;
+  background: #f0f3ed;
+  border-radius: 5px;
+  padding: 1px 6px;
+}
 .market-indicator-list details {
-  margin-top: 8px;
+  margin-top: 0;
 }
 .market-indicator-list details p,
 .market-brief-policy p,
@@ -4233,27 +4333,119 @@ tbody tr:hover {
   font-size: 11px;
 }
 .market-term-note {
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: #f7f5ed;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 .market-term-note p {
   margin: 6px 0;
 }
 .market-brief-policy {
-  margin-top: 20px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 6px;
   border-top: 1px solid var(--line);
 }
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .market-brief-layout {
     grid-template-columns: 1fr;
   }
   .market-indicator-panel {
     border-left: 0;
     border-top: 1px solid var(--line);
-    padding: 20px 0 0;
+    padding: 16px 0 0;
+  }
+  .market-brief-layout {
+    gap: 16px;
+  }
+  .markets-page .market-intelligence {
+    padding: 18px 16px;
+  }
+  .market-brief-toolbar {
+    gap: 8px;
+  }
+  .market-brief-toolbar .market-badge {
+    font-size: 10px;
+  }
+  .market-brief-jump {
+    margin-left: 0;
+  }
+  .market-brief-lead {
+    padding: 14px;
+  }
+  .market-brief-summary {
+    font-size: 14px;
+  }
+  .market-indicator-tabs {
+    margin-bottom: 16px;
+  }
+  .market-indicator-tabs button {
+    font-size: 11px;
+    padding: 8px 5px;
+    gap: 4px;
+  }
+  .market-indicator-tabs button > span {
+    display: none;
+  }
+  .market-brief-next {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .market-intelligence .card-head > button {
+    width: auto;
+  }
+}
+@media (max-width: 600px) {
+  .markets-page {
+    padding-top: 18px;
+  }
+  .markets-header {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .markets-header .market-back,
+  .markets-header .eyebrow {
+    display: none;
+  }
+  .markets-header h1 {
+    font-size: 24px;
+    margin: 0 0 3px;
+  }
+  .market-sync-status {
+    margin-bottom: 0;
+    font-size: 10px;
+  }
+  .market-status {
+    gap: 6px;
+  }
+  .market-status button {
+    font-size: 11px;
+  }
+  .markets-page .market-intelligence .card-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .market-intelligence .card-head .eyebrow,
+  .market-intelligence .card-head p:not(.eyebrow) {
+    display: none;
+  }
+  .market-intelligence .card-head h2 {
+    font-size: 14px;
+    margin: 0;
+  }
+  .market-intelligence .card-head > button {
+    flex-shrink: 0;
+    font-size: 11px;
+    min-height: 40px;
+    padding: 8px;
+  }
+  .market-brief-toolbar {
+    margin-bottom: 10px;
+  }
+  .market-brief-jump {
+    margin-left: auto;
   }
 }
 .investment-desk h3 {

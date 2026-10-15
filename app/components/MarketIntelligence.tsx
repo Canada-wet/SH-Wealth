@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUpRight, RefreshCw, Sparkles } from "lucide-react";
 import type { MarketData, MarketReading } from "@/lib/market";
 import { formatPeriod, readingChange, signed } from "@/lib/market-analysis";
 import {
   INDICATOR_GROUPS,
+  indicatorGroup,
   MARKET_INDICATORS,
   observationAge,
   volatilityTerm,
@@ -13,6 +14,9 @@ import type { MarketBrief } from "@/lib/market-briefing";
 type Group = keyof typeof INDICATOR_GROUPS;
 const level = (value: number) =>
   new Intl.NumberFormat("en-CA", { maximumFractionDigits: 2 }).format(value);
+const topicOf = (point: MarketBrief["points"][number], index: number) =>
+  point.evidence.map(indicatorGroup).find(Boolean) ??
+  Object.keys(INDICATOR_GROUPS)[index];
 
 function Fact({ row }: { row: MarketReading }) {
   return (
@@ -150,7 +154,7 @@ export default function MarketIntelligence({
           <h2>
             <Sparkles size={18} aria-hidden="true" /> 每日市场简报
           </h2>
-          <p>情绪、经济前瞻与 AI 产业线索，先核对事实，再看简短分析。</p>
+          <p>先看判断，再核对数据。三个主题，一次看清。</p>
         </div>
         <button
           className="secondary"
@@ -174,74 +178,110 @@ export default function MarketIntelligence({
           {info}
         </p>
       )}
+      <div className="market-brief-toolbar">
+        <span className="market-badge">
+          {report?.mode === "ai"
+            ? `AI · ${report.provider} · ${report.model}`
+            : report
+              ? "规则摘要 · 非 AI"
+              : "等待每日简报"}
+        </span>
+        {reports.length > 0 && (
+          <select
+            aria-label="查看历史市场简报"
+            value={report?.day ?? ""}
+            onChange={(event) => setSelectedDay(event.target.value)}
+          >
+            {reports.map((row) => (
+              <option key={row.day} value={row.day}>
+                {row.day}
+                {row.day === today ? " · 今日" : " · 历史"}
+              </option>
+            ))}
+          </select>
+        )}
+        <a className="market-brief-jump" href="#watchlist-pulse">
+          查看自选涨跌 <ArrowUpRight size={14} aria-hidden="true" />
+        </a>
+      </div>
+      {report && (
+        <div className="market-brief-lead">
+          <span>{report.day === today ? "今日提要" : "归档提要"}</span>
+          <p className="market-brief-summary">{report.summary}</p>
+          {report.day !== today && (
+            <p className="desk-help">
+              当前查看 {report.day} 的归档，不代表今日市场；引用值为生成时快照。
+            </p>
+          )}
+        </div>
+      )}
+      <div
+        className="market-indicator-tabs"
+        role="group"
+        aria-label="市场指标类别"
+      >
+        {Object.entries(INDICATOR_GROUPS).map(([id, label], index) => (
+          <button
+            className="secondary"
+            disabled={!ready}
+            aria-label={label}
+            aria-pressed={group === id}
+            aria-controls={
+              report
+                ? `market-topic-${id} market-latest-indicators`
+                : "market-latest-indicators"
+            }
+            key={id}
+            onClick={() => setGroup(id as Group)}
+          >
+            <span aria-hidden="true">0{index + 1}</span>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="market-brief-layout">
         <div className="market-brief-narrative">
-          <div className="market-brief-toolbar">
-            <span className="market-badge">
-              {report?.mode === "ai"
-                ? `AI · ${report.provider} · ${report.model}`
-                : report
-                  ? "规则摘要 · 非 AI"
-                  : "等待每日简报"}
-            </span>
-            {reports.length > 0 && (
-              <select
-                aria-label="查看历史市场简报"
-                value={report?.day ?? ""}
-                onChange={(event) => setSelectedDay(event.target.value)}
-              >
-                {reports.map((row) => (
-                  <option key={row.day} value={row.day}>
-                    {row.day}
-                    {row.day === today ? " · 今日" : " · 历史"}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <p className="market-column-label">
+            简报解读 <span>生成时快照</span>
+          </p>
           {report ? (
             <>
-              <p className="market-brief-summary">{report.summary}</p>
-              {report.day !== today && (
-                <p className="desk-help">
-                  当前查看 {report.day}{" "}
-                  的归档，不代表今日市场；引用值为生成时快照。
-                </p>
-              )}
               <div className="market-brief-points">
-                {report.points.map((point, index) => (
-                  <article key={index}>
-                    <h3>{point.title}</h3>
-                    <p>{point.text}</p>
-                    <details>
-                      <summary>核对依据 · {point.evidence.length} 项</summary>
-                      <div className="market-brief-evidence">
-                        {point.evidence.map((id) => {
-                          const fact = report.facts.find(
-                            (row) => row.id === id,
-                          );
-                          return fact ? <Fact key={id} row={fact} /> : null;
-                        })}
-                      </div>
-                    </details>
-                  </article>
+                {Object.keys(INDICATOR_GROUPS).map((id) => (
+                  <div id={`market-topic-${id}`} key={id} hidden={group !== id}>
+                    {report.points
+                      .filter((point, index) => topicOf(point, index) === id)
+                      .map((point, index) => (
+                        <article key={index}>
+                          <h3>{point.title}</h3>
+                          <p>{point.text}</p>
+                          <details>
+                            <summary>
+                              核对依据 · {point.evidence.length} 项
+                            </summary>
+                            <div className="market-brief-evidence">
+                              {point.evidence.map((id) => {
+                                const fact = report.facts.find(
+                                  (row) => row.id === id,
+                                );
+                                return fact ? (
+                                  <Fact key={id} row={fact} />
+                                ) : null;
+                              })}
+                            </div>
+                          </details>
+                        </article>
+                      ))}
+                    {!report.points.some(
+                      (point, index) => topicOf(point, index) === id,
+                    ) && (
+                      <p className="empty-note">
+                        这份简报暂无此主题的有效解读；可核对最新观测，缺失数据不作推断。
+                      </p>
+                    )}
+                  </div>
                 ))}
               </div>
-              <div className="market-brief-next">
-                <b>接下来关注</b>
-                <p>{report.watchNext}</p>
-              </div>
-              <p className="desk-help">{report.limitations}</p>
-              <small className="desk-help">
-                生成：
-                {new Date(report.generatedAt).toLocaleString("zh-CN", {
-                  timeZone: "America/Toronto",
-                })}{" "}
-                多伦多时间 · 数据读取：
-                {new Date(report.dataAt).toLocaleString("zh-CN", {
-                  timeZone: "America/Toronto",
-                })}
-              </small>
             </>
           ) : (
             <p className="empty-note" role="status">
@@ -251,26 +291,12 @@ export default function MarketIntelligence({
             </p>
           )}
         </div>
-        <div className="market-indicator-panel">
-          <div
-            className="market-indicator-tabs"
-            role="group"
-            aria-label="市场指标类别"
-          >
-            {Object.entries(INDICATOR_GROUPS).map(([id, label]) => (
-              <button
-                className="secondary"
-                disabled={!ready}
-                aria-pressed={group === id}
-                key={id}
-                onClick={() => setGroup(id as Group)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="desk-help">
-            以下为当前最新可用观测；左侧归档引用的是当时快照，二者日期可能不同。
+        <div className="market-indicator-panel" id="market-latest-indicators">
+          <p className="market-column-label">
+            关键指标 <span>最新可用观测</span>
+          </p>
+          <p className="desk-help market-snapshot-note">
+            不同于简报生成时快照，请以每项日期为准。
           </p>
           <div className="market-indicator-list">
             {rows.map((row) => {
@@ -299,7 +325,7 @@ export default function MarketIntelligence({
                     {age.delayed ? " · 期间较旧，请核对" : ""}
                   </p>
                   {change && (
-                    <small>
+                    <small className="market-indicator-change">
                       {change.label} {signed(change.value)} {change.unit}
                     </small>
                   )}
@@ -345,8 +371,29 @@ export default function MarketIntelligence({
           )}
         </div>
       </div>
+      {report && (
+        <div className="market-brief-next">
+          <b>接下来关注</b>
+          <p>{report.watchNext}</p>
+        </div>
+      )}
       <details className="market-brief-policy">
-        <summary>每日更新、费用与数据边界</summary>
+        <summary>来源说明、生成时间与数据边界</summary>
+        {report && (
+          <>
+            <p>{report.limitations}</p>
+            <p>
+              生成：
+              {new Date(report.generatedAt).toLocaleString("zh-CN", {
+                timeZone: "America/Toronto",
+              })}{" "}
+              多伦多时间 · 数据读取：
+              {new Date(report.dataAt).toLocaleString("zh-CN", {
+                timeZone: "America/Toronto",
+              })}
+            </p>
+          </>
+        )}
         <p>
           每天安排 14:00 UTC 生成（多伦多夏令时约 10 点、冬令时约 9
           点，调度可能延迟）；首次打开时可补齐当天简报。每天共用一份，刷新不重复调用模型，最近
