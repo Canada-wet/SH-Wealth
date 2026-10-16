@@ -23,6 +23,10 @@ export async function authenticate(
         }),
       }),
     );
+  if (process.env.RUN_RESEARCH_ARCHIVE_INTEGRATION !== "1")
+    await page.route("**/api/market/research-archive?**", (route) =>
+      route.fulfill({ json: { reports: [] } }),
+    );
   loadEnvConfig(process.cwd());
   const mock = process.env.E2E_USE_MOCK_AUTH === "1";
   const url = mock

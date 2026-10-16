@@ -17,6 +17,7 @@ import MarketPulse from "@/app/components/MarketPulse";
 import MarketInvestmentDesk from "@/app/components/MarketInvestmentDesk";
 import MarketIntelligence from "@/app/components/MarketIntelligence";
 import MarketWealth from "@/app/components/MarketWealth";
+import MarketResearchArchive from "@/app/components/MarketResearchArchive";
 import { saveResearchNote } from "@/lib/market-research";
 import {
   MarketOverview,
@@ -147,6 +148,7 @@ export default function Markets() {
     if (
       ![
         "market-intelligence",
+        "research-archive",
         "market-wealth",
         "watchlist-pulse",
         "investment-desk",
@@ -791,6 +793,7 @@ export default function Markets() {
             净值不等于交易价格。授权不足的标的可能无法嵌入，不填虚构价格。
           </small>
         </section>
+        <MarketResearchArchive household={store.cloudHousehold} />
         <footer className="market-footer">
           <span>
             官方数据读取：

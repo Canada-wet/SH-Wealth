@@ -10,6 +10,7 @@ const sections = [
   ["rates-research", "收益率曲线"],
   ["fx-research", "汇率"],
   ["securities", "自选管理"],
+  ["research-archive", "研究归档"],
 ];
 export default function MarketSectionNav() {
   const [active, setActive] = useState(sections[0][0]);

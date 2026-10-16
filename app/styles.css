@@ -5289,3 +5289,26 @@ tbody tr:hover {
     animation: none !important;
   }
 }
+/* Private external research stays separate from verified market observations. */
+.research-archive {
+  overflow-wrap: anywhere;
+}
+.research-archive-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+.research-archive-select select {
+  max-width: 100%;
+  min-width: 0;
+}
+.research-archive summary {
+  cursor: pointer;
+  padding: 0.75rem 0;
+}
+.research-archive .advisor-markdown {
+  max-width: 80ch;
+  margin-top: 1rem;
+}

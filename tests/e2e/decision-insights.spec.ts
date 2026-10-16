@@ -142,7 +142,7 @@ test("每日心理学收藏、回看、失败重试与订阅明确保存；版�
   ).toBe(true);
   await page.goto("/updates");
   await expect(page.locator(".admin-status")).toContainText("管理员");
-  await expect(page.getByRole("heading", { name: /v0.2.0/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /v0.2.1/ })).toBeVisible();
 });
 test("真实个人收藏跨设备保存、伴侣隔离、关闭订阅；只使用临时家庭", async ({
   page,

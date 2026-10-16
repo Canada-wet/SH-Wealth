@@ -41,5 +41,5 @@ it("收藏只接受目录内唯一 ID、显式本人提醒偏好和安全版本"
 });
 it("发行版本与包版本一致，旧基线不捏造发布日期", () => {
   expect(APP_VERSION).toBe(RELEASES[0].version);
-  expect(RELEASES[1].date).toBeNull();
+  expect(RELEASES.find((r) => r.version === "0.1.0")?.date).toBeNull();
 });

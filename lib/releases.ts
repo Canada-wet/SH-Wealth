@@ -2,6 +2,19 @@ import metadata from "../package.json";
 export const APP_VERSION = metadata.version;
 export const RELEASES = [
   {
+    version: "0.2.1",
+    date: "2026-10-15",
+    title: "可追溯的外部研究归档",
+    items: [
+      "单次授权 Funda 浏览器交互：独立公开市场问题，原文、引用和采集时间私密归档。",
+      "市场页新增研究归档，家庭成员可回看；原始 AI 判断与官方行情、家庭资产分开保存。",
+    ],
+    limitations: [
+      "未启用每日自动采集；订阅不代表取得系统性自动提取授权。",
+      "AI 原文中的“已核实”仅是来源自述，App 未独立核验；一次记录不能形成历史趋势。",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-10-15",
     title: "从市场信息到家庭决策",
