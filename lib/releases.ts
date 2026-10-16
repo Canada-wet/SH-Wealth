@@ -2,6 +2,19 @@ import metadata from "../package.json";
 export const APP_VERSION = metadata.version;
 export const RELEASES = [
   {
+    version: "0.2.2",
+    date: "2026-10-16",
+    title: "授权后的开盘与收盘研究任务",
+    items: [
+      "开盘与收盘分别认领、按交易日去重，已提交但状态不明的任务不自动重复提问。",
+      "本地浏览器任务说明与持久化归档助手；保留原文、引用和数据时点，仍不自动改账。",
+    ],
+    limitations: [
+      "定时任务在本机 Codex 执行，不是 Vercel 常驻浏览器；依赖设备在线、Chrome 连接和有效登录。",
+      "NYSE 日历覆盖 2026–2028；异常休市须核对官方公告，未知年份停止而非猜测。",
+    ],
+  },
+  {
     version: "0.2.1",
     date: "2026-10-15",
     title: "可追溯的外部研究归档",

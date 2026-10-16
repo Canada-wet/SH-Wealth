@@ -1,5 +1,6 @@
 # Deploy only application source. Local secrets, caches and test artifacts stay local.
 .env*
+.local
 .next*
 node_modules
 .git

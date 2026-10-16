@@ -53,7 +53,7 @@ test("外部研究归档可回看、刷新和安全显示来源，手机不溢�
   await expect(
     panel.getByRole("link", { name: "BEA", exact: true }),
   ).toHaveAttribute("href", "https://www.bea.gov/");
-  await expect(panel).toContainText("未启用每日自动采集");
+  await expect(panel).toContainText("实际执行以采集时间为准");
   fail = true;
   await panel.getByRole("button", { name: "刷新研究归档" }).click();
   await expect(panel.getByRole("alert")).toBeVisible();

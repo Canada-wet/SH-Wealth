@@ -105,7 +105,7 @@ export default function MarketResearchArchive({
         </button>
       </div>
       <p className="market-notice">
-        Funda 单次交互测试 · 未启用每日自动采集。AI
+        Funda 浏览器研究归档 · 本地任务依赖设备在线，实际执行以采集时间为准。AI
         研究未经独立核验，不写入官方行情曲线，也不修改家庭资产。
       </p>
       {!household && <p>连接共同家庭后可查看私密研究归档。</p>}

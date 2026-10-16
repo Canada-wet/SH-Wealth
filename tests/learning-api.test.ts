@@ -51,7 +51,7 @@ it("未登录不能读写收藏或版本；管理员权限来自服务端验证�
     expect(await r.json()).toMatchObject({
       role: "admin",
       viewer: email,
-      version: "0.2.1",
+      version: "0.2.2",
     });
   }
 });

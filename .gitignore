@@ -10,6 +10,7 @@ playwright-report
 /.pnp
 .pnp.js
 /coverage
+/.local
 /out
 /build
 .DS_Store
