@@ -9,11 +9,13 @@ import {
   Upload,
   Eye,
   EyeOff,
+  ArrowLeftRight,
 } from "lucide-react";
 import MarketNavigator from "@/app/components/MarketNavigator";
 import TrackLibrary from "@/app/components/lifestyle/TrackLibrary";
 import SetBuilder from "@/app/components/lifestyle/SetBuilder";
 import PracticeJournal from "@/app/components/lifestyle/PracticeJournal";
+import RekordboxBridge from "@/app/components/lifestyle/RekordboxBridge";
 import Dialog from "@/app/components/Dialog";
 import {
   downloadText,
@@ -29,7 +31,7 @@ import { readLifestyleBackup } from "@/lib/dj-import";
 import type { Lifestyle } from "@/lib/lifestyle-schema";
 import "./lifestyle.css";
 
-type View = "library" | "sets" | "practice";
+type View = "library" | "sets" | "practice" | "rekordbox";
 export default function LifestylePage() {
   const store = useWealth(),
     life = store.state.preferences.lifestyle ?? EMPTY_LIFESTYLE;
@@ -50,7 +52,8 @@ export default function LifestylePage() {
     setPrivacy(sessionStorage.getItem("together-privacy") === "on");
     const update = () => {
       const hash = location.hash.slice(1);
-      if (["library", "sets", "practice"].includes(hash)) setView(hash as View);
+      if (["library", "sets", "practice", "rekordbox"].includes(hash))
+        setView(hash as View);
     };
     update();
     window.addEventListener("hashchange", update);
@@ -222,6 +225,7 @@ export default function LifestylePage() {
                     ["library", "曲库", Music2],
                     ["sets", "Set Builder", Disc3],
                     ["practice", "练习与快乐", Heart],
+                    ["rekordbox", "rekordbox", ArrowLeftRight],
                   ] as const
                 ).map(([key, label, Icon]) => (
                   <button
@@ -342,6 +346,9 @@ export default function LifestylePage() {
                   members={store.state.members}
                   preferredSet={preferredSet}
                 />
+              )}
+              {view === "rekordbox" && (
+                <RekordboxBridge life={life} save={save} disabled={!editable} />
               )}
             </div>
             <footer className="hobby-footer">

@@ -1,4 +1,42 @@
+import { validFileLocation } from "./dj-location";
 export type HobbyMember = "first" | "second" | "joint";
+export type DJCue = {
+  id: string;
+  label: string;
+  seconds: number;
+  type?: 0 | 1 | 2 | 3 | 4;
+  num?: number;
+  end?: number;
+  color?: [number, number, number];
+};
+export type DJTempo = {
+  start: number;
+  bpm: number;
+  meter: string;
+  beat: number;
+};
+export const MAX_CUES = 64;
+export const REKORDBOX_ATTRIBUTES = [
+  "Composer",
+  "Album",
+  "Grouping",
+  "Kind",
+  "Size",
+  "DiscNumber",
+  "TrackNumber",
+  "Year",
+  "DateModified",
+  "DateAdded",
+  "BitRate",
+  "SampleRate",
+  "PlayCount",
+  "LastPlayed",
+  "Remixer",
+  "Label",
+  "Mix",
+  "Colour",
+  "Tonality",
+] as const;
 export type DJTrack = {
   id: string;
   title: string;
@@ -10,7 +48,9 @@ export type DJTrack = {
   duration: number | null;
   cueNotes: string;
   rating: number | null;
-  cues: { id: string; label: string; seconds: number }[];
+  cues: DJCue[];
+  fileLocation?: string;
+  rekordbox?: { attributes: Record<string, string>; tempos: DJTempo[] };
 };
 export type SetEntry = {
   id: string;
@@ -26,6 +66,7 @@ export type DJSet = {
   owner: HobbyMember;
   targetMinutes: number;
   entries: SetEntry[];
+  rekordboxSource?: string;
 };
 export type Practice = {
   id: string;
@@ -102,9 +143,43 @@ export function validTrack(t: DJTrack): boolean {
     (t.duration === null || Number.isInteger(t.duration)) &&
     text(t.cueNotes, 1000) &&
     nullable(t.rating, 1, 5) &&
-    rows(t.cues, 16) &&
+    (t.fileLocation === undefined || validFileLocation(t.fileLocation)) &&
+    (t.rekordbox === undefined ||
+      (object(t.rekordbox) &&
+        object(t.rekordbox.attributes) &&
+        Object.entries(t.rekordbox.attributes).every(
+          ([k, v]) =>
+            (REKORDBOX_ATTRIBUTES as readonly string[]).includes(k) &&
+            text(v, 2000),
+        ) &&
+        Array.isArray(t.rekordbox.tempos) &&
+        t.rekordbox.tempos.length <= 512 &&
+        t.rekordbox.tempos.every(
+          (g) =>
+            object(g) &&
+            num(g.start, 0, t.duration ?? 14400) &&
+            num(g.bpm, 1, 1000) &&
+            text(g.meter, 16, true) &&
+            /^[1-9]\d?\/[1-9]\d?$/.test(g.meter) &&
+            num(g.beat, 1, 99) &&
+            Number.isInteger(g.beat),
+        ))) &&
+    rows(t.cues, MAX_CUES) &&
+    new Set(t.cues.filter((c) => (c.num ?? -1) >= 0).map((c) => c.num)).size ===
+      t.cues.filter((c) => (c.num ?? -1) >= 0).length &&
     t.cues.every(
-      (c) => text(c.label, 80, true) && num(c.seconds, 0, t.duration ?? 14400),
+      (c) =>
+        text(c.label, 80, true) &&
+        num(c.seconds, 0, t.duration ?? 14400) &&
+        (c.type === undefined || [0, 1, 2, 3, 4].includes(c.type)) &&
+        (c.num === undefined ||
+          (num(c.num, -1, 7) && Number.isInteger(c.num))) &&
+        (c.end === undefined || num(c.end, c.seconds, t.duration ?? 14400)) &&
+        (c.type !== 4 || (c.end !== undefined && c.end > c.seconds)) &&
+        (c.color === undefined ||
+          (Array.isArray(c.color) &&
+            c.color.length === 3 &&
+            c.color.every((n) => num(n, 0, 255) && Number.isInteger(n)))),
     )
   );
 }
@@ -128,8 +203,9 @@ export function validLifestyle(raw: unknown): raw is Lifestyle {
           text(s.name, 120, true) &&
           member(s.owner) &&
           num(s.targetMinutes, 1, 600) &&
+          (s.rekordboxSource === undefined ||
+            text(s.rekordboxSource, 2000, true)) &&
           rows(s.entries, 200) &&
-          new Set(s.entries.map((e) => e.trackId)).size === s.entries.length &&
           s.entries.every((e, i) => {
             const t = tracks.get(e.trackId),
               previous = i ? s.entries[i - 1] : null;

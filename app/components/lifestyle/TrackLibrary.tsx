@@ -20,11 +20,13 @@ import {
 } from "@/lib/dj";
 import {
   MAX_TRACKS,
+  MAX_CUES,
   validTrack,
   type DJTrack,
   type Lifestyle,
 } from "@/lib/lifestyle-schema";
 import { CSV_TEMPLATE, previewCSV, tracksCSV } from "@/lib/dj-import";
+import { normalizeFileLocation } from "@/lib/dj-location";
 import { downloadText, type SaveLifestyle } from "./shared";
 
 export default function TrackLibrary({
@@ -224,7 +226,7 @@ export default function TrackLibrary({
           <h3>先确认，再加入曲库</h3>
           <p>
             {preview.tracks.length} 首新曲目 · 跳过 {preview.duplicates}{" "}
-            首相同标题 / 艺人 / BPM / 调性的重复项。
+            首重复项（有路径按路径，无路径按标题 / 艺人 / BPM / 调性）。
             {preview.ignored.length
               ? `忽略不支持的列：${preview.ignored.join("、")}。`
               : ""}
@@ -441,6 +443,7 @@ function TrackEditor({
       rating: initial.rating?.toString() ?? "",
       duration:
         initial.duration === null ? "" : formatDuration(initial.duration),
+      fileLocation: initial.fileLocation ?? "",
     }),
     [error, setError] = useState("");
   const numeric = (s: string) => (s.trim() ? Number(s) : null);
@@ -464,6 +467,9 @@ function TrackEditor({
             energy: numeric(draft.energy),
             rating: numeric(draft.rating),
             duration: parseDuration(draft.duration),
+            fileLocation: draft.fileLocation.trim()
+              ? normalizeFileLocation(draft.fileLocation)
+              : undefined,
           };
           if (!validTrack(track))
             throw new Error(
@@ -526,6 +532,21 @@ function TrackEditor({
           ))}
         </div>
         <label>
+          音乐文件路径（仅用于 rekordbox）
+          <input
+            aria-label="音乐文件路径"
+            maxLength={2048}
+            value={draft.fileLocation}
+            onChange={(e) =>
+              setDraft({ ...draft, fileLocation: e.target.value })
+            }
+            placeholder="/Users/…/Music/track.mp3 或 C:\Music\track.mp3"
+          />
+        </label>
+        <p className="hobby-caption">
+          只记录路径，不上传或读取音频；路径会对家庭另一位成员可见。浏览器无法验证文件存在。
+        </p>
+        <label>
           Cue 与个人备注
           <textarea
             aria-label="Cue 与个人备注"
@@ -563,7 +584,7 @@ function TrackEditor({
                   type="number"
                   min="0"
                   max="14400"
-                  step="1"
+                  step="any"
                   value={Number.isFinite(c.seconds) ? c.seconds : ""}
                   onChange={(e) =>
                     setDraft({
@@ -583,6 +604,89 @@ function TrackEditor({
                   }
                 />
               </label>
+              <label>
+                标记类型
+                <select
+                  aria-label={`Cue 类型 ${i + 1}`}
+                  value={c.type ?? 0}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      cues: draft.cues.map((x) =>
+                        x.id === c.id
+                          ? {
+                              ...x,
+                              type: Number(e.target.value) as 0 | 1 | 2 | 3 | 4,
+                              end:
+                                e.target.value === "4"
+                                  ? (x.end ?? x.seconds + 4)
+                                  : undefined,
+                            }
+                          : x,
+                      ),
+                    })
+                  }
+                >
+                  <option value="0">Cue</option>
+                  <option value="4">Loop</option>
+                  <option value="1">Fade In</option>
+                  <option value="2">Fade Out</option>
+                  <option value="3">Load</option>
+                </select>
+              </label>
+              <label>
+                槽位
+                <select
+                  aria-label={`Cue 槽位 ${i + 1}`}
+                  value={c.num ?? -1}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      cues: draft.cues.map((x) =>
+                        x.id === c.id
+                          ? { ...x, num: Number(e.target.value) }
+                          : x,
+                      ),
+                    })
+                  }
+                >
+                  <option value="-1">Memory</option>
+                  {Array.from({ length: 8 }, (_, n) => (
+                    <option key={n} value={n}>
+                      Hot Cue {String.fromCharCode(65 + n)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {c.type === 4 && (
+                <label>
+                  Loop 结束秒数
+                  <input
+                    aria-label={`Loop 结束秒数 ${i + 1}`}
+                    type="number"
+                    min="0"
+                    max="14400"
+                    step="any"
+                    value={c.end ?? ""}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        cues: draft.cues.map((x) =>
+                          x.id === c.id
+                            ? {
+                                ...x,
+                                end:
+                                  e.target.value === ""
+                                    ? undefined
+                                    : Number(e.target.value),
+                              }
+                            : x,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+              )}
               <button
                 type="button"
                 className="text-button"
@@ -600,7 +704,7 @@ function TrackEditor({
           <button
             type="button"
             className="secondary"
-            disabled={draft.cues.length >= 16}
+            disabled={draft.cues.length >= MAX_CUES}
             onClick={() =>
               setDraft({
                 ...draft,

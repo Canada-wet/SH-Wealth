@@ -8,12 +8,12 @@
 
 - 手动增删改曲名、艺人、BPM、调性、风格、能量 1–10、时长、Cue 备注、个人评分 1–5；未知可留空，不当成零。
 - 调性接受 Camelot 1A–12B 以及 Am、C major、F# minor 等常见写法，规范保存为 Camelot；不分析音频，也不推断未知调性。
-- 每首最多 16 个命名 Cue 时间点。Cue 仅是计划元数据，不遥控播放器。
+- 每首最多 64 个命名 Cue 时间点，支持 Memory / Hot Cue A–H、Loop 结束与小数秒。Cue 不遥控播放器，可通过 [rekordbox XML 交换](rekordbox.md) 带入实际 DJ 软件。
 - 搜索、风格过滤、排序；桌面表格和手机卡片使用同一份数据。
 - CSV 在浏览器本地解析，先预览，明确重复 / 忽略列，再确认提交；任何一行不合法则整批不写入。支持带引号逗号、多行备注、BOM、中文列名与下载模板。
 - 删除前确认，显示关联影响并支持安全撤销；已有新修改时拒绝撤销覆盖。
 
-CSV 默认字段：`title,artist,bpm,key,genre,energy,duration,rating,cue_notes,cues`。`duration` 用 `分:秒`；`duration_seconds` 用秒，二者不要同时提供；`cues` 可用合法 JSON 数组 `{id,label,seconds}`。重复依据为规范后的曲名 / 艺人 / BPM / 调性，不会以重复行覆盖旧曲目。
+CSV 默认字段：`title,artist,bpm,key,genre,energy,duration,rating,cue_notes,cues,file_location`。`duration` 用 `分:秒`；`duration_seconds` 用秒，二者不要同时提供；`cues` 可用合法 JSON 数组 `{id,label,seconds,type?,num?,end?,color?}`。有路径时按规范文件 URI 去重，无路径时按曲名 / 艺人 / BPM / 调性，不以重复行覆盖旧曲目。CSV 不携带完整来源 BeatGrid / 扩展资料，请用 XML 交换或 JSON 备份。
 
 CSV 导出对公式开头的文本加前导单引号，避免表格执行公式；这类文本再导入可能保留该单引号。需要完全无损恢复时用 JSON 兴趣备份。
 
@@ -38,7 +38,7 @@ CSV 导出对公式开头的文本加前导单引号，避免表格执行公式�
 
 Camelot 基础规则参考 [Mixed In Key 官方说明](https://mixedinkey.com/camelot-wheel/)。分数不包含实际音频、乐句、响度、人声重叠或现场效果，不能保证过渡质量。
 
-总计划时长 = 已知播放段时长合计 − 有效重叠时长。未知时长单独列出，不伪装成完整 Set；重叠不能超过相邻任一播放段，也不能使中间曲目的两个过渡重叠越界。移动 / 删除曲目会清除受影响的新相邻关系的重叠和转场备注，其他备注保留。第一版同一个 Set 内不重复加入同一首曲目。
+总计划时长 = 已知播放段时长合计 − 有效重叠时长。未知时长单独列出，不伪装成完整 Set；重叠不能超过相邻任一播放段，也不能使中间曲目的两个过渡重叠越界。移动 / 删除曲目会清除受影响的新相邻关系的重叠和转场备注，其他备注保留。推荐仍排除已用曲目；rekordbox 歌单中重复出现的曲目允许保存并保留曲序，每个出现位置有独立条目 ID。
 
 ## 轻量练习记录
 

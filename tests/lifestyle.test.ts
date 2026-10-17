@@ -211,7 +211,7 @@ describe("Set/元数据与持久化", () => {
       });
     }
     if (mode === "bad-cue") life.sets[0].entries[0].cueIn = 400;
-    if (mode === "duplicate-entry") life.sets[0].entries[1].trackId = "a";
+    if (mode === "duplicate-entry") life.sets[0].entries[1].id = "e1";
     if (mode === "dangling") life.sets[0].entries[0].trackId = "missing";
     expect(validLifestyle(life)).toBe(false);
   });

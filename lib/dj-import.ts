@@ -6,6 +6,7 @@ import {
   type Lifestyle,
 } from "./lifestyle-schema";
 import { normalizeKey, parseDuration } from "./dj";
+import { normalizeFileLocation } from "./dj-location";
 export const CSV_TEMPLATE =
   'title,artist,bpm,key,genre,energy,duration,rating,cue_notes\nExample Track,Your Artist,124,8A,House,6,5:30,4,"Intro 16 bars; check phrasing"\n';
 export function parseCSV(input: string): string[][] {
@@ -91,14 +92,20 @@ const aliases: Record<string, string> = {
   comment: "cueNotes",
   备注: "cueNotes",
   cues: "cues",
+  filelocation: "fileLocation",
+  location: "fileLocation",
+  path: "fileLocation",
+  文件路径: "fileLocation",
 };
 const fingerprint = (t: DJTrack) =>
-  [
-    t.title.trim().toLowerCase(),
-    t.artist.trim().toLowerCase(),
-    t.bpm,
-    t.key,
-  ].join("\u0001");
+  t.fileLocation
+    ? JSON.stringify(["file", t.fileLocation])
+    : JSON.stringify([
+        t.title.trim().toLowerCase(),
+        t.artist.trim().toLowerCase(),
+        t.bpm,
+        t.key,
+      ]);
 export function previewCSV(text: string, existing: DJTrack[]) {
   const rows = parseCSV(text),
     header = rows.shift();
@@ -147,6 +154,9 @@ export function previewCSV(text: string, existing: DJTrack[]) {
         rating: number("rating"),
         cueNotes: values.cueNotes ?? "",
         cues: values.cues ? JSON.parse(values.cues) : [],
+        ...(values.fileLocation
+          ? { fileLocation: normalizeFileLocation(values.fileLocation) }
+          : {}),
       };
       if (!validTrack(track))
         throw new Error(
@@ -189,6 +199,7 @@ export function tracksCSV(tracks: DJTrack[]) {
         "rating",
         "cue_notes",
         "cues",
+        "file_location",
       ],
       ...tracks.map((t) => [
         t.title,
@@ -203,6 +214,7 @@ export function tracksCSV(tracks: DJTrack[]) {
         t.rating,
         t.cueNotes,
         JSON.stringify(t.cues),
+        t.fileLocation ?? "",
       ]),
     ]
       .map((r) => r.map(cell).join(","))

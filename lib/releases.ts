@@ -2,6 +2,22 @@ import metadata from "../package.json";
 export const APP_VERSION = metadata.version;
 export const RELEASES = [
   {
+    version: "0.4.1",
+    date: "2026-10-16",
+    title: "从这里编排，带回 rekordbox 播放",
+    items: [
+      "rekordbox XML 交换中心：按全库 / 单歌单预览导入，路径匹配，默认保留旧数据，可明确更新元数据。",
+      "导入和导出 BPM / 调性 / 星级 / 备注、Memory 与 Hot Cue A–H、Loop、小数秒 Cue、来源 BeatGrid 和歌单曲序。",
+      "曲目可关联 Mac / Windows 本机路径；Set 导回为歌单，重复出现的曲目也保持顺序。",
+      "Cue 扩展为每曲 64 个，支持类型 / 槽位 / Loop 结束编辑；CSV 与 JSON 备份兼容新增字段。",
+    ],
+    limitations: [
+      "文件交换而非实时同步，不修改 rekordbox 数据库、不上传音频，路径是否存在需在电脑核对。",
+      "Set 的重叠 / 转场 / 片段、能量与练习仍留在本 App；无来源 BeatGrid 不凭 BPM 生成拍点。",
+      "不保证未知扩展、流媒体、波形或智能歌单规则无损互通；首次请在 rekordbox 测试歌单核对。",
+    ],
+  },
+  {
     version: "0.4.0",
     date: "2026-10-16",
     title: "给财富之外的生活，留一面唱片",

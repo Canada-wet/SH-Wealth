@@ -803,6 +803,78 @@
   font-size: 10px;
   margin-top: 5px;
 }
+.hobby-bridge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  margin-top: 26px;
+}
+.hobby-bridge-grid > div {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #e0e7d9;
+  border-radius: 16px;
+  background: #fbfcf8;
+}
+.hobby-rekordbox h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hobby-rekordbox h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.hobby-rekordbox p,
+.hobby-rekordbox li {
+  line-height: 1.85;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.hobby-rekordbox label {
+  display: grid;
+  gap: 9px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+.hobby-rekordbox select {
+  width: 100%;
+  min-width: 0;
+}
+.hobby-rekordbox details {
+  margin-top: 24px;
+  font-size: 13px;
+}
+.hobby-rekordbox summary {
+  cursor: pointer;
+  line-height: 1.8;
+}
+.hobby-rekordbox .hobby-bridge-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.7;
+}
+.hobby-bridge-checkbox input {
+  width: 18px;
+  min-height: 18px;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.hobby-bridge-import {
+  margin-top: 20px;
+  padding-top: 5px;
+  border-top: 1px solid #e0e7d9;
+}
+@media (max-width: 900px) {
+  .hobby-bridge-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .hobby-bridge-grid > div {
+    padding: 17px;
+  }
+}
 .hobby-footer {
   display: flex;
   flex-wrap: wrap;
@@ -821,6 +893,16 @@
 .hobby-footer a {
   color: #5a7150;
   text-decoration: none;
+}
+@media (max-width: 480px) {
+  .hobby-navigation [role="tablist"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hobby-navigation [role="tab"] {
+    min-width: 0;
+    justify-content: center;
+  }
 }
 @media (max-width: 1100px) {
   .hobby-hero {
