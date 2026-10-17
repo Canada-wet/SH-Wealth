@@ -4,7 +4,7 @@
 
 新增独立 [兴趣与生活 · DJ Set Assistant](docs/lifestyle.md)（`/lifestyle`）：共享元数据曲库、CSV 预览导入、可解释的下一首推荐、Cue / 转场 / 时长编排，以及轻量练习与快乐记录。沿用家庭云端与备份，不改财富余额；不上传音频、不依赖 Spotify，也不消耗模型额度。上一步 [季度财富复盘](docs/quarterly-review.md) 保留在家庭工作台，兴趣空间不替代财务主线。
 
-v0.4.1 新增 [rekordbox XML 兼容交换](docs/rekordbox.md)：`/lifestyle#rekordbox` 先预览导入、按路径匹配，支持 Cue / Hot Cue / Loop、来源 BeatGrid 与 Set 歌单导回。不是实时同步或整个数据库的无损备份，初次请在 rekordbox 测试歌单核对。
+v0.4.2 简化 [rekordbox XML 兼容交换](docs/rekordbox.md)：`/lifestyle#rekordbox` 拖入 XML 自动预览、按路径匹配并展示异常清单，确认后保存；支持 Cue / Hot Cue / Loop、来源 BeatGrid 与 Set 歌单导回。兼容的桌面浏览器可记住只读 XML，页面打开时检查变化并提示确认；仍需在 rekordbox 更新导出文件，不是实时同步或整个数据库的无损备份，初次请在 rekordbox 测试歌单核对。
 
 v0.2.0 新增[市场与家庭联动、每日决策心理学及管理员版本记录](docs/market-wealth-learning.md)。市场页按已确认的账户配置比例关联证券，不把自选或行情直接写成资产收益；`/learn` 支持个人收藏、回看与单独订阅每日提醒，`/updates` 供两位授权管理员查看。部署先执行 `supabase/learning.sql`；个人收藏与提醒偏好独立存于 Supabase，不在共同账本 JSON 备份中。
 

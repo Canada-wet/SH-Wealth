@@ -1,4 +1,4 @@
-# rekordbox 兼容交换（v0.4.1）
+# rekordbox 兼容交换（v0.4.2）
 
 入口 `/lifestyle#rekordbox`。这是文件交换，不是实时自动同步，不读写加密数据库，不是官方认证插件，也不是完整曲库备份。依照 [AlphaTheta XML 交换规范](https://cdn.rekordbox.com/files/20200410160904/xml_format_list.pdf) 实现 1.0.0 格式；操作引导参考 [rekordbox 7 官方手册](https://cdn.rekordbox.com/files/20260409151936/rekordbox7.214_manual_EN.pdf) 的 Using rekordbox xml、Importing from rekordbox xml 以及 File 菜单。其他版本菜单可能不同。
 
@@ -6,7 +6,7 @@
 
 1. 先在 rekordbox 备份曲库，用独立测试歌单验证一次，尤其先核对文件路径和 Cue。
 2. rekordbox：File → Export Collection in xml format，选择 UTF-8 XML 文件。
-3. 本 App：兴趣与生活 → rekordbox → 选择 XML。按全库与歌单、仅曲库或一个歌单选择范围，点击预览，再明确确认。大库可仅导入某个歌单及引用曲目。
+3. 本 App：兴趣与生活 → rekordbox → 拖入 / 选择 XML，自动识别并预览。核对范围、跳过清单后，点击确认即可入库，不需要逐项填写曲名或音乐路径。默认全库与歌单；大于 1000 首时明确预选一个小歌单，Set 容量不足预选仅曲库，用户仍可切换。
 4. 在曲库维护音乐路径 / BPM / 调性 / Cue，在 Set Builder 选择下一首、调整曲序。播放段、转场和重叠是独立 Set 计划，不代表全局曲目 Cue。
 5. 回到 rekordbox 页签，选全部或某套 Set，导出 XML。手动曲目也可导出，但须在编辑中补齐真实音频路径。不能用浏览器 File API 推断原电脑的完整路径。
 6. rekordbox Preferences → View → Layout → Media Browser，启用 rekordbox xml；Preferences → Advanced → Database → rekordbox xml → Imported Library，选择该 XML。
@@ -42,7 +42,21 @@
 
 XML ≤12MB / 20,000 原始曲目 / 有限层级，可从大库选一个歌单；真正导入后仍不超过 1,000 首、60 套 Set、每套 200 个出现位置、64 标记 / 曲、512 拍点段 / 曲，兴趣数据 ≤3MB。超限明确拒绝，不静默截断或删除旧数据。
 
-只在浏览器用原生 XML 解析，不发送解析请求；拒绝 DTD / 外部实体、损坏 XML、重复 TrackID / 路径和坏引用。位置、Loop、Hot 槽位、数值及 URI 都经校验。导出对 XML 特殊字符及备注换行进行编码，不虚构文件路径或拍点。
+只在浏览器用原生 XML 解析，不发送解析请求；DTD / 外部实体、损坏 XML、重复 TrackID、未知版本为文件级错误，整批拒绝。导入预览会跳过不支持的曲目与含糊路径（同一路径的所有候选都跳过，不任意选择 Cue 版本），并报告歌单被移除的引用；超过 200 项或无有效曲目的歌单整张跳过。未保存前可核对全部问题并下载 JSON 检查清单；确认保存的是剩余有效内容，不是完整无损导入。严格解析 API 的旧行为保留用于校验。
+
+容量或现有 Set 时长冲突仍整体拒绝，不静默截断或删除旧数据。位置、Loop、Hot 槽位、数值及 URI 都经校验。导出对 XML 特殊字符及备注换行进行编码，不虚构文件路径或拍点。
+
+## 记住 XML（可选增强）
+
+桌面 Chrome / Edge 等支持 `showOpenFilePicker` 的安全上下文可选择“连接并记住 XML”。这只为**用户明确选择的单个文件**申请只读授权，不扫描磁盘、音乐文件夹或原生数据库。Safari / 不支持浏览器用选文件或拖入方式。
+
+- 原生文件句柄与最后成功导入的 SHA-256 存在本机 IndexedDB，键为已验证 Supabase 用户 ID + 当前家庭；不进家庭 JSON、云端、备份或顾问上下文。
+- 页面此模块挂载且可见时，每分钟及恢复焦点时检查；隐藏、编辑预览中、云同步未就绪时不被动读取，不覆盖已打开的预览。关闭页面或离开模块后停止；没有后台守护服务。
+- 恢复句柄仅查询授权，不在后台请求权限。授权为 prompt / denied 时需用户点击检查再授权。浏览器可能不会跨刷新永久保留权限。
+- **rekordbox 内修改后仍须重新导出到这个 XML**。浏览器只能检查 XML 变动，不代表原生曲库变动已同步。基于实际内容哈希而非文件日期 / 大小判断更新。
+- 更新只生成预览；确认成功才记住已导入版本。取消不改曲库；同内容在当前会话不反复弹出，显式检查可重新预览并选择其他歌单。
+- 忘记文件先停止检查，完成本地清除后更新界面，曲库保留。浏览器网站权限须在网站设置另行撤销；清除失败明确提示，不假称永久忘记。
+- File System Access 官方浏览器说明：[文件选择器](https://developer.mozilla.org/en-US/docs/Web/API/Window/showOpenFilePicker)、[权限状态](https://developer.mozilla.org/en-US/docs/Web/API/FileSystemHandle/queryPermission)。不是在所有浏览器可用的通用网页权限。
 
 ## 验证边界
 

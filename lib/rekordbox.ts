@@ -313,6 +313,150 @@ export function previewRekordbox(
     sample: elements.slice(0, 5).map((e) => attr(e, "Name")),
   };
 }
+export type RekordboxImportIssue = {
+  kind: "track" | "playlist" | "reference";
+  name: string;
+  reason: string;
+};
+/** An explicit, reviewable partial import. Never truncates a library or Set. */
+export function previewRekordboxSmart(
+  catalog: RekordboxCatalog,
+  life: Lifestyle,
+  selection: string,
+  updateExisting = false,
+) {
+  const issues: RekordboxImportIssue[] = [];
+  const byId = new Map(catalog.tracks.map((t) => [attr(t, "TrackID"), t]));
+  const paths = new Map<string, Element[]>();
+  for (const t of catalog.tracks) {
+    try {
+      const path = normalizeFileLocation(attr(t, "Location"));
+      const group = paths.get(path) ?? [];
+      group.push(t);
+      paths.set(path, group);
+    } catch {
+      /* Unsupported paths are reported only when selected. */
+    }
+  }
+  const playlists =
+    selection === "all"
+      ? catalog.playlists
+      : selection === "collection"
+        ? []
+        : catalog.playlists.filter((p) => p.id === selection);
+  if (!["all", "collection"].includes(selection) && !playlists.length)
+    throw new Error("请选择有效的导入范围。");
+  const refs = new Map<Playlist, Element[]>();
+  for (const p of playlists) {
+    const found: Element[] = [];
+    for (const key of p.keys) {
+      let track: Element | undefined;
+      try {
+        track = p.byLocation
+          ? paths.get(normalizeFileLocation(key))?.[0]
+          : byId.get(key);
+      } catch {
+        /* Bad reference is explicitly included in the report. */
+      }
+      if (track) found.push(track);
+      else
+        issues.push({
+          kind: "reference",
+          name: p.path.join(" / "),
+          reason: `找不到曲目引用：${key.slice(0, 200)}`,
+        });
+    }
+    refs.set(p, found);
+  }
+  const selected = ["all", "collection"].includes(selection)
+    ? catalog.tracks
+    : [...new Set([...refs.values()].flat())];
+  const valid: Element[] = [];
+  for (const element of selected) {
+    try {
+      const track = readTrack(element, new Set());
+      if ((paths.get(track.fileLocation!)?.length ?? 0) > 1)
+        throw new Error(
+          "同一文件路径有多条记录，Cue 版本不明确；相关记录全部跳过。",
+        );
+      valid.push(element);
+    } catch (error) {
+      issues.push({
+        kind: "track",
+        name: attr(element, "Name") || attr(element, "TrackID"),
+        reason: error instanceof Error ? error.message : "曲目格式不支持",
+      });
+    }
+  }
+  const validSet = new Set(valid);
+  const cleanedPlaylists: Playlist[] = [];
+  for (const p of playlists) {
+    const source = refs.get(p)!;
+    const remaining = source.filter((t) => validSet.has(t));
+    if (p.keys.length > 200 || !remaining.length) {
+      issues.push({
+        kind: "playlist",
+        name: p.path.join(" / "),
+        reason:
+          p.keys.length > 200
+            ? "超过每套 200 项，整张歌单跳过，不截断曲序。"
+            : "没有可导入的曲目，跳过空 Set。",
+      });
+      continue;
+    }
+    if (remaining.length !== source.length)
+      issues.push({
+        kind: "reference",
+        name: p.path.join(" / "),
+        reason: `移除 ${source.length - remaining.length} 个不支持的曲目位置；其余曲序和重复项保留。`,
+      });
+    cleanedPlaylists.push({
+      ...p,
+      byLocation: false,
+      keys: remaining.map((t) => attr(t, "TrackID")),
+    });
+  }
+  const result = previewRekordbox(
+    { tracks: valid, playlists: cleanedPlaylists },
+    life,
+    "all",
+    updateExisting,
+  );
+  return {
+    ...result,
+    issues,
+    skippedTracks: issues.filter((i) => i.kind === "track").length,
+    skippedPlaylists: issues.filter((i) => i.kind === "playlist").length,
+  };
+}
+export function suggestedRekordboxScope(
+  catalog: RekordboxCatalog,
+  life: Lifestyle,
+) {
+  if (catalog.tracks.length > MAX_TRACKS) {
+    const p = catalog.playlists.find(
+      (p) => p.keys.length > 0 && p.keys.length <= 200,
+    );
+    return {
+      scope: p?.id ?? "collection",
+      note: p
+        ? `大曲库已预选「${p.path.join(" / ")}」，仅导入这张歌单及其曲目；可切换其他歌单。`
+        : "曲库超过 1000 首，请选择较小歌单或缩小导出范围。",
+    };
+  }
+  const newSets = catalog.playlists.filter(
+    (p) => !life.sets.some((s) => s.rekordboxSource === JSON.stringify(p.path)),
+  ).length;
+  if (life.sets.length + newSets > 60)
+    return {
+      scope: "collection",
+      note: "歌单数超过剩余 Set 容量，已预选仅曲库；不会截断歌单或覆盖现有编排。",
+    };
+  return {
+    scope: "all",
+    note: "已预选全部曲库与歌单；同一路径自动匹配，默认保留现有记录。",
+  };
+}
 const escape = (text: string | number) =>
   String(text).replace(
     /[&<>"'\t\r\n]/g,

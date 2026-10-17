@@ -40,9 +40,6 @@ test("真实临时家庭：rekordbox路径、毫秒Cue、Loop和BeatGrid双成�
         buffer: Buffer.from(REKORDBOX_FIXTURE),
       });
     await page
-      .getByRole("button", { name: "预览 XML 导入", exact: true })
-      .click();
-    await page
       .getByRole("button", { name: "确认导入 rekordbox", exact: true })
       .click();
     await synced(page);
@@ -95,9 +92,6 @@ test("rekordbox XML预览、按路径合并、毫秒Cue与Loop编辑、刷新和
     mimeType: "application/xml",
     buffer: Buffer.from(REKORDBOX_FIXTURE),
   });
-  await page
-    .getByRole("button", { name: "预览 XML 导入", exact: true })
-    .click();
   const preview = page.getByRole("region", { name: "rekordbox 导入预览" });
   await expect(preview).toContainText("新增 2 首");
   await expect(preview).toContainText("Soft & Warm");
@@ -122,9 +116,6 @@ test("rekordbox XML预览、按路径合并、毫秒Cue与Loop编辑、刷新和
     mimeType: "application/xml",
     buffer: Buffer.from(REKORDBOX_FIXTURE),
   });
-  await page
-    .getByRole("button", { name: "预览 XML 导入", exact: true })
-    .click();
   await expect(preview).toContainText("新增 0 首");
   await expect(preview).toContainText("保留 2 首");
   await page.getByRole("button", { name: "取消导入", exact: true }).click();

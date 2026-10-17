@@ -348,7 +348,12 @@ export default function LifestylePage() {
                 />
               )}
               {view === "rekordbox" && (
-                <RekordboxBridge life={life} save={save} disabled={!editable} />
+                <RekordboxBridge
+                  life={life}
+                  save={save}
+                  disabled={!editable}
+                  household={store.cloudHousehold}
+                />
               )}
             </div>
             <footer className="hobby-footer">

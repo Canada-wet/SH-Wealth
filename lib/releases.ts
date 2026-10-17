@@ -2,6 +2,23 @@ import metadata from "../package.json";
 export const APP_VERSION = metadata.version;
 export const RELEASES = [
   {
+    version: "0.4.2",
+    date: "2026-10-16",
+    title: "少填资料，多一点音乐",
+    items: [
+      "XML 拖入或选取后自动预览，识别曲目 / Cue / 路径 / 歌单，确认一次即可保存，不再逐项手填。",
+      "个别坏记录不阻断整库：明确显示跳过曲目、歌单与引用变化，可下载完整检查清单；不截断曲序。",
+      "桌面支持的浏览器可记住只读 XML；页面可见时定期检查更新，只生成预览，不自动改曲库。",
+      "本机文件记忆按已验证账号与家庭隔离，可忘记文件而不删曲库；Safari 保留直接选文件流程。",
+      "大库预选小歌单、Set 容量不足预选仅曲库，范围明确展示；高级更新与帮助说明收纳，操作更聚焦。",
+    ],
+    limitations: [
+      "仍需在 rekordbox 导出并更新 XML，不读取原生数据库，不是后台或实时自动同步。",
+      "文件记忆仅限支持 File System Access 的浏览器，刷新后可能需重新授权；页面关闭后不检查。",
+      "文件级损坏 / DTD / 重复 TrackID 仍拒绝；容量或现有 Set 时长冲突不覆盖旧数据。",
+    ],
+  },
+  {
     version: "0.4.1",
     date: "2026-10-16",
     title: "从这里编排，带回 rekordbox 播放",
