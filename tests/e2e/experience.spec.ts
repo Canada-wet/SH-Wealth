@@ -190,11 +190,11 @@ test("资产排序筛选小计准确，假设与复盘不改变真实财富", as
   await page.getByLabel("一次性支出（CAD）").fill("5000");
   await expect(page.locator(".scenario-result")).toContainText("$127,000.00");
   await expect(page.getByTestId("net-worth")).toHaveText("$120,000.00");
-  await page.locator(".household-review > summary").click();
+  await page.locator(".quarter-current > summary").click();
   await page.locator(".household-tools").screenshot({
     path: `test-results/household-tools-${test.info().project.name}.png`,
   });
-  await expect(page.locator(".household-review")).toContainText(
+  await expect(page.locator(".quarter-current")).toContainText(
     "1 项资产未填本年回报",
   );
   await page.getByRole("button", { name: "与顾问讨论这个假设" }).click();

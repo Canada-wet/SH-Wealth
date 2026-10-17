@@ -10,6 +10,346 @@
   scroll-behavior: smooth;
   scroll-padding-top: 24px;
 }
+.quarter-reminder {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 16px 20px;
+  border: 1px solid #d5e3d5;
+  border-radius: 16px;
+  background: #eef4e9;
+  color: var(--ink);
+  text-decoration: none;
+}
+.quarter-reminder span {
+  flex: 1;
+}
+.quarter-reminder b,
+.quarter-reminder small {
+  display: block;
+}
+.quarter-reminder small {
+  color: #52695b;
+  margin-top: 4px;
+}
+.quarterly-review {
+  margin: 24px 0;
+  scroll-margin-top: 24px;
+}
+.quarterly-review .card-head {
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.quarterly-review h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.quarter-eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  color: #5c7866;
+}
+.quarter-current {
+  margin-bottom: 14px;
+  color: #536a5d;
+  font-size: 12px;
+}
+.quarter-current summary {
+  cursor: pointer;
+}
+.quarter-current li {
+  margin: 8px 0;
+}
+.quarter-picker {
+  display: grid;
+  gap: 5px;
+  color: #536a5d;
+  font-size: 12px;
+}
+.quarterly-review .quarter-picker select {
+  appearance: none;
+  display: block;
+  height: 44px;
+  min-height: 44px;
+  padding-right: 36px;
+  line-height: 1.4;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--green) 50%),
+    linear-gradient(135deg, var(--green) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+}
+.quarter-workspace > small {
+  display: block;
+  margin-top: 8px;
+}
+.quarterly-review input:not([type="checkbox"]),
+.quarterly-review select,
+.quarterly-review textarea {
+  width: 100%;
+  border: 1px solid #cedacf;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 12px;
+  min-height: 42px;
+}
+.quarterly-review input:focus-visible,
+.quarterly-review select:focus-visible,
+.quarterly-review textarea:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+.quarter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  color: #607366;
+}
+.quarter-toolbar .text-button {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.quarter-badge {
+  background: #eaf1e7;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #3d5c49;
+}
+.quarter-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--line);
+}
+.quarter-metrics > div {
+  display: grid;
+  gap: 7px;
+  background: #fafbf7;
+  padding: 19px;
+}
+.quarter-metrics b {
+  font-size: clamp(20px, 2.2vw, 29px);
+  font-variant-numeric: tabular-nums;
+}
+.quarter-metrics span,
+.quarter-metrics small {
+  color: #5c6e61;
+  font-size: 12px;
+}
+.quarter-gap {
+  color: #79612e;
+  background: #fbf4e6;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.quarter-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+  margin-top: 25px;
+}
+.quarter-workspace {
+  min-width: 0;
+}
+.quarter-workspace h3 {
+  margin: 0 0 15px;
+  font-size: 14px;
+}
+.quarterly-review fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.quarter-checks label,
+.quarter-settings label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+}
+.quarterly-review input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+.quarter-evidence {
+  padding: 16px;
+  background: #f4f6f0;
+  border-radius: 12px;
+  margin: 16px 0 10px;
+}
+.quarter-evidence > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.quarter-evidence span {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+.quarter-evidence small,
+.quarter-caption {
+  color: #576d5e;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.quarter-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 14px 0 25px;
+  font-size: 12px;
+}
+.quarter-links a {
+  color: var(--green);
+  text-underline-offset: 3px;
+}
+.quarter-notes {
+  display: grid;
+  gap: 9px;
+  font-size: 12px;
+}
+.quarter-notes textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+.quarter-advisor {
+  margin-top: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.quarter-actions {
+  border-left: 1px solid var(--line);
+  padding-left: 28px;
+}
+.quarter-actions ul {
+  padding: 0;
+  margin: 14px 0;
+  list-style: none;
+}
+.quarter-actions li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.quarter-actions li label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.quarter-actions li b {
+  overflow-wrap: anywhere;
+}
+.quarter-actions li small {
+  display: block;
+  margin-top: 6px;
+  color: #637768;
+}
+.quarter-done {
+  text-decoration: line-through;
+  color: #637768;
+}
+.quarter-empty {
+  border: 1px dashed #cedacf;
+  padding: 20px;
+  color: #62776a;
+  border-radius: 12px;
+  margin: 14px 0;
+}
+.quarter-actions form label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+.quarter-action-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+.quarter-finish {
+  padding: 18px;
+  background: #edf3e9;
+  border-radius: 12px;
+  margin-top: 24px;
+}
+.quarter-finish p {
+  margin: 0 0 12px;
+  color: #4c6654;
+}
+.quarter-settings {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.quarter-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.quarter-settings p {
+  max-width: 720px;
+  color: #5e7062;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .quarterly-review input:not([type="checkbox"]),
+  .quarterly-review select,
+  .quarterly-review textarea {
+    font-size: 16px;
+  }
+  .quarter-layout {
+    grid-template-columns: 1fr;
+    gap: 25px;
+  }
+  .quarter-actions {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 22px 0 0;
+  }
+  .quarter-metrics {
+    grid-template-columns: 1fr;
+  }
+  .quarter-metrics > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 14px;
+  }
+  .quarter-metrics small {
+    grid-column: 1/-1;
+  }
+  .quarter-metrics b {
+    font-size: 22px;
+  }
+  .quarter-picker {
+    width: 100%;
+  }
+  .quarter-reminder {
+    padding: 14px;
+  }
+}
 * {
   box-sizing: border-box;
 }
@@ -155,6 +495,9 @@ main {
 .sidebar nav {
   display: grid;
   gap: 7px;
+  overflow-y: auto;
+  min-height: 0;
+  align-content: start;
 }
 .sidebar nav a,
 .sidebar nav button,
@@ -637,6 +980,11 @@ main {
     display: flex;
     gap: 8px;
     padding: 16px 16px 0;
+    overflow-x: auto;
+    align-items: center;
+  }
+  .market-mobile-nav > * {
+    flex-shrink: 0;
   }
   .market-mobile-nav a {
     padding: 7px 12px;

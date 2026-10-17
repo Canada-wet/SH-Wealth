@@ -202,6 +202,7 @@ export async function sendChannelNotice(
   key: string,
   test = false,
   lessonDay?: string,
+  reviewQuarter?: string,
 ) {
   if (!channelReadiness(channel).ready)
     throw new ChannelSendError("failed", channelReadiness(channel).reason);
@@ -210,15 +211,26 @@ export async function sendChannelNotice(
     (!/^\d{4}-\d{2}-\d{2}$/.test(lessonDay) || channel === "whatsapp")
   )
     throw new ChannelSendError("failed", "此渠道未配置每日心理学通知模板。");
+  if (
+    reviewQuarter &&
+    (!/^(20\d{2}|2100)-Q[1-4]$/.test(reviewQuarter) ||
+      channel === "whatsapp" ||
+      lessonDay)
+  )
+    throw new ChannelSendError("failed", "此渠道未配置季度复盘通知模板。");
   const link = lessonDay
     ? new URL(`/learn?day=${lessonDay}`, appLink()).href
-    : appLink();
+    : reviewQuarter
+      ? new URL("/#quarterly-review", appLink()).href
+      : appLink();
   const subject = test
     ? "Together · 通知连接测试"
     : lessonDay
       ? "Together · 每日决策心理学"
-      : "Together · 本周家庭财富复盘";
-  const text = `${test ? "Together 测试通知" : lessonDay ? "今天的投资、工作与生活心理学卡片已准备好" : "本周家庭财富复盘已准备好"}。请登录私密家庭空间查看详情：${link}\n本消息不包含资产金额。`;
+      : reviewQuarter
+        ? "Together · 季度财富复盘提醒"
+        : "Together · 本周家庭财富复盘";
+  const text = `${test ? "Together 测试通知" : lessonDay ? "今天的投资、工作与生活心理学卡片已准备好" : reviewQuarter ? `${reviewQuarter} 已结束，一起核对账户、讨论目标并安排下一季度行动` : "本周家庭财富复盘已准备好"}。请登录私密家庭空间查看详情：${link}\n本消息不包含资产金额。`;
   if (channel === "email") {
     if (!process.env.RESEND_API_KEY) {
       const port = Number(process.env.SMTP_PORT);

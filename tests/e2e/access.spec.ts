@@ -48,7 +48,7 @@ test("已有有效登录自动回到看板，退出只清理当前设备并可�
   await page
     .getByRole("button", {
       name:
-        test.info().project.name === "mobile" ? "退出登录" : "退出当前设备登录",
+        test.info().project.name.startsWith("mobile") ? "退出登录" : "退出当前设备登录",
       exact: true,
     })
     .click();

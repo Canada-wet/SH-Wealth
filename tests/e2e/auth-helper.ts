@@ -154,6 +154,14 @@ export async function authenticate(
   );
   return home!;
 }
+export async function assertFixtureConnection(page: Page, householdId: string) {
+  if (!created.has(householdId))
+    throw new Error("Refusing to verify or mutate a non-fixture household.");
+  await expect.poll(async () => page.evaluate(() => {
+    const link = localStorage.getItem("together-cloud-link");
+    return link ? JSON.parse(link).householdId : null;
+  })).toBe(householdId);
+}
 export async function cleanupAuthenticated(page: Page) {
   const fixture = fixtures.get(page);
   if (!fixture) return;

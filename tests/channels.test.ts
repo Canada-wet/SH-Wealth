@@ -58,6 +58,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("私密消息渠道", () => {
+  it("季度提醒链接到复盘入口，静态消息不带金额，不用WhatsApp周报模板冒充", async () => {
+    fetchMock.mockResolvedValue(new Response('{"ok":true}'));
+    await sendChannelNotice(
+      "telegram",
+      "123",
+      "quarter-fixture",
+      false,
+      undefined,
+      "2026-Q3",
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.text).toContain("2026-Q3");
+    expect(body.text).toContain("https://example.test/#quarterly-review");
+    expect(body.text).not.toContain("净资产");
+    await expect(
+      sendChannelNotice(
+        "whatsapp",
+        "15550000001",
+        "fixture",
+        false,
+        undefined,
+        "2026-Q3",
+      ),
+    ).rejects.toThrow("季度");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
   it("绑定渠道的消息先保存，再读取本渠道上下文；重复回调不重复生成回复", async () => {
     const state = saveAsset(emptyState(), {
       id: "a",

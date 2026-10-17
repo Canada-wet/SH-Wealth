@@ -305,7 +305,7 @@ test("简报主题联动布局在窄手机、平板和桌面无横向溢出", as
   }
   await section.getByRole("button", { name: "情绪与波动" }).click();
   await page.setViewportSize({
-    width: test.info().project.name === "mobile" ? 390 : 1440,
+    width: test.info().project.name.startsWith("mobile") ? 390 : 1440,
     height: 900,
   });
   await section.screenshot({
@@ -638,7 +638,7 @@ test("独立看板保留导航和当前页状态，返回家庭资产定位正�
   page,
 }) => {
   await page.goto("/markets");
-  const mobile = test.info().project.name === "mobile";
+  const mobile = test.info().project.name.startsWith("mobile");
   await expect(
     page.locator(
       mobile
@@ -666,7 +666,7 @@ test("市场看板入口、币种方向、宏观口径和来源都明确，手�
   await page.goto("/");
   await page
     .getByRole("link", {
-      name: test.info().project.name === "mobile" ? "市场" : "市场看板",
+      name: test.info().project.name.startsWith("mobile") ? "市场" : "市场看板",
       exact: true,
     })
     .click();

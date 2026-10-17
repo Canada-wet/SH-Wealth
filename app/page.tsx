@@ -59,6 +59,10 @@ import Dialog from "./components/Dialog";
 import DataSettings from "./components/DataSettings";
 import CashflowTable from "./components/CashflowTable";
 import HouseholdReview from "./components/HouseholdReview";
+import QuarterlyReview, {
+  QuarterlyReminder,
+} from "./components/QuarterlyReview";
+import { quarterlyStatus } from "@/lib/quarterly-review";
 import PushSettings from "./components/PushSettings";
 import { cloudClient } from "@/lib/cloud";
 import { allowedEmail } from "@/lib/access";
@@ -137,6 +141,7 @@ export default function Home() {
         "assets",
         "cashflow",
         "contributions",
+        "quarterly-review",
         "framework",
       ].includes(section)
     ) {
@@ -156,7 +161,7 @@ export default function Home() {
       members: current.members,
     });
   const [cloudAlerts, setCloudAlerts] = useState<
-    { id: string; title: string; body: string; prompt: string }[]
+    { id: string; title: string; body: string; prompt: string; kind?: string }[]
   >([]);
   const balance = useMemo(() => totals(state), [state]);
   const groups = useMemo(
@@ -169,10 +174,17 @@ export default function Home() {
     () => chartPoints(state, state.preferences.months),
     [state],
   );
-  const alerts = useMemo(
-    () => [...proactiveInsights(state), ...cloudAlerts],
-    [state, cloudAlerts],
-  );
+  const alerts = useMemo(() => {
+    const quarter = quarterlyStatus(state);
+    return [
+      ...proactiveInsights(state),
+      ...cloudAlerts.filter(
+        (row) =>
+          row.kind !== "quarterly_review" ||
+          (quarter.due && row.title.startsWith(quarter.period.label)),
+      ),
+    ];
+  }, [state, cloudAlerts]);
   const unreadInsights = proactiveInsights(state).filter(
     (row) => !state.readAlerts.includes(row.id),
   );
@@ -193,6 +205,7 @@ export default function Home() {
       "assets",
       "cashflow",
       "contributions",
+      "quarterly-review",
       "framework",
     ].forEach((id) => {
       const el = document.getElementById(id);
@@ -211,7 +224,7 @@ export default function Home() {
       if (!client || document.hidden) return;
       const result = await client
         .from("advisor_alerts")
-        .select("id,title,body")
+        .select("id,title,body,kind")
         .eq("household_id", store.cloudHousehold)
         .order("created_at", { ascending: false })
         .limit(12);
@@ -538,6 +551,15 @@ export default function Home() {
             <Landmark />
             家庭计划
           </a>
+          <a
+            href="#quarterly-review"
+            aria-current={
+              activeSection === "quarterly-review" ? "location" : undefined
+            }
+          >
+            <Target />
+            季度复盘
+          </a>
           <a href="/markets">
             <Globe2 />
             市场看板
@@ -549,6 +571,10 @@ export default function Home() {
           <a href="/learn">
             <Sparkles />
             每日心理学
+          </a>
+          <a href="/lifestyle">
+            <Sparkles />
+            兴趣与生活
           </a>
         </nav>
         <div className="sidebar-bottom">
@@ -671,11 +697,14 @@ export default function Home() {
             <a href="#cashflow">收支</a>
             <a href="#contributions">贡献</a>
             <a href="#framework">计划</a>
+            <a href="#quarterly-review">复盘</a>
             <button onClick={() => open({ kind: "members" })}>成员</button>
             <button onClick={() => open({ kind: "settings" })}>数据</button>
             <a href="/learn">心理学</a>
+            <a href="/lifestyle">兴趣</a>
             <a href="/updates">版本</a>
           </div>
+          <QuarterlyReminder state={state} />
           <div className="hero">
             <div>
               <span className="label">家庭净资产 · CAD</span>
@@ -1247,6 +1276,11 @@ export default function Home() {
               onBatch={() => open({ kind: "valuations" })}
             />
           </HouseholdReview>
+          <QuarterlyReview
+            state={state}
+            onChange={change}
+            disabled={!ready || !!store.cloudChoice || store.cloudLoading}
+          />
           <section className="card contributions-card" id="contributions">
             <div className="card-head">
               <div>

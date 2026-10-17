@@ -22,6 +22,7 @@ export async function dispatchChannelNotices(
   admin: SupabaseClient,
   householdId: string,
   alertId: string,
+  reviewQuarter?: string,
 ) {
   const result = { accepted: 0, failures: 0 };
   const { data, error } = await admin
@@ -31,6 +32,8 @@ export async function dispatchChannelNotices(
     .eq("enabled", true);
   if (error) return { accepted: 0, failures: 1 };
   for (const row of data ?? []) {
+    // Quarterly consent does not authorize a new WhatsApp template.
+    if (reviewQuarter && row.channel === "whatsapp") continue;
     if (!channelReadiness(row.channel as Channel).ready) {
       result.failures++;
       continue;
@@ -50,6 +53,9 @@ export async function dispatchChannelNotices(
         row.channel,
         decryptRecipient(row.destination_cipher),
         `wealth-${alertId}-${row.id}`,
+        false,
+        undefined,
+        reviewQuarter,
       );
     } catch (reason) {
       status = reason instanceof ChannelSendError ? reason.status : "failed";

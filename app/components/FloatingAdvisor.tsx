@@ -195,7 +195,11 @@ export default function FloatingAdvisor({
         body: JSON.stringify({
           message: question,
           preference: snapshot.preferences.model,
-          state: snapshot,
+          // Hobby metadata is not needed for financial advice; keep it out of requests.
+          state: {
+            ...snapshot,
+            preferences: { ...snapshot.preferences, lifestyle: undefined },
+          },
           voice: Boolean(spoken),
         }),
       });

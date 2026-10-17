@@ -34,6 +34,8 @@ export function hasSavedData(state: WealthState) {
     state.preferences.marketResearch !== undefined ||
     state.preferences.growthPlan !== undefined ||
     state.preferences.portfolioLinks !== undefined ||
+    state.preferences.quarterlyReviews !== undefined ||
+    state.preferences.lifestyle !== undefined ||
     !!state.messages.length ||
     !!state.chatArchives?.length
   );
@@ -59,7 +61,9 @@ export function connectionPlan(
     local.preferences.marketWatchlist === undefined &&
     local.preferences.marketResearch === undefined &&
     local.preferences.growthPlan === undefined &&
-    local.preferences.portfolioLinks === undefined
+    local.preferences.portfolioLinks === undefined &&
+    local.preferences.quarterlyReviews === undefined &&
+    local.preferences.lifestyle === undefined
   )
     return "merge-chat";
   return "choice";

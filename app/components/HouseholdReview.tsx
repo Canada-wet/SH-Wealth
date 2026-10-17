@@ -1,6 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { CalendarCheck, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { money, type WealthState } from "@/lib/wealth";
 import { reviewChecks, savingsScenario } from "@/lib/household-review";
 
@@ -35,47 +35,6 @@ export default function HouseholdReview({
   return (
     <div className="household-tools">
       {children}
-      <details className="household-review">
-        <summary>
-          <CalendarCheck size={18} /> 一起复盘{" "}
-          <span>15 分钟 · 核对记录与下一步</span>
-        </summary>
-        <div className="household-tool-body">
-          <p>
-            最近财务记录：
-            {review.age === null ? "尚无快照" : `${review.age} 天前`}
-            {review.delta !== null
-              ? ` · 上次记录净值变化 ${money(review.delta)}`
-              : ""}
-            。记录变化包含新增、删除、投入和估值，不等于投资收益。
-          </p>
-          <ul>
-            <li>
-              {review.completeBudget
-                ? `已录入收支，账面月结余 ${money(review.budget.surplus)}；一起核对旅行、维修和年度账单。`
-                : "收支未完整录入，先补齐收入和支出；缺失值不是零。"}
-            </li>
-            <li>
-              {review.missingReturns.length
-                ? `${review.missingReturns.length} 项资产未填本年回报。未填不等于0%；住房和车辆可以保持未知。`
-                : "已有回报记录仍需核对时间范围；记录值不代表未来收益。"}
-            </li>
-            <li>
-              {review.duplicateNames.length
-                ? `同名账户：${review.duplicateNames.join("、")}。建议用银行或成员区分，避免对话改错。`
-                : "账户名称无重复；语音编辑请清楚说出名称与归属。"}
-            </li>
-            <li>
-              {state.contributions.length
-                ? `已记录 ${state.contributions.length} 笔贡献；一起核对实际出资和转账。`
-                : "尚无实际贡献记录，持有资产占比不能替代出资占比。"}
-            </li>
-          </ul>
-          <button className="secondary" onClick={() => discuss(review.prompt)}>
-            让顾问带我们复盘
-          </button>
-        </div>
-      </details>
       <details className="household-scenario">
         <summary>
           <SlidersHorizontal size={18} /> 如果我们…{" "}

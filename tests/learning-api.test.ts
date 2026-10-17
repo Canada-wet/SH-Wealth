@@ -12,6 +12,7 @@ vi.mock("../lib/channel-server", () => ({ channelAdmin: mock.admin }));
 import { GET, PUT } from "../app/api/learning/route";
 import { GET as release } from "../app/api/releases/route";
 import { GET as daily } from "../app/api/learning/daily/route";
+import { APP_VERSION } from "../lib/releases";
 const household = "00000000-0000-4000-8000-000000000011";
 beforeEach(() => {
   vi.clearAllMocks();
@@ -51,7 +52,7 @@ it("未登录不能读写收藏或版本；管理员权限来自服务端验证�
     expect(await r.json()).toMatchObject({
       role: "admin",
       viewer: email,
-      version: "0.2.2",
+      version: APP_VERSION,
     });
   }
 });

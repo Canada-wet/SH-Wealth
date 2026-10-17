@@ -10,11 +10,12 @@ import {
   Globe2,
   ArrowUpRight,
   Target,
+  Headphones,
 } from "lucide-react";
 export default function MarketNavigator({
   active = "markets",
 }: {
-  active?: "markets" | "learn" | "updates";
+  active?: "markets" | "learn" | "updates" | "lifestyle";
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -73,6 +74,10 @@ export default function MarketNavigator({
             <Landmark />
             家庭计划
           </a>
+          <a href="/#quarterly-review">
+            <Target />
+            季度复盘
+          </a>
           <a
             href="/markets"
             aria-current={active === "markets" ? "page" : undefined}
@@ -93,6 +98,13 @@ export default function MarketNavigator({
           >
             <Users />
             版本更新 · Admin
+          </a>
+          <a
+            href="/lifestyle"
+            aria-current={active === "lifestyle" ? "page" : undefined}
+          >
+            <Headphones />
+            兴趣与生活
           </a>
         </nav>
         <div className="sidebar-bottom market-sidebar-note">
@@ -123,6 +135,12 @@ export default function MarketNavigator({
         </a>
         <a href="/learn" aria-current={active === "learn" ? "page" : undefined}>
           心理学
+        </a>
+        <a
+          href="/lifestyle"
+          aria-current={active === "lifestyle" ? "page" : undefined}
+        >
+          兴趣生活
         </a>
         <a
           href="/updates"

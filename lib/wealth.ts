@@ -1,6 +1,8 @@
 import { validResearchNotes } from "./market-research";
 import { validGrowthPlan } from "./growth-schema";
 import { validPortfolioLinks } from "./portfolio-links";
+import { validQuarterly } from "./quarterly-schema";
+import { validLifestyle } from "./lifestyle-schema";
 export type Owner = "joint" | "first" | "second" | string;
 export type Asset = {
   id: string;
@@ -86,6 +88,8 @@ export type WealthState = {
     marketResearch?: import("./market-research").ResearchNotes;
     growthPlan?: import("./growth-schema").GrowthPlan;
     portfolioLinks?: import("./portfolio-links").PortfolioLink[];
+    quarterlyReviews?: import("./quarterly-schema").QuarterlyReviews;
+    lifestyle?: import("./lifestyle-schema").Lifestyle;
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -462,6 +466,16 @@ export function alertsFor(state: WealthState) {
   return alerts;
 }
 export function validateState(raw: unknown): asserts raw is WealthState {
+  if (
+    (raw as WealthState)?.preferences?.lifestyle !== undefined &&
+    !validLifestyle((raw as WealthState).preferences.lifestyle)
+  )
+    throw new Error("兴趣与生活数据无效。");
+  if (
+    (raw as WealthState)?.preferences?.quarterlyReviews !== undefined &&
+    !validQuarterly((raw as WealthState).preferences.quarterlyReviews)
+  )
+    throw new Error("季度复盘数据无效。");
   if (
     (raw as WealthState)?.preferences?.portfolioLinks !== undefined &&
     !validPortfolioLinks((raw as WealthState).preferences.portfolioLinks)
