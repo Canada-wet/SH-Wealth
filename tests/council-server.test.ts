@@ -24,6 +24,7 @@ import {
 } from "../lib/council-server";
 import { COUNCIL_MODELS, councilPlan, type CouncilRun } from "../lib/council";
 import { councilModelSnapshot } from "../lib/council-provider";
+import { CouncilProviderError } from "../lib/council-provider";
 const id = "00000000-0000-4000-8000-000000000003";
 let doc: CouncilRun;
 beforeEach(() => {
@@ -190,6 +191,27 @@ it("追问只需一个响应者，读取历史后原子归档；当前轮全部�
   await advanceCouncil("owner", id);
   expect(mock.call).toHaveBeenCalledTimes(1);
   expect(doc.steps[8].error).toContain("本轮没有成功回应");
+});
+it("同轮已确认权限拒绝的型号跳过后续请求，其他模型继续，不自动换渠道", async () => {
+  doc.participants = ["deepseek-light", "openai-light", "openai-flagship"];
+  doc.models = COUNCIL_MODELS.filter((m) => doc.participants.includes(m.key));
+  doc.judge = null;
+  doc.steps = councilPlan(doc.participants, null).map((s) => ({
+    ...s,
+    status: "pending",
+    answer: "",
+    error: "",
+    usage: { input: null, output: null },
+    started_at: null,
+    finished_at: null,
+  }));
+  mock.call.mockRejectedValueOnce(
+    new CouncilProviderError("需要开通模型权限", "access"),
+  );
+  for (let i = 0; i < 9; i++) await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(7);
+  expect(doc.steps[3].error).toContain("未再次调用");
+  expect(doc.steps[6].error_kind).toBe("access");
 });
 it("未配置或已暂停不调用；错误保留成明确状态", async () => {
   doc.status = "paused";

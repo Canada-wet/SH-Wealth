@@ -112,7 +112,14 @@ export function councilAvailability(): CouncilAvailability[] {
     };
   });
 }
-export class CouncilProviderError extends Error {}
+export class CouncilProviderError extends Error {
+  constructor(
+    message: string,
+    readonly kind?: "access",
+  ) {
+    super(message);
+  }
+}
 async function boundedJson(response: Response) {
   const reader = response.body?.getReader();
   if (!reader) throw Error();
@@ -405,7 +412,8 @@ export async function callCouncilModel(
       cache: "no-store",
     });
     if (!response.ok) {
-      let hint = "";
+      let hint = "",
+        denied = response.status === 401 || response.status === 403;
       if (response.status === 400) {
         try {
           const error = await boundedJson(response);
@@ -422,8 +430,10 @@ export async function callCouncilModel(
           if (parameter) hint = `涉及 ${parameter} 参数。`;
           if (/not exist|not found|not supported.*model/i.test(description))
             hint = "该地域不支持此精确型号，或尚未开通该型号。";
-          if (/activate|permission|access denied/i.test(description))
+          if (/activate|permission|access denied/i.test(description)) {
             hint = "请先在百炼开通该模型服务权限。";
+            denied = true;
+          }
         } catch {
           /* Never expose an untrusted upstream body, question or key. */
         }
@@ -438,6 +448,7 @@ export async function callCouncilModel(
               : response.status === 400
                 ? `服务商拒绝请求（400）。${hint || "请检查型号、推理模式或上下文长度。"}未自动重试。`
                 : `服务商请求未成功（${response.status}）；未自动重试。`,
+        denied ? "access" : undefined,
       );
     }
     // Never persist hidden reasoning, tool requests or raw provider error bodies.

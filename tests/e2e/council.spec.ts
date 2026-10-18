@@ -182,6 +182,83 @@ async function councilFixture(
   return { calls: () => calls, run: () => run };
 }
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("浏览器真实 ReadableStream 逐段显示临时正文，只有 result 归档帧才完成", async ({
+  page,
+}) => {
+  await authenticate(page);
+  const fixture = await councilFixture(page);
+  await page.addInitScript(() => {
+    const native = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await native(...args);
+      const options = args[1];
+      let request;
+      try {
+        request = JSON.parse(String(options?.body || "{}"));
+      } catch {
+        return response;
+      }
+      if (request.action !== "advance" || !response.ok) return response;
+      const data = await response.json();
+      const encoder = new TextEncoder();
+      const seq = Math.max(
+        ...data.run.steps
+          .filter((s: { status: string }) => s.status === "succeeded")
+          .map((s: { seq: number }) => s.seq),
+      );
+      return new Response(
+        new ReadableStream({
+          async start(c) {
+            c.enqueue(
+              encoder.encode(
+                JSON.stringify({ type: "progress", phase: "thinking", seq }) +
+                  "\n",
+              ),
+            );
+            await new Promise((r) => setTimeout(r, 250));
+            c.enqueue(
+              encoder.encode(
+                JSON.stringify({
+                  type: "progress",
+                  phase: "answering",
+                  seq,
+                  preview: "### 合成流式正文\n\n这还是临时内容。",
+                }) + "\n",
+              ),
+            );
+            await new Promise((r) => setTimeout(r, 650));
+            c.enqueue(
+              encoder.encode(
+                JSON.stringify({ type: "result", run: data.run }) + "\n",
+              ),
+            );
+            c.close();
+          },
+        }),
+        { headers: { "Content-Type": "application/x-ndjson" } },
+      );
+    };
+  });
+  await page.goto("/council");
+  await page
+    .getByLabel("问题与已知条件")
+    .fill("合成流式问题：请按固定阶段比较两个方案。");
+  await page.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await page.getByRole("button", { name: "开始研讨", exact: true }).click();
+  await expect(page.locator(".council-stream-preview")).toContainText(
+    "临时正文",
+  );
+  await expect(page.locator(".council-stream-preview")).toContainText(
+    "合成流式正文",
+  );
+  await expect(page.locator(".council-session")).toContainText("6/6 步已归档", {
+    timeout: 20000,
+  });
+  expect(fixture.calls()).toBe(6);
+  await expect(page.locator(".council-stream-preview")).toHaveCount(0);
+  await page.reload();
+  expect(fixture.calls()).toBe(6);
+});
 test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手机不溢出", async ({
   page,
 }, info) => {

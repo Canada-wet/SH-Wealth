@@ -920,6 +920,9 @@ export default function CouncilPage() {
                     {busy && auto && (
                       <p role="status" className="council-live">
                         <LoaderCircle size={16} className="council-spin" />{" "}
+                        {progress?.seq !== undefined
+                          ? `${run.models.find((m) => m.key === run.steps.find((s) => s.seq === progress.seq)?.model_key)?.name || "模型"} · `
+                          : ""}
                         {progress?.phase === "thinking"
                           ? "模型正在推理"
                           : progress?.phase === "answering"
@@ -976,6 +979,7 @@ export default function CouncilPage() {
                   <Results
                     run={run}
                     round={round}
+                    activeSeq={busy ? progress?.seq : undefined}
                     inspect={(target, seq) => {
                       setTranscript(true);
                       setStage(target);

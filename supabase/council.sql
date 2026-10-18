@@ -113,7 +113,7 @@ begin
     if s->>'status'<>'running' then return d; end if;
     if action='finish' then
       if s->>'claim' is distinct from payload->>'claim' then raise exception 'council_conflict'; end if;
-      s:=(s-'claim')||jsonb_build_object('status',case when length(payload->>'answer')>0 then 'succeeded' else 'failed' end,'answer',left(coalesce(payload->>'answer',''),16000),'error',left(coalesce(payload->>'error',''),300),'usage',payload->'usage','finished_at',now());
+      s:=(s-'claim')||jsonb_build_object('status',case when length(payload->>'answer')>0 then 'succeeded' else 'failed' end,'answer',left(coalesce(payload->>'answer',''),16000),'error',left(coalesce(payload->>'error',''),300),'error_kind',case when payload->>'error_kind'='access' then 'access' else null end,'usage',payload->'usage','finished_at',now());
     else
       if (s->>'started_at')::timestamptz>now()-interval '6 minutes' then raise exception 'council_running'; end if;
       s:=(s-'claim')||jsonb_build_object('status','failed','error','提交结果不确定；用户选择跳过，未重新调用。','finished_at',now());

@@ -10,10 +10,12 @@ export default function Results({
   run,
   round,
   inspect,
+  activeSeq,
 }: {
   run: CouncilRun;
   round: number;
   inspect: (stage: CouncilStage, seq?: number) => void;
+  activeSeq?: number;
 }) {
   const current = councilRound(run, round);
   const finals = current.steps.filter(
@@ -67,9 +69,9 @@ export default function Results({
                 .map((s) => (
                   <span
                     key={s.seq}
-                    title={`${STAGES[s.stage]}：${s.status}`}
-                    className={`council-dot ${s.status}`}
-                    aria-label={`${STAGES[s.stage]} ${s.status}`}
+                    title={`${STAGES[s.stage]}：${activeSeq === s.seq ? "生成中" : s.status}`}
+                    className={`council-dot ${activeSeq === s.seq ? "running" : s.status}`}
+                    aria-label={`${STAGES[s.stage]} ${activeSeq === s.seq ? "生成中" : s.status}`}
                   />
                 ))}
             </span>

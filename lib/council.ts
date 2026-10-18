@@ -147,6 +147,7 @@ export type CouncilStep = {
   status: "pending" | "running" | "succeeded" | "failed";
   answer: string;
   error: string;
+  error_kind?: "access" | null;
   usage: {
     input: number | null;
     output: number | null;

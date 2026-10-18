@@ -78,6 +78,8 @@ Qwen 和百炼 GLM 使用 SSE，解析跨 chunk UTF-8、CRLF、多行事件、�
 
 `check-model` 是独立的白名单、同源、限频操作，仅允许 Qwen 两档与 GLM 旗舰，必须明确费用同意；只发送固定公开合成问题，不传用户问题 / 附件 / 财富，不写研讨和配额。成功表示本次确实返回正文，不代表未来不会限流或断线。用于本轮有界真实验证，以及用户连接自检；不能把原只读目录检查偷偷升级成付费测试。
 
+若某型号在同一轮已经收到明确的模型权限拒绝，后续该型号步骤跳过且不再次调用，其他模型继续。不会将临时超时误判成永久权限拒绝；修正权限后可通过新的明确追问重新选择该型号，原失败记录保留。控制台开通不等于当前生产 key 已获调用权限，需要核对新加坡地域、业务空间和 API key 的模型访问范围；若更换了 Vercel 凭证，还需重新部署使其生效。
+
 结果速览与观点对照只展示已归档原文和执行状态；共识 / 分歧栏目来自裁判本人，不由字符串投票生成。未设裁判时保留并列结论，不提供伪造的共识百分比。模型可见 Markdown 在原有安全渲染器中显示，不执行 HTML、远程图片或操作指令。
 
 依据：[百炼深度思考](https://www.alibabacloud.com/help/zh/model-studio/deep-thinking)、[百炼 GLM-ZHIPU](https://www.alibabacloud.com/help/en/model-studio/glm-zhipu)、[OpenAI 对话状态](https://developers.openai.com/api/docs/guides/conversation-state)、[Vercel 执行时限](https://vercel.com/docs/functions/configuring-functions/duration)。

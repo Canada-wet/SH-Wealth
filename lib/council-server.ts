@@ -171,8 +171,10 @@ export async function advanceCouncil(
     (s) => (s as typeof s & { claim?: string }).claim === claim,
   );
   if (!step) return run; // Another tab owns the call; never duplicate it.
+  onProgress?.({ phase: "waiting", seq: step.seq });
   let answer = "",
     error = "",
+    errorKind: "access" | undefined,
     usage: {
       input: number | null;
       output: number | null;
@@ -189,6 +191,19 @@ export async function advanceCouncil(
   const model = run.models.find((m) => m.key === step.model_key);
   try {
     if (!model) throw new CouncilProviderError("模型快照缺失，未发起调用。");
+    if (
+      run.steps.some(
+        (s) =>
+          s.seq < step.seq &&
+          s.model_key === step.model_key &&
+          (s.round ?? 0) === (step.round ?? 0) &&
+          s.error_kind === "access",
+      )
+    )
+      throw new CouncilProviderError(
+        "此型号本轮已被服务商拒绝访问，后续步骤已跳过，未再次调用。请修正模型权限后明确补问。",
+        "access",
+      );
     if (!step.round && step.stage !== "opening" && openings.length < 2)
       throw new CouncilProviderError(
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
@@ -217,6 +232,7 @@ export async function advanceCouncil(
     answer = result.answer;
     usage = result.usage;
   } catch (e) {
+    errorKind = e instanceof CouncilProviderError ? e.kind : undefined;
     error =
       e instanceof CouncilProviderError
         ? e.message
@@ -228,6 +244,7 @@ export async function advanceCouncil(
     claim,
     answer,
     error,
+    error_kind: errorKind ?? null,
     usage,
   });
 }
