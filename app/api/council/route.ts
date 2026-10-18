@@ -78,11 +78,36 @@ export async function POST(request: Request) {
     return fail("请在应用内操作。", 403);
   let raw: Record<string, unknown>;
   try {
-    if (Number(request.headers.get("content-length")) > 64000) throw Error();
-    const text = await request.text();
-    if (text.length > 16000) throw Error();
+    if (Number(request.headers.get("content-length")) > 700000) throw Error();
+    const reader = request.body?.getReader();
+    if (!reader) throw Error();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > 700000) {
+        await reader.cancel();
+        throw Error();
+      }
+      chunks.push(part.value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     raw = JSON.parse(text);
-    if (!raw || typeof raw !== "object") throw Error();
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      Array.isArray(raw) ||
+      (raw.action !== "create" && text.length > 16000)
+    )
+      throw Error();
   } catch {
     return fail("请求格式无效或内容过长。", 400);
   }

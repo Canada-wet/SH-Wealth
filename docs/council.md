@@ -1,4 +1,4 @@
-# 多模型研讨 · v0.6.1
+# 多模型研讨 · v0.6.2
 
 入口 `/council`。两位白名单成员均可用，但问题及历史按本人账号隔离，不自动共享给伴侣，不自动附带家庭资产、兴趣资料或既有聊天。页面明确同意后，所选服务商接收问题以及后续阶段需要的发言；他们的存储和处理取决于各自条款。
 
@@ -19,7 +19,7 @@
 | 服务 | 变量 | 核对型号 |
 | --- | --- | --- |
 | OpenAI | `OPENAI_API_KEY` | GPT-6 Luna / GPT-6 Astra |
-| Anthropic | `ANTHROPIC_API_KEY` | Claude Haiku 5.5 / Fable 5.1 |
+| Anthropic | `ANTHROPIC_API_KEY` | Claude Haiku 5.5 / Opus 5.5（日常旗舰） / Fable 5.1（深度推理，现役） |
 | DeepSeek | `DEEPSEEK_API_KEY` | DeepSeek V4.1 Flash / V4 Pro |
 | Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL` | Qwen 3.8 Flash / Max |
 | GLM | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `ZAI_API_KEY` | 百炼旗舰 `ZHIPU/GLM-5.3`；Flash 暂仅原厂 |
@@ -37,6 +37,8 @@
 
 ## 型号依据（核对日期 2026-10-18）
 
+Anthropic 官方当前仍列 Fable 5.1；5.1 与 Haiku / Opus 的 5.5 属于不同产品线，不能按数字判断过时。官方建议大多数工作先用 Opus 5.5，高要求推理再用 Fable。新增 `anthropic-opus`，保留 `anthropic-flagship` 的 Fable 映射与所有旧快照，不自动改变已有研讨的数据接收方。
+
 - [OpenAI 模型目录](https://developers.openai.com/api/docs/models)
 - [Anthropic 模型目录](https://platform.claude.com/docs/en/models/overview)
 - [DeepSeek 模型与价格](https://api-docs.deepseek.com/quick_start/pricing/)
@@ -51,3 +53,15 @@
 ## 验证
 
 核心、八种协议的模拟响应、认证/输入边界、防重复认领和失败恢复见 `tests/council*.test.ts`。`tests/council.sql` 使用合成研讨记录并整体回滚，检查 RLS、客户端写入拒绝、幂等创建、并发认领、暂停保存、停止和限额。浏览器交互测试使用隔离模拟，不发送真实问题至付费模型；不能据此声称八家服务均已激活。
+
+## 图片与附件
+
+- 浏览器本机处理；未开始的材料只在当前页面内存中，刷新会丢失。开始时才经认证接口保存到该用户的私密 `wealth_council_runs.document.attachments`。不创建公开对象、不发给额外 OCR 服务、不写家庭账本，也不自动读取任何本地文件。
+- 每场最多 5 份材料、2 张图片；原文件各不超过 10 MB。JPEG / PNG / WebP 重编码成去元数据的 JPEG，最长边起始 1800 像素，每张不超过 150 KB；用户必须预览小字可读性。JSON 序列化附件最多 600 KB，API 整体最多 700 KB（流式有界读取）；原有数据库单场 2 MB 上限保留。
+- TXT / MD / CSV / TSV / JSON 要求 UTF-8；DOCX 仅解压大小不超过 2 MB 的 `word/document.xml`，不执行宏/链接；PDF.js 在本机 worker 中读取最多 30 页的文字和页码。所有文档合计最多 30,000 字，超长拒绝而非静默截断。扫描 PDF 无 OCR，文档图像、批注、复杂表格和排版不保证保留；改用清晰截图。原始 PDF / DOCX 不保存，不能将本功能当原件备份。
+- PDF.js 的中文等 CMap 与标准字体在 `predev` / `prebuild` 从已安装依赖复制到版本化的自有静态目录；没有第三方 CDN，不向外部字体服务发送文件信息。生成目录被 Git 忽略，部署时自动生成。
+- 每步的提示附带完整文字材料（非此前发言 4,000 字摘录限制）；图片以真实多模态内容块随每一步发送。当前仅开放已核实的 OpenAI Responses、Anthropic Messages、Gemini GenerateContent 和百炼 Qwen 路径；其他型号本页只接收文字材料。图片场景中任何参会者或裁判不兼容均在付费前拒绝，无隐藏 OCR 或跨服务替换。
+- 文件名、文字与图片中的内容视为不可信证据，不服从其改变角色、泄露系统或调用工具的指令。提示要求引用文件名 / 页码，图像模糊时标注不确定。材料反复发送会增加输入用量，用户授权文案明确包含附件。
+- 附件随个人研讨完整删除，不留孤立对象；导出 Markdown 包含文字及图片说明，不嵌入 base64，图片回到私密历史查看。历史摘要列表不返回附件内容。幂等创建同时核对附件与型号快照，同一编号不同材料返回冲突。
+
+协议依据：[OpenAI 图像输入](https://developers.openai.com/api/docs/guides/images-vision)、[Claude Vision](https://platform.claude.com/docs/en/build-with-claude/vision)、[Gemini GenerateContent 图像](https://ai.google.dev/gemini-api/docs/generate-content/image-understanding)、[Qwen 视觉理解](https://www.alibabacloud.com/help/en/model-studio/vision)。

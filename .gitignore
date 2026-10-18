@@ -1,4 +1,5 @@
 node_modules
+/public/vendor/pdfjs/
 .next*
 .env*
 !.env.example

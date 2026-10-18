@@ -132,6 +132,54 @@ it("服务端强制本人 ID 与模型白名单，不接受伪造 owner / secret
     ).status,
   ).toBe(400);
 });
+it("有界文档超过旧 16K 限制仍可保存；图片与文字裁判不兼容、巨大请求在付费前拒绝", async () => {
+  const attachment = {
+    id,
+    name: "paper.txt",
+    kind: "text",
+    mime: "text/plain",
+    content: "研".repeat(20000),
+    note: "Synthetic",
+  };
+  const spec = {
+    action: "create",
+    id,
+    question: "分析材料中的证据",
+    participants: ["deepseek-light", "openai-light"],
+    judge: null,
+    consent: true,
+    attachments: [attachment],
+  };
+  expect((await post(spec)).status).toBe(200);
+  expect(mock.create.mock.calls[0][1].attachments[0].content.length).toBe(
+    20000,
+  );
+  expect(
+    (
+      await post({
+        ...spec,
+        attachments: [{ ...attachment, content: "a".repeat(710000) }],
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await post({
+        ...spec,
+        attachments: [
+          {
+            ...attachment,
+            kind: "image",
+            mime: "image/png",
+            content: "https://evil.test/image",
+          },
+        ],
+      })
+    ).status,
+  ).toBe(400);
+  expect(mock.create).toHaveBeenCalledTimes(1);
+  expect(mock.advance).not.toHaveBeenCalled();
+});
 it("返回归档时剥离执行 claim；无库不声称已保存，也不启动付费请求", async () => {
   const d = structuredClone(run);
   (d.steps[0] as unknown as Record<string, unknown>).claim = "private-claim";

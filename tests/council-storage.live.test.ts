@@ -65,7 +65,7 @@ it.skipIf(process.env.RUN_COUNCIL_READ_INTEGRATION !== "1")(
       expect(response.headers.get("cache-control")).toContain("private");
       const body = await response.json();
       expect(body.storageReady).toBe(true);
-      expect(body.models).toHaveLength(15);
+      expect(body.models).toHaveLength(16);
       expect(
         body.availability.find(
           (m: { key: string }) => m.key === "deepseek-light",

@@ -521,3 +521,58 @@
     grid-template-columns: 1fr;
   }
 }
+.council-materials {
+  border: 1px dashed var(--border, #d8e1d8);
+  border-radius: 16px;
+  padding: 18px;
+  margin: 20px 0;
+  background: #f7f9f5;
+}
+.council-materials p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #66766b;
+}
+.council-attachment-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.council-attachment {
+  min-width: 0;
+  border: 1px solid #dce5dc;
+  border-radius: 12px;
+  padding: 12px;
+  background: white;
+}
+.council-attachment summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.council-attachment summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+.council-attachment summary small {
+  color: #6e7f73;
+  white-space: nowrap;
+}
+.council-attachment img {
+  display: block;
+  max-width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  margin: 12px auto;
+}
+.council-attachment pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 280px;
+  overflow: auto;
+  font: 13px/1.65 inherit;
+  padding: 12px;
+  background: #f7f9f5;
+}

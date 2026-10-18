@@ -27,6 +27,11 @@ import {
   type CouncilProvider,
 } from "@/lib/council";
 import "./council.css";
+import Attachments, { AttachmentList } from "./Attachments";
+import {
+  councilCanSeeImages,
+  type CouncilAttachment,
+} from "@/lib/council-attachments";
 type HistoryItem = Pick<
   CouncilRun,
   "id" | "question" | "status" | "created_at"
@@ -55,6 +60,8 @@ async function api(body?: unknown, id?: string) {
 export default function CouncilPage() {
   const [showAllProviders, setShowAllProviders] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [attachments, setAttachments] = useState<CouncilAttachment[]>([]);
+  const [processingFiles, setProcessingFiles] = useState(false);
   const [availability, setAvailability] = useState<CouncilAvailability[]>([]),
     [storageReady, setStorageReady] = useState(false),
     [loading, setLoading] = useState(true),
@@ -234,7 +241,19 @@ export default function CouncilPage() {
     setBusy(true);
     setError("");
     setNotice("");
-    const signature = JSON.stringify({ question, participants, judge });
+    const expectedConnections = Object.fromEntries(
+      [...participants, ...(judge ? [judge] : [])].flatMap((key) => {
+        const c = availability.find((a) => a.key === key)?.connection;
+        return c ? [[key, c]] : [];
+      }),
+    );
+    const signature = JSON.stringify({
+      question,
+      participants,
+      judge,
+      attachments,
+      expectedConnections,
+    });
     if (draft.current?.signature !== signature)
       draft.current = { signature, id: crypto.randomUUID() };
     try {
@@ -245,12 +264,8 @@ export default function CouncilPage() {
         participants,
         judge: judge || null,
         consent,
-        expectedConnections: Object.fromEntries(
-          [...participants, ...(judge ? [judge] : [])].flatMap((key) => {
-            const c = availability.find((a) => a.key === key)?.connection;
-            return c ? [[key, c]] : [];
-          }),
-        ),
+        attachments,
+        expectedConnections,
       });
       accept(d.run);
       setCompose(false);
@@ -323,11 +338,17 @@ export default function CouncilPage() {
     stopAuto();
     setCompose(true);
     setQuestion("");
+    setAttachments([]);
     draft.current = null;
     setConsent(false);
     setError("");
     window.history.replaceState(null, "", "/council");
   };
+  const incompatibleImages =
+    attachments.some((a) => a.kind === "image") &&
+    [...participants, ...(judge ? [judge] : [])].some(
+      (key) => !councilCanSeeImages(COUNCIL_MODELS.find((m) => m.key === key)!),
+    );
   return (
     <main className="market-shell council-shell">
       <MarketNavigator active="council" />
@@ -342,7 +363,7 @@ export default function CouncilPage() {
           </div>
           <button
             className="primary-button"
-            disabled={busy || auto}
+            disabled={busy || auto || processingFiles}
             onClick={newQuestion}
           >
             <Plus size={17} /> 新问题
@@ -385,7 +406,7 @@ export default function CouncilPage() {
               history.map((h) => (
                 <button
                   className={run?.id === h.id && !compose ? "selected" : ""}
-                  disabled={busy || auto}
+                  disabled={busy || auto || processingFiles}
                   key={h.id}
                   onClick={() => void openRun(h.id)}
                 >
@@ -420,6 +441,22 @@ export default function CouncilPage() {
                   <span>补充目标、约束和反例，比简单问“哪个好”更有帮助。</span>
                   <span>{question.length}/6,000</span>
                 </div>
+                <Attachments
+                  items={attachments}
+                  onChange={(items) => {
+                    setAttachments(items);
+                    setConsent(false);
+                  }}
+                  onBusy={setProcessingFiles}
+                  disabled={busy}
+                />
+                {incompatibleImages && (
+                  <p role="alert" className="council-alert">
+                    图片需要所有参与者及裁判均支持看图。请选择
+                    OpenAI、Claude、Gemini 或 Qwen
+                    型号，或移除图片；不会把图片偷偷转交其他服务识别。
+                  </p>
+                )}
                 <div className="council-section-label">
                   <h3>谁来参与？</h3>
                   <span>{participants.length}/6 · 至少 2 个</span>
@@ -476,6 +513,14 @@ export default function CouncilPage() {
                                 />
                                 <span>
                                   <strong>{m.name}</strong>
+                                  <small>
+                                    {councilCanSeeImages(m)
+                                      ? "文字 + 看图"
+                                      : "本页仅文字材料"}
+                                    {m.model === "claude-fable-5-1"
+                                      ? " · 深度推理，仍为现役"
+                                      : ""}
+                                  </small>
                                   <small>
                                     {m.tier === "light"
                                       ? "轻量"
@@ -564,7 +609,7 @@ export default function CouncilPage() {
                     onChange={(e) => setConsent(e.target.checked)}
                   />
                   <span>
-                    我同意把问题及发言发送给所选服务商，并了解 API
+                    我同意把问题、附件内容及发言发送给所选服务商，并了解 API
                     用量可能收费。请勿填写账号密码或第三方隐私。
                   </span>
                 </label>
@@ -574,6 +619,8 @@ export default function CouncilPage() {
                     !storageReady ||
                     loading ||
                     busy ||
+                    processingFiles ||
+                    incompatibleImages ||
                     participants.length < 2 ||
                     question.trim().length < 5 ||
                     !consent
@@ -666,6 +713,12 @@ export default function CouncilPage() {
                         ? `裁判 ${run.models.find((m) => m.key === run.judge)?.name}`
                         : "无裁判，保留并列结论"}
                     </p>
+                    {!!run.attachments?.length && (
+                      <div className="council-materials">
+                        <h3>本场材料 · 已随历史私密保存</h3>
+                        <AttachmentList items={run.attachments} />
+                      </div>
+                    )}
                     <progress
                       value={completed}
                       max={run.steps.length}

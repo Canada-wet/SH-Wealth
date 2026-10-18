@@ -1,5 +1,6 @@
 import { it, expect, vi, afterEach } from "vitest";
 import { COUNCIL_MODELS } from "../lib/council";
+import type { CouncilAttachment } from "../lib/council-attachments";
 import {
   callCouncilModel,
   councilAvailability,
@@ -33,6 +34,73 @@ const onlyAlibaba = () => {
   enable();
   keys.filter((k) => k !== "QWEN_API_KEY").forEach((k) => vi.stubEnv(k, ""));
 };
+it.each([
+  "openai-light",
+  "anthropic-light",
+  "anthropic-opus",
+  "gemini-light",
+  "qwen-light",
+])("%s 真实多模态请求结构，不把图片仅作为文字提及", async (key) => {
+  enable();
+  const image: CouncilAttachment = {
+    id: "00000000-0000-4000-8000-000000000004",
+    name: "chart.png",
+    kind: "image",
+    mime: "image/png",
+    note: "Synthetic pixel",
+    content:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAusAAAAASUVORK5CYII=",
+  };
+  const m = COUNCIL_MODELS.find((v) => v.key === key)!;
+  const fetcher = vi.fn(async (_url: unknown, options: RequestInit) => {
+    const b = JSON.parse(String(options.body));
+    if (m.provider === "openai")
+      expect(b.input[0].content[0]).toMatchObject({
+        type: "input_image",
+        image_url: image.content,
+      });
+    if (m.provider === "anthropic")
+      expect(b.messages[0].content[0]).toMatchObject({
+        type: "image",
+        source: { type: "base64", media_type: image.mime },
+      });
+    if (m.provider === "gemini")
+      expect(b.contents[0].parts[0].inlineData).toEqual({
+        mimeType: image.mime,
+        data: image.content.split(",")[1],
+      });
+    if (m.provider === "qwen")
+      expect(b.messages[1].content[0]).toMatchObject({
+        type: "image_url",
+        image_url: { url: image.content },
+      });
+    return Response.json({
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "visible" }],
+        },
+      ],
+      content: [{ type: "text", text: "visible" }],
+      candidates: [{ content: { parts: [{ text: "visible" }] } }],
+      choices: [{ message: { content: "visible" } }],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  expect((await callCouncilModel(m, "s", "question", [image])).answer).toBe(
+    "visible",
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  await expect(
+    callCouncilModel(
+      COUNCIL_MODELS.find((v) => v.key === "deepseek-light")!,
+      "s",
+      "q",
+      [image],
+    ),
+  ).rejects.toThrow("未调用模型");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it("一把百炼key启用核实的五个型号；GLM Flash不自动替换", () => {
   onlyAlibaba();
   expect(
@@ -293,4 +361,36 @@ it("达到输出预算或展示长度时标注截断，用量未知不伪造为�
   const result = await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
   expect(result.answer.length).toBe(16000);
   expect(result.usage).toEqual({ input: null, output: null, truncated: true });
+});
+it("包含特殊字符的回复仍为数据库留足附件空间，不保存 NUL 或半个代理对", async () => {
+  enable();
+  const fetcher = vi.fn(async () =>
+    Response.json({
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "\u0001".repeat(16000) }],
+        },
+      ],
+    }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const result = await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
+  expect(Buffer.byteLength(JSON.stringify(result.answer))).toBeLessThanOrEqual(
+    60000,
+  );
+  expect(result.usage.truncated).toBe(true);
+  fetcher.mockResolvedValueOnce(
+    Response.json({
+      output: [
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "x".repeat(15999) + "😀\0" }],
+        },
+      ],
+    }),
+  );
+  const unicode = await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
+  expect(unicode.answer.isWellFormed()).toBe(true);
+  expect(unicode.answer).not.toContain("\0");
 });

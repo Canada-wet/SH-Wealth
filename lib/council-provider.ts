@@ -5,6 +5,11 @@ import {
   type CouncilAvailability,
 } from "./council";
 import { createHash } from "node:crypto";
+import {
+  councilCanSeeImages,
+  validateCouncilAttachments,
+  type CouncilAttachment,
+} from "./council-attachments";
 const KEY: Record<CouncilProvider, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
@@ -187,7 +192,15 @@ export async function callCouncilModel(
   model: CouncilModel,
   system: string,
   input: string,
+  attachments: CouncilAttachment[] = [],
 ) {
+  const images = validateCouncilAttachments(attachments).filter(
+    (a) => a.kind === "image",
+  );
+  if (images.length && !councilCanSeeImages(model))
+    throw new CouncilProviderError(
+      "此型号尚未核实图片输入支持；未调用模型。请选择看图型号或移除图片。",
+    );
   // Legacy runs had direct Kimi/GLM connections. Never silently migrate them.
   const connection =
     model.connection ??
@@ -221,7 +234,18 @@ export async function callCouncilModel(
   const p = model.provider,
     messages = [
       { role: "system", content: system },
-      { role: "user", content: input },
+      {
+        role: "user",
+        content: images.length
+          ? [
+              ...images.map((a) => ({
+                type: "image_url",
+                image_url: { url: a.content },
+              })),
+              { type: "text", text: input },
+            ]
+          : input,
+      },
     ];
   let endpoint: string,
     body: Record<string, unknown>,
@@ -247,7 +271,21 @@ export async function callCouncilModel(
     body = {
       model: model.model,
       instructions: system,
-      input,
+      input: images.length
+        ? [
+            {
+              role: "user",
+              content: [
+                ...images.map((a) => ({
+                  type: "input_image",
+                  image_url: a.content,
+                  detail: "auto",
+                })),
+                { type: "input_text", text: input },
+              ],
+            },
+          ]
+        : input,
       max_output_tokens: limit,
       store: false,
       ...(p === "openai"
@@ -266,7 +304,24 @@ export async function callCouncilModel(
     body = {
       model: model.model,
       system,
-      messages: [{ role: "user", content: input }],
+      messages: [
+        {
+          role: "user",
+          content: images.length
+            ? [
+                ...images.map((a) => ({
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: a.mime,
+                    data: a.content.split(",")[1],
+                  },
+                })),
+                { type: "text", text: input },
+              ]
+            : input,
+        },
+      ],
       max_tokens: limit,
     };
   } else if (p === "gemini") {
@@ -274,7 +329,17 @@ export async function callCouncilModel(
     headers = { "Content-Type": "application/json", "x-goog-api-key": key };
     body = {
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: input }] }],
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...images.map((a) => ({
+              inlineData: { mimeType: a.mime, data: a.content.split(",")[1] },
+            })),
+            { text: input },
+          ],
+        },
+      ],
       generationConfig: {
         maxOutputTokens: limit,
         ...(model.tier === "flagship"
@@ -385,12 +450,18 @@ export async function callCouncilModel(
       throw new CouncilProviderError(
         "未收到可展示的回答（可能触发内容限制或推理耗尽预算）；保留其他结果，不自动重试。",
       );
+    const normalized = text.trim().toWellFormed().replaceAll("\0", "\ufffd");
+    let answer = normalized.slice(0, 16000);
+    // Reserve space for attachments + all 19 replies within the unchanged 2 MB row limit.
+    while (Buffer.byteLength(JSON.stringify(answer), "utf8") > 60000)
+      answer = answer.slice(0, -256);
+    if (/[\uD800-\uDBFF]$/.test(answer)) answer = answer.slice(0, -1);
     return {
-      answer: text.trim().slice(0, 16000),
+      answer,
       usage: {
         input: tokenCount(incoming),
         output: tokenCount(outgoing),
-        truncated: truncated || text.length > 16000,
+        truncated: truncated || normalized.length > answer.length,
       },
     };
   } catch (e) {

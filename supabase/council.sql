@@ -36,7 +36,9 @@ begin
   select document into d from public.wealth_council_runs where id=run_id and user_id=target_user for update;
   if action='create' then
     if d is not null then
-      if d->>'question'<>payload->>'question' or d->'participants'<>payload->'participants' or d->'judge'<>payload->'judge' then raise exception 'council_conflict'; end if;
+      if d->>'question'<>payload->>'question' or d->'participants'<>payload->'participants' or d->'judge'<>payload->'judge'
+        or coalesce(d->'attachments','[]'::jsonb) is distinct from coalesce(payload->'attachments','[]'::jsonb)
+        or d->'models' is distinct from payload->'models' then raise exception 'council_conflict'; end if;
       return d;
     end if;
     if exists(select 1 from public.wealth_council_runs where id=run_id) then raise exception 'council_forbidden'; end if;

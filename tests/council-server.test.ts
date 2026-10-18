@@ -112,6 +112,16 @@ it("两标签并发只认领一次；持久化先于调用，返回后归档", a
   });
 });
 it("完整阶段真正互相读取发言；可用参与模型兼任裁判", async () => {
+  doc.attachments = [
+    {
+      id,
+      name: "evidence.txt",
+      kind: "text",
+      mime: "text/plain",
+      content: "Synthetic source material",
+      note: "本机提取文字",
+    },
+  ];
   for (let i = 0; i < 7; i++) await advanceCouncil("owner", id);
   expect(doc.status).toBe("complete");
   expect(mock.call).toHaveBeenCalledTimes(7);
@@ -119,6 +129,11 @@ it("完整阶段真正互相读取发言；可用参与模型兼任裁判", asyn
   expect(JSON.parse(mock.call.mock.calls[2][2]).responses).toHaveLength(2);
   expect(JSON.parse(mock.call.mock.calls[4][2]).responses).toHaveLength(4);
   expect(mock.call.mock.calls[6][1]).toContain("作独立裁判");
+  expect(
+    mock.call.mock.calls.every((call) =>
+      call[2].includes("Synthetic source material"),
+    ),
+  ).toBe(true);
 });
 it("开场不足两份就跳过后续付费请求，不伪造完整研讨", async () => {
   mock.call.mockRejectedValueOnce(Error("internal-secret"));

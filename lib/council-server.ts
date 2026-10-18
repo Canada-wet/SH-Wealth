@@ -14,6 +14,11 @@ import {
   councilAvailability,
   councilModelSnapshot,
 } from "./council-provider";
+import {
+  validateCouncilAttachments,
+  councilCanSeeImages,
+  type CouncilAttachment,
+} from "./council-attachments";
 export class CouncilError extends Error {
   constructor(
     message: string,
@@ -83,6 +88,7 @@ export async function createCouncil(
     question: string;
     participants: string[];
     judge: string | null;
+    attachments?: CouncilAttachment[];
     expectedConnections?: Record<
       string,
       NonNullable<CouncilModel["connection"]>
@@ -95,6 +101,12 @@ export async function createCouncil(
   const models = COUNCIL_MODELS.filter((m) => keys.includes(m.key)).map(
     councilModelSnapshot,
   );
+  const attachments = validateCouncilAttachments(spec.attachments);
+  if (
+    attachments.some((a) => a.kind === "image") &&
+    models.some((m) => !councilCanSeeImages(m))
+  )
+    throw new CouncilError("图片研讨需要所有参与者和裁判均支持看图。", 400);
   for (const m of models) {
     const expected = spec.expectedConnections?.[m.key],
       actual = m.connection!;
@@ -152,7 +164,14 @@ export async function advanceCouncil(user: string, id: string) {
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
       );
     const prompt = councilPrompt(run, step),
-      result = await callCouncilModel(model, prompt.system, prompt.input);
+      result = await callCouncilModel(
+        model,
+        prompt.system,
+        prompt.input,
+        validateCouncilAttachments(run.attachments).filter(
+          (a) => a.kind === "image",
+        ),
+      );
     answer = result.answer;
     usage = result.usage;
   } catch (e) {
