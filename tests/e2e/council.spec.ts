@@ -230,6 +230,8 @@ test("图片、PDF、DOCX 和文字本机预览，检查看图兼容，归档后
     "/vendor/pdfjs/6.4.299/cmaps/UniGB-UCS2-H.bcmap",
   );
   expect(cmap.status()).toBe(200);
+  expect(cmap.headers()["content-type"]).not.toContain("text/html");
+  expect((await cmap.body()).byteLength).toBeGreaterThan(1000);
   await upload.setInputFiles({
     name: "notes.txt",
     mimeType: "text/plain",

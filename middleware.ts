@@ -6,6 +6,8 @@ export async function middleware(request: NextRequest) {
   // Recovery is public; the cron route independently validates its secret.
   if (
     path === "/login" ||
+    // Versioned library resources only; user attachments never live under this path.
+    path.startsWith("/vendor/pdfjs/") ||
     path.startsWith("/auth/") ||
     path === "/api/advisor/digest" ||
     path === "/api/market/briefing/daily" ||

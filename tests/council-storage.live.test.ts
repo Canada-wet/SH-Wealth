@@ -83,6 +83,13 @@ it.skipIf(process.env.RUN_COUNCIL_READ_INTEGRATION !== "1")(
     const privatePage = await fetch(app + "/council", { redirect: "manual" });
     expect(privatePage.status).toBe(307);
     expect(privatePage.headers.get("location")).toContain("/login");
+    const cmap = await fetch(
+      app + "/vendor/pdfjs/6.4.299/cmaps/UniGB-UCS2-H.bcmap",
+      { redirect: "manual" },
+    );
+    expect(cmap.status).toBe(200);
+    expect(cmap.headers.get("content-type")).not.toContain("text/html");
+    expect((await cmap.arrayBuffer()).byteLength).toBeGreaterThan(1000);
   },
   60000,
 );
