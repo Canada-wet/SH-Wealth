@@ -183,10 +183,11 @@ export async function advanceCouncil(
     } = { input: null, output: null };
   const openings = run.steps.filter(
     (s) =>
-      !s.round &&
+      (s.round ?? 0) === (step.round ?? 0) &&
       s.stage === "opening" &&
       s.status === "succeeded" &&
-      !s.usage?.interrupted,
+      !s.usage?.interrupted &&
+      !s.usage?.truncated,
   );
   const model = run.models.find((m) => m.key === step.model_key);
   try {
@@ -204,18 +205,21 @@ export async function advanceCouncil(
         "此型号本轮已被服务商拒绝访问，后续步骤已跳过，未再次调用。请修正模型权限后明确补问。",
         "access",
       );
-    if (!step.round && step.stage !== "opening" && openings.length < 2)
+    const debate =
+      !step.round || run.turns?.[step.round - 1]?.mode === "debate";
+    if (debate && step.stage !== "opening" && openings.length < 2)
       throw new CouncilProviderError(
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
       );
     if (
-      step.round &&
       step.stage === "judge" &&
       !run.steps.some(
         (s) =>
-          s.round === step.round &&
-          s.stage === "followup" &&
-          s.status === "succeeded",
+          (s.round ?? 0) === (step.round ?? 0) &&
+          s.stage === (debate ? "revision" : "followup") &&
+          s.status === "succeeded" &&
+          !s.usage?.interrupted &&
+          !s.usage?.truncated,
       )
     )
       throw new CouncilProviderError("本轮没有成功回应，裁判步骤未调用模型。");

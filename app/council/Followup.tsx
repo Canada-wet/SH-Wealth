@@ -1,7 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { CouncilRun } from "@/lib/council";
-import { COUNCIL_MAX_FOLLOWUPS, councilConnectionNote } from "@/lib/council";
+import type { CouncilRun, CouncilFollowupMode } from "@/lib/council";
+import {
+  COUNCIL_MAX_FOLLOWUPS,
+  councilConnectionNote,
+  councilFollowupPlan,
+} from "@/lib/council";
 export default function Followup({
   run,
   disabled,
@@ -14,6 +18,7 @@ export default function Followup({
   const [question, setQuestion] = useState(""),
     [models, setModels] = useState<string[]>(run.participants),
     [judge, setJudge] = useState(run.judge || ""),
+    [mode, setMode] = useState<CouncilFollowupMode>("debate"),
     [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -23,6 +28,7 @@ export default function Followup({
     setQuestion("");
     setModels(run.participants);
     setJudge(run.judge || "");
+    setMode("debate");
     setConsent(false);
     draft.current = null;
     setError("");
@@ -32,6 +38,14 @@ export default function Followup({
     !run.steps.some((s) => s.status === "running") &&
     run.steps.some((s) => s.status === "succeeded") &&
     count < COUNCIL_MAX_FOLLOWUPS;
+  const calls = councilFollowupPlan(
+    models,
+    judge || null,
+    mode,
+    count + 1,
+    run.steps.length,
+  ).length;
+  const tooFew = models.length < (mode === "debate" ? 2 : 1);
   return (
     <section className="council-card council-followup" aria-label="继续追问">
       <div className="council-section-label">
@@ -41,7 +55,7 @@ export default function Followup({
         </span>
       </div>
       <p className="council-muted">
-        接续最新一轮，沿用本场资料、原问题和历史观点；可只问一个模型，也可邀请多方回应，不重跑三阶段。这里只处理本场上下文，不会修改财富账本。
+        接续最新一轮，沿用本场资料、原问题和历史观点。默认让模型先独立回应，再互相质询、修订结论；只新增本轮步骤，不重跑旧轮。不会修改财富账本。
       </p>
       {!canAsk && (
         <p className="council-muted">
@@ -64,6 +78,64 @@ export default function Followup({
           }}
         />
       </label>
+      <fieldset
+        className="council-followup-mode"
+        disabled={disabled || busy || !canAsk}
+      >
+        <legend>追问方式</legend>
+        <label>
+          <input
+            type="radio"
+            name={`followup-mode-${run.id}`}
+            value="debate"
+            checked={mode === "debate"}
+            onChange={() => {
+              setMode("debate");
+              setConsent(false);
+            }}
+          />
+          <span>
+            相互研讨<small>每个模型 3 次调用 · 至少 2 个模型</small>
+          </span>
+        </label>
+        <label>
+          <input
+            type="radio"
+            name={`followup-mode-${run.id}`}
+            value="direct"
+            checked={mode === "direct"}
+            onChange={() => {
+              setMode("direct");
+              setConsent(false);
+            }}
+          />
+          <span>
+            直接回应<small>每个模型 1 次调用 · 不互相质询</small>
+          </span>
+        </label>
+      </fieldset>
+      {mode === "debate" && (
+        <ol className="council-followup-flow" aria-label="本轮研讨流程">
+          <li>
+            <strong>1 · 独立回应</strong>
+            <span>基于新问题更新各自判断</span>
+          </li>
+          <li>
+            <strong>2 · 交叉质询</strong>
+            <span>阅读彼此观点，指出分歧与证据缺口</span>
+          </li>
+          <li>
+            <strong>3 · 修订结论</strong>
+            <span>回应质疑，说明采纳与保留的意见</span>
+          </li>
+          {judge && (
+            <li>
+              <strong>4 · 裁判汇总</strong>
+              <span>汇总本轮共识、分歧和下一步</span>
+            </li>
+          )}
+        </ol>
+      )}
       <div className="council-followup-models">
         {run.models.map((m) => (
           <label key={m.key}>
@@ -111,9 +183,18 @@ export default function Followup({
           ))}
         </select>
       </label>
+      {tooFew && (
+        <p className="council-alert" role="status">
+          {mode === "debate"
+            ? "相互研讨至少需要 2 个模型；也可切换为直接回应。"
+            : "请至少选择 1 个回应模型。"}
+        </p>
+      )}
       <p className="council-muted">
-        本次 {models.length + (judge ? 1 : 0)} 次新调用；每人每天最多 10
-        次追问。原失败请求不会自动重发；补问同一模型仍可能再次计费。
+        本次 {calls} 次新调用（{models.length} 个模型 ×{" "}
+        {mode === "debate" ? 3 : 1}
+        {judge ? " + 裁判 1 次" : ""}）；每人每天最多 10
+        次追问。失败步骤不会自动重发，未执行步骤不调用；补问同一模型仍可能再次计费。
       </p>
       <label className="council-consent">
         <input
@@ -139,13 +220,14 @@ export default function Followup({
           !canAsk ||
           !consent ||
           question.trim().length < 2 ||
-          !models.length
+          tooFew
         }
         onClick={async () => {
           const signature = JSON.stringify({
             question,
             models,
             judge,
+            mode,
             count,
             run: run.id,
           });
@@ -161,6 +243,7 @@ export default function Followup({
               question,
               participants: models,
               judge: judge || null,
+              mode,
               baseRound: count,
               consent,
             });

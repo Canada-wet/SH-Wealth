@@ -22,7 +22,12 @@ import {
   advanceCouncil,
   councilCommand,
 } from "../lib/council-server";
-import { COUNCIL_MODELS, councilPlan, type CouncilRun } from "../lib/council";
+import {
+  COUNCIL_MODELS,
+  councilPlan,
+  councilFollowupPlan,
+  type CouncilRun,
+} from "../lib/council";
 import { councilModelSnapshot } from "../lib/council-provider";
 import { CouncilProviderError } from "../lib/council-provider";
 const id = "00000000-0000-4000-8000-000000000003";
@@ -191,6 +196,89 @@ it("追问只需一个响应者，读取历史后原子归档；当前轮全部�
   await advanceCouncil("owner", id);
   expect(mock.call).toHaveBeenCalledTimes(1);
   expect(doc.steps[8].error).toContain("本轮没有成功回应");
+});
+function appendDebate() {
+  doc.steps.forEach((s) => {
+    s.status = "succeeded";
+    s.answer = "旧轮有效结论";
+  });
+  doc.turns = [
+    {
+      id,
+      question: "新增约束后再研讨",
+      participants: doc.participants,
+      judge: doc.judge,
+      mode: "debate",
+      created_at: "2026-10-18",
+    },
+  ];
+  doc.steps.push(
+    ...councilFollowupPlan(
+      doc.participants,
+      doc.judge,
+      "debate",
+      1,
+      doc.steps.length,
+    ).map((s) => ({
+      ...s,
+      status: "pending" as const,
+      answer: "",
+      error: "",
+      usage: { input: null, output: null },
+      started_at: null,
+      finished_at: null,
+    })),
+  );
+}
+it("追问完整三阶段只运行新步骤；质询读取本轮独立观点，修订读取本轮质询", async () => {
+  appendDebate();
+  for (let i = 0; i < 7; i++) await advanceCouncil("owner", id);
+  expect(doc.status).toBe("complete");
+  expect(mock.call).toHaveBeenCalledTimes(7);
+  const context = (i: number) => JSON.parse(mock.call.mock.calls[i][2]);
+  expect(
+    context(1).responses.every((s: { round: number }) => s.round === 0),
+  ).toBe(true);
+  expect(
+    context(2).responses.filter((s: { round: number }) => s.round === 1),
+  ).toHaveLength(2);
+  expect(
+    context(4).responses.filter(
+      (s: { round: number; stage: string }) =>
+        s.round === 1 && s.stage === "交叉质询",
+    ),
+  ).toHaveLength(2);
+  expect(
+    context(6).responses.filter(
+      (s: { round: number; stage: string }) =>
+        s.round === 1 && s.stage === "修订结论",
+    ),
+  ).toHaveLength(2);
+  expect(doc.steps.slice(0, 7).every((s) => s.answer === "旧轮有效结论")).toBe(
+    true,
+  );
+});
+it("旧轮成功不能替代本轮观点；本轮不足两份完整开场不调用交锋和裁判", async () => {
+  appendDebate();
+  mock.call.mockResolvedValueOnce({
+    answer: "不完整的开场",
+    usage: { input: 1, output: 2, interrupted: true },
+  });
+  for (let i = 0; i < 7; i++) await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(2);
+  expect(doc.status).toBe("complete");
+  expect(doc.steps.slice(9).every((s) => s.error.includes("不足两份"))).toBe(
+    true,
+  );
+});
+it("本轮修订全部失败时不让裁判用旧结论冒充新汇总", async () => {
+  appendDebate();
+  for (let i = 0; i < 4; i++) await advanceCouncil("owner", id);
+  mock.call.mockRejectedValueOnce(new CouncilProviderError("响应失败"));
+  mock.call.mockRejectedValueOnce(new CouncilProviderError("响应失败"));
+  for (let i = 0; i < 3; i++) await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(6);
+  expect(doc.steps.at(-1)?.error).toContain("本轮没有成功回应");
 });
 it("同轮已确认权限拒绝的型号跳过后续请求，其他模型继续，不自动换渠道", async () => {
   doc.participants = ["deepseek-light", "openai-light", "openai-flagship"];

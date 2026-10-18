@@ -1,6 +1,13 @@
 import type { CouncilRun } from "./council";
 export function councilRound(run: CouncilRun, round: number) {
+  const mode =
+    !round || run.turns?.[round - 1]?.mode === "debate" ? "debate" : "direct";
   return {
+    mode,
+    firstStage:
+      mode === "debate" ? ("opening" as const) : ("followup" as const),
+    finalStage:
+      mode === "debate" ? ("revision" as const) : ("followup" as const),
     question: round
       ? (run.turns?.[round - 1]?.question ?? "追问")
       : run.question,

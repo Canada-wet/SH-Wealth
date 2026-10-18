@@ -104,6 +104,7 @@ it("追问只把经过校验的请求交给本人原子命令，未授权不启�
     participants: ["openai-light"],
     judge: null,
     baseRound: 0,
+    mode: "direct",
   });
   const d = structuredClone(run);
   Object.assign(d.steps[0], { claim: "DO_NOT_EXPOSE" });
@@ -134,6 +135,33 @@ it("所有读写需验证登录，拒绝跨源请求、任意动作和过大内�
   expect((await post({ question: "x".repeat(16001) })).status).toBe(400);
   expect(mock.create).not.toHaveBeenCalled();
   expect(mock.advance).not.toHaveBeenCalled();
+});
+it("追问三阶段模式校验后交给数据库，不能伪造计划；新增步骤可明确跳过到最后一轮", async () => {
+  const spec = {
+    action: "followup",
+    id,
+    turnId: id,
+    question: "新条件下请继续研讨",
+    participants: ["openai-light", "deepseek-light"],
+    judge: null,
+    baseRound: 0,
+    consent: true,
+    mode: "debate",
+    steps: [{ stage: "evil" }],
+  };
+  expect((await post({ ...spec, participants: ["openai-light"] })).status).toBe(
+    400,
+  );
+  expect((await post({ ...spec, mode: "evil" })).status).toBe(400);
+  expect(mock.command).not.toHaveBeenCalled();
+  expect((await post(spec)).status).toBe(200);
+  expect(mock.command.mock.calls[0][3]).toMatchObject({
+    mode: "debate",
+    participants: spec.participants,
+  });
+  expect(mock.command.mock.calls[0][3]).not.toHaveProperty("steps");
+  expect((await post({ action: "abandon", id, seq: 170 })).status).toBe(200);
+  expect((await post({ action: "abandon", id, seq: 171 })).status).toBe(400);
 });
 it("服务端强制本人 ID 与模型白名单，不接受伪造 owner / secret / URL", async () => {
   const response = await post({

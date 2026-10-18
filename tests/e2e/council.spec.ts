@@ -5,6 +5,7 @@ import { authenticate, cleanupAuthenticated } from "./auth-helper";
 import {
   COUNCIL_MODELS,
   councilPlan,
+  councilFollowupPlan,
   type CouncilRun,
 } from "../../lib/council";
 async function councilFixture(
@@ -113,29 +114,20 @@ async function councilFixture(
           question: body.question,
           participants: body.participants,
           judge: body.judge,
+          mode: body.mode || "direct",
           created_at: new Date().toISOString(),
         },
       ];
       const round = run.turns.length;
-      for (const key of body.participants)
+      for (const step of councilFollowupPlan(
+        body.participants,
+        body.judge,
+        body.mode || "direct",
+        round,
+        run.steps.length,
+      ))
         run.steps.push({
-          seq: run.steps.length,
-          round,
-          model_key: key,
-          stage: "followup",
-          status: "pending",
-          answer: "",
-          error: "",
-          usage: { input: null, output: null },
-          started_at: null,
-          finished_at: null,
-        });
-      if (body.judge)
-        run.steps.push({
-          seq: run.steps.length,
-          round,
-          model_key: body.judge,
-          stage: "judge",
+          ...step,
           status: "pending",
           answer: "",
           error: "",
@@ -344,6 +336,7 @@ test("研讨结束后只问一位模型并可选裁判，轮次与材料刷新�
     timeout: 20000,
   });
   const form = page.getByRole("region", { name: "继续追问", exact: true });
+  await form.getByRole("radio", { name: /直接回应/ }).check();
   await form
     .getByRole("textbox", { name: "继续追问", exact: true })
     .fill("如果只能投入两周时间，结论是否改变？");
@@ -384,6 +377,116 @@ test("研讨结束后只问一位模型并可选裁判，轮次与材料刷新�
   expect(await readFile((await (await exported).path())!, "utf8")).toContain(
     "如果只能投入两周时间",
   );
+});
+test("追问默认相互辩论，三阶段及裁判可回看，直接回应混合轮次保留且刷新不重跑", async ({
+  page,
+}, info) => {
+  test.setTimeout(45000);
+  await authenticate(page);
+  const fixture = await councilFixture(page);
+  await page.goto("/council");
+  await page
+    .getByLabel("问题与已知条件")
+    .fill("合成研讨：比较两种学习和生活计划。");
+  await page.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await page.getByRole("button", { name: "开始研讨", exact: true }).click();
+  await expect(page.locator(".council-session")).toContainText("6/6 步已归档", {
+    timeout: 15000,
+  });
+  const form = page.getByRole("region", { name: "继续追问", exact: true });
+  await expect(form.getByRole("radio", { name: /相互研讨/ })).toBeChecked();
+  await form.getByRole("textbox").fill("如果时间减少一半，请互相质询再修订。 ");
+  await form.getByLabel("追问裁判").selectOption("openai-light");
+  await expect(form).toContainText("本次 7 次新调用");
+  expect(
+    (await form.getByLabel("追问裁判").boundingBox())!.height,
+  ).toBeGreaterThanOrEqual(44);
+  await expect(form.getByLabel("本轮研讨流程")).toContainText("交叉质询");
+  await form.screenshot({
+    path: `/private/tmp/council-followup-debate-${info.project.name}.png`,
+  });
+  await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();
+  await form.getByRole("button", { name: "发送追问" }).click();
+  await expect(page.locator(".council-session")).toContainText(
+    "13/13 步已归档",
+    { timeout: 20000 },
+  );
+  expect(fixture.calls()).toBe(13);
+  expect(fixture.run()?.turns?.[0].mode).toBe("debate");
+  expect(
+    fixture
+      .run()
+      ?.steps.filter((s) => s.round === 1)
+      .map((s) => s.stage),
+  ).toEqual([
+    "opening",
+    "opening",
+    "critique",
+    "critique",
+    "revision",
+    "revision",
+    "judge",
+  ]);
+  await expect(page.locator(".council-current-question")).toContainText(
+    "相互研讨",
+  );
+  await expect(page.getByLabel("研讨结论速览")).toContainText("2/2");
+  await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
+  await page.getByRole("button", { name: /^交叉质询/ }).click();
+  await expect(page.locator(".council-answer")).toHaveCount(2);
+  await expect(page.locator(".council-answer").first()).toContainText(
+    "critique",
+  );
+  await page.reload();
+  await expect(page.locator(".council-session")).toContainText(
+    "13/13 步已归档",
+  );
+  await expect(
+    page
+      .getByLabel("研讨结论速览")
+      .getByLabel("修订结论 succeeded", { exact: true }),
+  ).toHaveCount(2);
+  expect(fixture.calls()).toBe(13);
+  await form.getByRole("radio", { name: /直接回应/ }).check();
+  await form.getByRole("checkbox", { name: /DeepSeek/ }).uncheck();
+  await form.getByRole("textbox").fill("最后只请一位概括执行步骤。");
+  await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();
+  await form.getByRole("button", { name: "发送追问" }).click();
+  await expect(page.locator(".council-session")).toContainText(
+    "14/14 步已归档",
+    { timeout: 10000 },
+  );
+  await expect(page.locator(".council-current-question")).toContainText(
+    "直接回应",
+  );
+  await page.getByRole("button", { name: "追问 1", exact: true }).click();
+  await expect(page.locator(".council-current-question")).toContainText(
+    "时间减少一半",
+  );
+  await expect(page.getByLabel("研讨结论速览")).toContainText("2/2");
+  await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
+  await page.getByRole("button", { name: /^修订结论/ }).click();
+  await expect(page.locator(".council-answer").first()).toContainText(
+    "revision",
+  );
+  const exported = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出", exact: true }).click();
+  const text = await readFile((await (await exported).path())!, "utf8");
+  expect(text).toContain("追问 1 · 相互研讨");
+  expect(text).toContain("追问 2 · 直接回应");
+  await page.screenshot({
+    path: `/private/tmp/council-debate-results-${info.project.name}.png`,
+    fullPage: true,
+  });
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+  }
+  expect(fixture.calls()).toBe(14);
 });
 test("图片、PDF、DOCX 和文字本机预览，检查看图兼容，归档后刷新仍可回看材料", async ({
   page,

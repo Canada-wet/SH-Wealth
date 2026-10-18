@@ -32,7 +32,7 @@ grant all on public.wealth_council_quota to service_role;
 create or replace function public.wealth_council_command(action text, target_user uuid, run_id uuid, payload jsonb default '{}') returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare
-  d jsonb; s jsonb; idx integer; t jsonb; existing_turn jsonb; round_no integer; additions jsonb; k text; current_day date := (now() at time zone 'America/Toronto')::date;
+  d jsonb; s jsonb; idx integer; t jsonb; existing_turn jsonb; round_no integer; additions jsonb; k text; followup_mode text; stage_name text; current_day date := (now() at time zone 'America/Toronto')::date;
 begin
   if not exists(select 1 from auth.users where id=target_user and email_confirmed_at is not null and lower(email) in ('henrywhy233@gmail.com','sallyxie0378@gmail.com')) then raise exception 'council_forbidden'; end if;
   perform pg_advisory_xact_lock(hashtextextended(target_user::text,723));
@@ -57,9 +57,12 @@ begin
   end if;
   if d is null then raise exception 'council_not_found'; end if;
   if action='followup' then
+    -- Missing mode is the legacy direct-response contract, not consent to 3x calls.
+    followup_mode:=coalesce(payload->>'mode','direct');
+    if followup_mode not in ('debate','direct') or (payload ? 'mode' and jsonb_typeof(payload->'mode')<>'string') then raise exception 'council_invalid'; end if;
     select value into existing_turn from jsonb_array_elements(coalesce(d->'turns','[]'::jsonb)) where value->>'id'=payload->>'turnId';
     if existing_turn is not null then
-      if existing_turn->>'question' is distinct from payload->>'question' or existing_turn->'participants' is distinct from payload->'participants' or existing_turn->'judge' is distinct from payload->'judge' then raise exception 'council_conflict'; end if;
+      if existing_turn->>'question' is distinct from payload->>'question' or existing_turn->'participants' is distinct from payload->'participants' or existing_turn->'judge' is distinct from payload->'judge' or coalesce(existing_turn->>'mode','direct')<>followup_mode then raise exception 'council_conflict'; end if;
       return d;
     end if;
     round_no:=jsonb_array_length(coalesce(d->'turns','[]'::jsonb))+1;
@@ -67,7 +70,8 @@ begin
     if round_no-1<>(payload->>'baseRound')::integer then raise exception 'council_conflict'; end if;
     if d->>'status' not in ('complete','cancelled') or exists(select 1 from jsonb_array_elements(d->'steps') x where x->>'status'='running') or not exists(select 1 from jsonb_array_elements(d->'steps') x where x->>'status'='succeeded') then raise exception 'council_followup_state'; end if;
     if exists(select 1 from public.wealth_council_runs where user_id=target_user and id<>run_id and status in ('active','paused')) then raise exception 'council_active'; end if;
-    if length(payload->>'question') not between 2 and 4000 or jsonb_array_length(payload->'participants') not between 1 and 6 then raise exception 'council_invalid'; end if;
+    if coalesce(jsonb_typeof(payload->'participants'),'null')<>'array' then raise exception 'council_invalid'; end if;
+    if length(payload->>'question') not between 2 and 4000 or jsonb_array_length(payload->'participants') not between (case followup_mode when 'debate' then 2 else 1 end) and 6 then raise exception 'council_invalid'; end if;
     if (select count(distinct value) from jsonb_array_elements_text(payload->'participants'))<>jsonb_array_length(payload->'participants') then raise exception 'council_invalid'; end if;
     for k in select value from jsonb_array_elements_text(payload->'participants') union select payload->>'judge' where payload->>'judge' is not null loop
       if not exists(select 1 from jsonb_array_elements(d->'models') m where m->>'key'=k) then raise exception 'council_invalid'; end if;
@@ -78,16 +82,18 @@ begin
     select jsonb_agg(case when value->>'status'='pending' then value||jsonb_build_object('status','failed','error','用户结束原轮次后另开追问；此步骤未调用。','finished_at',now()) else value end order by ordinality) into s from jsonb_array_elements(d->'steps') with ordinality;
     d:=jsonb_set(d,'{steps}',s);
     additions:='[]'::jsonb; idx:=jsonb_array_length(d->'steps');
-    for k in select value from jsonb_array_elements_text(payload->'participants') loop
-      additions:=additions||jsonb_build_array(jsonb_build_object('seq',idx,'round',round_no,'model_key',k,'stage','followup','status','pending','answer','','error','','usage',jsonb_build_object('input',null,'output',null),'started_at',null,'finished_at',null)); idx:=idx+1;
+    foreach stage_name in array (case followup_mode when 'debate' then array['opening','critique','revision'] else array['followup'] end) loop
+      for k in select value from jsonb_array_elements_text(payload->'participants') loop
+        additions:=additions||jsonb_build_array(jsonb_build_object('seq',idx,'round',round_no,'model_key',k,'stage',stage_name,'status','pending','answer','','error','','usage',jsonb_build_object('input',null,'output',null),'started_at',null,'finished_at',null)); idx:=idx+1;
+      end loop;
     end loop;
     if payload->>'judge' is not null then
       additions:=additions||jsonb_build_array(jsonb_build_object('seq',idx,'round',round_no,'model_key',payload->>'judge','stage','judge','status','pending','answer','','error','','usage',jsonb_build_object('input',null,'output',null),'started_at',null,'finished_at',null));
     end if;
-    t:=jsonb_build_object('id',payload->>'turnId','question',payload->>'question','participants',payload->'participants','judge',payload->'judge','created_at',now());
+    t:=jsonb_build_object('id',payload->>'turnId','question',payload->>'question','participants',payload->'participants','judge',payload->'judge','mode',followup_mode,'created_at',now());
     d:=d||jsonb_build_object('turns',coalesce(d->'turns','[]'::jsonb)||jsonb_build_array(t),'steps',(d->'steps')||additions,'status','active');
     -- Reserve the maximum serialized answer size before any paid call.
-    if octet_length(d::text)+jsonb_array_length(additions)*60500>3900000 then raise exception 'council_document_full'; end if;
+    if jsonb_array_length(d->'steps')>171 or octet_length(d::text)+jsonb_array_length(additions)*60500>3900000 then raise exception 'council_document_full'; end if;
     update public.wealth_council_quota set followups=followups+1 where user_id=target_user and day=current_day;
     update public.wealth_council_runs set document=d,status='active' where id=run_id and user_id=target_user;
     return d;

@@ -18,9 +18,7 @@ export default function Results({
   activeSeq?: number;
 }) {
   const current = councilRound(run, round);
-  const finals = current.steps.filter(
-    (s) => s.stage === (round ? "followup" : "revision"),
-  );
+  const finals = current.steps.filter((s) => s.stage === current.finalStage);
   const judge = current.steps.find(
     (s) => s.stage === "judge" && s.status === "succeeded",
   );

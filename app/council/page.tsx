@@ -173,10 +173,8 @@ export default function CouncilPage() {
               x.run.status === "complete"
                 ? councilRound(x.run, x.run.turns?.length || 0).judge
                   ? "judge"
-                  : x.run.turns?.length
-                    ? "followup"
-                    : "revision"
-                : "opening",
+                  : councilRound(x.run, x.run.turns?.length || 0).finalStage
+                : councilRound(x.run, x.run.turns?.length || 0).firstStage,
             );
           }
         } catch (e) {
@@ -236,9 +234,7 @@ export default function CouncilPage() {
             setStage(
               councilRound(d.run, lastRound).judge
                 ? "judge"
-                : lastRound
-                  ? "followup"
-                  : "revision",
+                : councilRound(d.run, lastRound).finalStage,
             );
           }
         }
@@ -272,10 +268,8 @@ export default function CouncilPage() {
         d.run.status === "complete"
           ? councilRound(d.run, lastRound).judge
             ? "judge"
-            : lastRound
-              ? "followup"
-              : "revision"
-          : "opening",
+            : councilRound(d.run, lastRound).finalStage
+          : councilRound(d.run, lastRound).firstStage,
       );
       window.history.replaceState(null, "", `/council?run=${id}`);
     } catch (e) {
@@ -380,13 +374,15 @@ export default function CouncilPage() {
     run?.steps.filter((s) => s.status === "succeeded" || s.status === "failed")
       .length ?? 0;
   const running = run?.steps.find((s) => s.status === "running");
+  const liveStep = run?.steps.find((s) => s.seq === progress?.seq);
   const currentRound = run ? councilRound(run, round) : null;
   const finals =
     currentRound?.steps.filter(
       (s) =>
-        s.stage === (round ? "followup" : "revision") &&
+        s.stage === currentRound.finalStage &&
         s.status === "succeeded" &&
-        !s.usage?.interrupted,
+        !s.usage?.interrupted &&
+        !s.usage?.truncated,
     ) ?? [];
   const failed = run?.steps.filter((s) => s.status === "failed").length ?? 0;
   const newQuestion = () => {
@@ -816,11 +812,7 @@ export default function CouncilPage() {
                               setRound(value);
                               const target = councilRound(run, value);
                               setStage(
-                                target.judge
-                                  ? "judge"
-                                  : value
-                                    ? "followup"
-                                    : "revision",
+                                target.judge ? "judge" : target.finalStage,
                               );
                             }}
                           >
@@ -831,7 +823,12 @@ export default function CouncilPage() {
                     )}
                     {round > 0 && (
                       <div className="council-current-question">
-                        <small>本轮追问</small>
+                        <small>
+                          本轮追问 ·{" "}
+                          {currentRound?.mode === "debate"
+                            ? "相互研讨"
+                            : "直接回应"}
+                        </small>
                         <p>{currentRound?.question}</p>
                       </div>
                     )}
@@ -927,7 +924,7 @@ export default function CouncilPage() {
                       <p role="status" className="council-live">
                         <LoaderCircle size={16} className="council-spin" />{" "}
                         {progress?.seq !== undefined
-                          ? `${run.models.find((m) => m.key === run.steps.find((s) => s.seq === progress.seq)?.model_key)?.name || "模型"} · `
+                          ? `${run.models.find((m) => m.key === liveStep?.model_key)?.name || "模型"} · ${liveStep ? STAGES[liveStep.stage] : "准备中"} · `
                           : ""}
                         {progress?.phase === "thinking"
                           ? "模型正在推理"
@@ -974,8 +971,11 @@ export default function CouncilPage() {
                     )}
                     {run.status === "complete" && (
                       <p className="council-notice">
-                        {finals.length < (round ? 1 : 2)
-                          ? "有效的最终观点不足两份，本场不是完整研讨。请查看失败步骤。"
+                        {finals.length <
+                        (currentRound?.mode === "debate" ? 2 : 1)
+                          ? currentRound?.mode === "debate"
+                            ? "有效的最终观点不足两份，本轮不是完整研讨。请查看失败步骤。"
+                            : "本轮没有完整回应，请查看失败或中断步骤。"
                           : failed
                             ? "研讨已结束，但有缺席或失败步骤；结论仅基于成功返回的内容。"
                             : "各方结论已归档，可随时回看。意见一致不代表事实已被验证。"}
@@ -1142,7 +1142,7 @@ export default function CouncilPage() {
                         accept(d.run);
                         const lastRound = d.run.turns?.length || 0;
                         setRound(lastRound);
-                        setStage("followup");
+                        setStage(councilRound(d.run, lastRound).firstStage);
                         setTranscript(true);
                         enabled.current = true;
                         setAuto(true);

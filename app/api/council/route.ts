@@ -3,6 +3,7 @@ import { authorizeRequest } from "@/lib/server-auth";
 import {
   COUNCIL_MODELS,
   CATALOG_DATE,
+  COUNCIL_MAX_STEPS,
   councilSpec,
   councilFollowupSpec,
   validCouncilId,
@@ -201,7 +202,7 @@ export async function POST(request: Request) {
       raw.action === "abandon" &&
       (!Number.isInteger(raw.seq) ||
         Number(raw.seq) < 0 ||
-        Number(raw.seq) > 74)
+        Number(raw.seq) >= COUNCIL_MAX_STEPS)
     )
       return fail("步骤编号无效。", 400);
     if (raw.action === "advance" && raw.stream === true) {
