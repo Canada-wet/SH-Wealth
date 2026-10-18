@@ -83,6 +83,42 @@ it("目录检查验证本人和频率，仅检查不生成；过频不碰服务�
   expect((await post({ action: "check-alibaba" })).status).toBe(429);
   expect(mock.check).toHaveBeenCalledTimes(1);
 });
+it("追问只把经过校验的请求交给本人原子命令，未授权不启动；流式结果剥离 claim", async () => {
+  const spec = {
+    action: "followup",
+    id,
+    turnId: id,
+    question: "新的约束条件呢？",
+    participants: ["openai-light"],
+    judge: null,
+    baseRound: 0,
+    consent: true,
+    user_id: "victim",
+  };
+  expect((await post({ ...spec, consent: false })).status).toBe(400);
+  expect(mock.command).not.toHaveBeenCalled();
+  expect((await post(spec)).status).toBe(200);
+  expect(mock.command).toHaveBeenCalledWith("followup", "verified-user", id, {
+    turnId: id,
+    question: "新的约束条件呢？",
+    participants: ["openai-light"],
+    judge: null,
+    baseRound: 0,
+  });
+  const d = structuredClone(run);
+  Object.assign(d.steps[0], { claim: "DO_NOT_EXPOSE" });
+  mock.advance.mockImplementationOnce(async (_u, _id, progress) => {
+    progress({ phase: "thinking", seq: 0 });
+    progress({ phase: "answering", preview: "临时正文", seq: 0 });
+    return d;
+  });
+  const stream = await post({ action: "advance", id, stream: true });
+  expect(stream.headers.get("content-type")).toContain("application/x-ndjson");
+  const body = await stream.text();
+  expect(body).toContain('"type":"result"');
+  expect(body).toContain("临时正文");
+  expect(body).not.toContain("DO_NOT_EXPOSE");
+});
 it("所有读写需验证登录，拒绝跨源请求、任意动作和过大内容", async () => {
   mock.auth.mockResolvedValueOnce({ status: 401, error: "login" });
   expect((await GET(new Request("https://app.test/api/council"))).status).toBe(

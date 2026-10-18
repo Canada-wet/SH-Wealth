@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import type { CouncilProgress } from "./council-stream";
 import {
   COUNCIL_MODELS,
   CATALOG_DATE,
@@ -50,6 +51,11 @@ export async function councilCommand(
   });
   if (error) {
     const message = error.message ?? "";
+    if (message.includes("council_invalid"))
+      throw new CouncilError(
+        "追问格式无效，参与者和裁判必须来自本场已授权的型号。",
+        400,
+      );
     if (
       message.includes("council_not_found") ||
       message.includes("council_forbidden")
@@ -59,6 +65,21 @@ export async function councilCommand(
       throw new CouncilError(
         "已达到每日 3 场研讨的上限（多伦多日期），避免意外支出。",
         429,
+      );
+    if (message.includes("council_followup_limit"))
+      throw new CouncilError(
+        "每场最多 8 次追问，每人每天最多 10 次；请保留结果，明天继续或新建研讨。",
+        429,
+      );
+    if (message.includes("council_followup_state"))
+      throw new CouncilError(
+        "请等待本轮结束或明确结束本轮后再追问；至少保留一份成功观点。",
+        409,
+      );
+    if (message.includes("council_document_full"))
+      throw new CouncilError(
+        "本场历史接近容量上限，请导出后新建研讨；未调用模型。",
+        409,
       );
     if (message.includes("council_active"))
       throw new CouncilError("请先继续或结束已有研讨，再开始新问题。", 409);
@@ -72,7 +93,7 @@ export async function councilCommand(
       message.includes("council_conflict")
     )
       throw new CouncilError(
-        "存在进行中的请求或版本冲突；请刷新，等待两分钟后再处理。",
+        "存在进行中的请求或版本冲突；请先重新读取。不确定请求开始 6 分钟后才允许明确跳过。",
         409,
       );
     throw new CouncilError(
@@ -139,7 +160,11 @@ export async function createCouncil(
     })),
   });
 }
-export async function advanceCouncil(user: string, id: string) {
+export async function advanceCouncil(
+  user: string,
+  id: string,
+  onProgress?: (p: CouncilProgress) => void,
+) {
   const claim = randomUUID();
   const run = await councilCommand("claim", user, id, { claim });
   const step = run.steps.find(
@@ -152,17 +177,33 @@ export async function advanceCouncil(user: string, id: string) {
       input: number | null;
       output: number | null;
       truncated?: boolean;
+      interrupted?: boolean;
     } = { input: null, output: null };
   const openings = run.steps.filter(
-    (s) => s.stage === "opening" && s.status === "succeeded",
+    (s) =>
+      !s.round &&
+      s.stage === "opening" &&
+      s.status === "succeeded" &&
+      !s.usage?.interrupted,
   );
   const model = run.models.find((m) => m.key === step.model_key);
   try {
     if (!model) throw new CouncilProviderError("模型快照缺失，未发起调用。");
-    if (step.stage !== "opening" && openings.length < 2)
+    if (!step.round && step.stage !== "opening" && openings.length < 2)
       throw new CouncilProviderError(
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
       );
+    if (
+      step.round &&
+      step.stage === "judge" &&
+      !run.steps.some(
+        (s) =>
+          s.round === step.round &&
+          s.stage === "followup" &&
+          s.status === "succeeded",
+      )
+    )
+      throw new CouncilProviderError("本轮没有成功回应，裁判步骤未调用模型。");
     const prompt = councilPrompt(run, step),
       result = await callCouncilModel(
         model,
@@ -171,6 +212,7 @@ export async function advanceCouncil(user: string, id: string) {
         validateCouncilAttachments(run.attachments).filter(
           (a) => a.kind === "image",
         ),
+        (p) => onProgress?.({ ...p, seq: step.seq }),
       );
     answer = result.answer;
     usage = result.usage;

@@ -141,7 +141,12 @@ it.each([
     const body = JSON.parse(String(options.body));
     expect(body.model).toBe(id);
     expect(body.thinking).toBeUndefined();
-    expect(body.reasoning_effort).toBeUndefined();
+    if (k === "glm-flagship") {
+      expect(body.reasoning_effort).toBe("low");
+      expect(body.enable_thinking).toBe(true);
+      expect(body.stream).toBe(true);
+      expect(body.stream_options.include_usage).toBe(true);
+    } else expect(body.reasoning_effort).toBeUndefined();
     return Response.json({
       choices: [{ message: { content: "百炼合成回答" } }],
     });
@@ -361,6 +366,62 @@ it("达到输出预算或展示长度时标注截断，用量未知不伪造为�
   const result = await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
   expect(result.answer.length).toBe(16000);
   expect(result.usage).toEqual({ input: null, output: null, truncated: true });
+});
+it("Qwen 旗舰通过 SSE 接收，限制思考长度且保留部分正文，隐藏推理不进入结果", async () => {
+  onlyAlibaba();
+  const fetcher = vi.fn(async (_url: unknown, options: RequestInit) => {
+    const body = JSON.parse(String(options.body));
+    expect(body.enable_thinking).toBe(true);
+    expect(body.thinking_budget).toBe(1024);
+    expect(body.stream).toBe(true);
+    expect(body.reasoning_effort).toBeUndefined();
+    return new Response(
+      'data: {"choices":[{"delta":{"reasoning_content":"PRIVATE"}}]}\n\ndata: {"choices":[{"delta":{"content":"部分结论"}}]}\n\n',
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const result = await callCouncilModel(
+    councilModelSnapshot(
+      COUNCIL_MODELS.find((m) => m.key === "qwen-flagship")!,
+    ),
+    "system",
+    "public question",
+  );
+  expect(result.answer).toBe("部分结论");
+  expect(result.usage.interrupted).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("超时、坏 JSON 与参数错误分开提示，不回显上游私密内容", async () => {
+  enable();
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  fetcher.mockRejectedValueOnce(
+    new DOMException("private detail", "TimeoutError"),
+  );
+  await expect(callCouncilModel(COUNCIL_MODELS[0], "s", "q")).rejects.toThrow(
+    "4 分钟",
+  );
+  fetcher.mockResolvedValueOnce(new Response("invalid JSON"));
+  await expect(callCouncilModel(COUNCIL_MODELS[0], "s", "q")).rejects.toThrow(
+    "无法解析",
+  );
+  fetcher.mockResolvedValueOnce(
+    Response.json(
+      { error: { message: "max_tokens invalid: PRIVATE_SECRET" } },
+      { status: 400 },
+    ),
+  );
+  let message = "";
+  try {
+    await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  expect(message).toContain("涉及 max_tokens");
+  expect(message).not.toContain("PRIVATE_SECRET");
+  expect(fetcher).toHaveBeenCalledTimes(3);
 });
 it("包含特殊字符的回复仍为数据库留足附件空间，不保存 NUL 或半个代理对", async () => {
   enable();

@@ -21,6 +21,8 @@ import {
   STAGES,
   councilExport,
   councilConnectionNote,
+  councilSpeaker,
+  COUNCIL_STALE_MS,
   type CouncilAvailability,
   type CouncilRun,
   type CouncilStage,
@@ -28,6 +30,11 @@ import {
 } from "@/lib/council";
 import "./council.css";
 import Attachments, { AttachmentList } from "./Attachments";
+import Followup from "./Followup";
+import Results from "./Results";
+import { councilRound } from "@/lib/council-results";
+import { readCouncilResponse } from "@/lib/council-client";
+import type { CouncilProgress } from "@/lib/council-stream";
 import {
   councilCanSeeImages,
   type CouncilAttachment,
@@ -42,7 +49,11 @@ const STATUS = {
   complete: "已结束",
   cancelled: "已停止",
 };
-async function api(body?: unknown, id?: string) {
+async function api(
+  body?: unknown,
+  id?: string,
+  progress?: (p: CouncilProgress) => void,
+) {
   const r = await fetch(
     "/api/council" + (id ? `?id=${encodeURIComponent(id)}` : ""),
     {
@@ -50,18 +61,27 @@ async function api(body?: unknown, id?: string) {
       credentials: "same-origin",
       cache: "no-store",
       headers: body ? { "Content-Type": "application/json" } : {},
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body
+        ? {
+            body: JSON.stringify({
+              ...(body as Record<string, unknown>),
+              ...(progress ? { stream: true } : {}),
+            }),
+          }
+        : {}),
     },
   );
-  const data = await r.json();
-  if (!r.ok) throw Error(data.error || "研讨服务暂不可用。");
-  return data;
+  return readCouncilResponse(r, progress);
 }
 export default function CouncilPage() {
   const [showAllProviders, setShowAllProviders] = useState(false);
   const [checking, setChecking] = useState(false);
   const [attachments, setAttachments] = useState<CouncilAttachment[]>([]);
   const [processingFiles, setProcessingFiles] = useState(false);
+  const [round, setRound] = useState(0),
+    [transcript, setTranscript] = useState(true),
+    [progress, setProgress] = useState<CouncilProgress | null>(null),
+    [requestAt, setRequestAt] = useState(0);
   const [availability, setAvailability] = useState<CouncilAvailability[]>([]),
     [storageReady, setStorageReady] = useState(false),
     [loading, setLoading] = useState(true),
@@ -145,12 +165,16 @@ export default function CouncilPage() {
           const x = await api(undefined, id);
           if (mounted.current) {
             accept(x.run);
+            setRound(x.run.turns?.length || 0);
+            setTranscript(x.run.status !== "complete");
             setCompose(false);
             setStage(
               x.run.status === "complete"
-                ? x.run.judge
+                ? councilRound(x.run, x.run.turns?.length || 0).judge
                   ? "judge"
-                  : "revision"
+                  : x.run.turns?.length
+                    ? "followup"
+                    : "revision"
                 : "opening",
             );
           }
@@ -190,13 +214,31 @@ export default function CouncilPage() {
       }
       flight.current = true;
       setBusy(true);
+      setRequestAt(Date.now());
+      setProgress({ phase: "waiting" });
       try {
-        const d = await api({ action: "advance", id: latest.id });
+        const d = await api(
+          { action: "advance", id: latest.id },
+          undefined,
+          (p) => {
+            if (mounted.current && current.current?.id === latest.id)
+              setProgress(p);
+          },
+        );
         if (mounted.current) {
           accept(d.run);
           if (d.run.status === "complete") {
             stopAuto();
-            setStage(d.run.judge ? "judge" : "revision");
+            const lastRound = d.run.turns?.length || 0;
+            setRound(lastRound);
+            setTranscript(false);
+            setStage(
+              councilRound(d.run, lastRound).judge
+                ? "judge"
+                : lastRound
+                  ? "followup"
+                  : "revision",
+            );
           }
         }
       } catch (e) {
@@ -207,6 +249,7 @@ export default function CouncilPage() {
       } finally {
         flight.current = false;
         if (mounted.current) setBusy(false);
+        if (mounted.current) setProgress(null);
       }
     }, 500);
     return () => clearTimeout(tick);
@@ -220,12 +263,17 @@ export default function CouncilPage() {
     try {
       const d = await api(undefined, id);
       accept(d.run);
+      const lastRound = d.run.turns?.length || 0;
+      setRound(lastRound);
+      setTranscript(d.run.status !== "complete");
       setCompose(false);
       setStage(
         d.run.status === "complete"
-          ? d.run.judge
+          ? councilRound(d.run, lastRound).judge
             ? "judge"
-            : "revision"
+            : lastRound
+              ? "followup"
+              : "revision"
           : "opening",
       );
       window.history.replaceState(null, "", `/council?run=${id}`);
@@ -268,6 +316,8 @@ export default function CouncilPage() {
         expectedConnections,
       });
       accept(d.run);
+      setRound(0);
+      setTranscript(true);
       setCompose(false);
       setStage("opening");
       enabled.current = true;
@@ -304,7 +354,7 @@ export default function CouncilPage() {
     if (
       !run ||
       !window.confirm(
-        "删除本人的这场研讨及全部发言？此操作不能撤销，建议先导出。",
+        "删除本人的这场研讨、全部追问、附件及发言？此操作不能撤销，建议先导出。",
       )
     )
       return;
@@ -329,9 +379,13 @@ export default function CouncilPage() {
     run?.steps.filter((s) => s.status === "succeeded" || s.status === "failed")
       .length ?? 0;
   const running = run?.steps.find((s) => s.status === "running");
+  const currentRound = run ? councilRound(run, round) : null;
   const finals =
-    run?.steps.filter(
-      (s) => s.stage === "revision" && s.status === "succeeded",
+    currentRound?.steps.filter(
+      (s) =>
+        s.stage === (round ? "followup" : "revision") &&
+        s.status === "succeeded" &&
+        !s.usage?.interrupted,
     ) ?? [];
   const failed = run?.steps.filter((s) => s.status === "failed").length ?? 0;
   const newQuestion = () => {
@@ -667,6 +721,46 @@ export default function CouncilPage() {
                       ? "正在检查百炼连接…"
                       : "检查百炼连接（不生成回答）"}
                   </button>
+                  <p>
+                    实际生成自检：仅发送固定公开问题，不读取你的研讨或财富数据，会有少量
+                    API 用量，不自动重试。
+                  </p>
+                  <div className="council-actions">
+                    {["qwen-light", "qwen-flagship", "glm-flagship"]
+                      .filter(available)
+                      .map((key) => (
+                        <button
+                          key={key}
+                          disabled={checking}
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "发送一次固定公开问题测试该模型？会产生少量 API 用量，不使用私人数据，也不会自动重试。",
+                              )
+                            )
+                              return;
+                            setChecking(true);
+                            setError("");
+                            setNotice("正在执行固定问题自检，最长 4 分钟…");
+                            try {
+                              const d = await api({
+                                action: "check-model",
+                                modelKey: key,
+                                consent: true,
+                              });
+                              setNotice(d.check.message);
+                            } catch (e) {
+                              setError((e as Error).message);
+                              setNotice("");
+                            } finally {
+                              setChecking(false);
+                            }
+                          }}
+                        >
+                          自检 {COUNCIL_MODELS.find((m) => m.key === key)?.name}
+                        </button>
+                      ))}
+                  </div>
                   {(Object.keys(PROVIDER_NAMES) as CouncilProvider[]).map(
                     (p) => (
                       <div key={p}>
@@ -706,11 +800,44 @@ export default function CouncilPage() {
                       </span>
                     </div>
                     <h2>{run.question}</h2>
+                    {!!run.turns?.length && (
+                      <nav className="council-round-nav" aria-label="讨论轮次">
+                        {[0, ...run.turns.map((_, i) => i + 1)].map((value) => (
+                          <button
+                            key={value}
+                            aria-current={round === value ? "page" : undefined}
+                            onClick={() => {
+                              setRound(value);
+                              const target = councilRound(run, value);
+                              setStage(
+                                target.judge
+                                  ? "judge"
+                                  : value
+                                    ? "followup"
+                                    : "revision",
+                              );
+                            }}
+                          >
+                            {value ? `追问 ${value}` : "原始研讨"}
+                          </button>
+                        ))}
+                      </nav>
+                    )}
+                    {round > 0 && (
+                      <div className="council-current-question">
+                        <small>本轮追问</small>
+                        <p>{currentRound?.question}</p>
+                      </div>
+                    )}
                     <p className="council-muted">
-                      {new Date(run.created_at).toLocaleString("zh-CN")} ·{" "}
-                      {run.participants.length} 个参与模型 ·{" "}
-                      {run.judge
-                        ? `裁判 ${run.models.find((m) => m.key === run.judge)?.name}`
+                      {new Date(
+                        round
+                          ? run.turns?.[round - 1]?.created_at || run.created_at
+                          : run.created_at,
+                      ).toLocaleString("zh-CN")}{" "}
+                      · {currentRound?.participants.length} 个参与模型 ·{" "}
+                      {currentRound?.judge
+                        ? `裁判 ${run.models.find((m) => m.key === currentRound.judge)?.name}`
                         : "无裁判，保留并列结论"}
                     </p>
                     {!!run.attachments?.length && (
@@ -793,8 +920,21 @@ export default function CouncilPage() {
                     {busy && auto && (
                       <p role="status" className="council-live">
                         <LoaderCircle size={16} className="council-spin" />{" "}
-                        正在等待模型；单次最多约 50 秒，不自动重试。
+                        {progress?.phase === "thinking"
+                          ? "模型正在推理"
+                          : progress?.phase === "answering"
+                            ? "正在接收正文"
+                            : "请求已提交，正在等待服务商"}{" "}
+                        · 已等待{" "}
+                        {Math.max(0, Math.floor((now - requestAt) / 1000))}{" "}
+                        秒；最多 4 分钟，不自动重发。
                       </p>
+                    )}
+                    {busy && progress?.preview && (
+                      <div className="council-stream-preview">
+                        <small>临时正文 · 完成归档后才算保存</small>
+                        <AdvisorMarkdown text={progress.preview} />
+                      </div>
                     )}
                     {running && !busy && (
                       <div className="council-alert">
@@ -807,7 +947,7 @@ export default function CouncilPage() {
                           ”已提交，结果尚待确认。请先重新读取，不会自动重发。
                         </span>
                         {now - Date.parse(running.started_at || "") >=
-                          120000 && (
+                          COUNCIL_STALE_MS && (
                           <button
                             onClick={() => {
                               if (
@@ -825,7 +965,7 @@ export default function CouncilPage() {
                     )}
                     {run.status === "complete" && (
                       <p className="council-notice">
-                        {finals.length < 2
+                        {finals.length < (round ? 1 : 2)
                           ? "有效的最终观点不足两份，本场不是完整研讨。请查看失败步骤。"
                           : failed
                             ? "研讨已结束，但有缺席或失败步骤；结论仅基于成功返回的内容。"
@@ -833,110 +973,175 @@ export default function CouncilPage() {
                       </p>
                     )}
                   </section>
-                  <nav className="council-stage-nav" aria-label="研讨阶段">
-                    {(Object.keys(STAGES) as CouncilStage[])
-                      .filter((s) => s !== "judge" || run.judge)
-                      .map((s) => (
-                        <button
-                          key={s}
-                          aria-current={stage === s ? "step" : undefined}
-                          onClick={() => setStage(s)}
-                        >
-                          <span>{STAGES[s]}</span>
-                          <small>
-                            {
-                              run.steps.filter(
-                                (x) =>
-                                  x.stage === s && x.status === "succeeded",
-                              ).length
-                            }
-                            /{run.steps.filter((x) => x.stage === s).length}
-                          </small>
-                        </button>
-                      ))}
-                  </nav>
-                  {stage === "revision" && !run.judge && (
-                    <div className="council-no-judge">
-                      未设置裁判：以下并列展示各模型最终结论，不生成虚假的“统一答案”。
-                    </div>
-                  )}
-                  <div className="council-responses">
-                    {run.steps
-                      .filter((s) => s.stage === stage)
-                      .map((s) => (
-                        <article
-                          className="council-card council-answer"
-                          key={s.seq}
-                        >
-                          <header>
-                            <div>
-                              <small>
-                                {s.stage === "judge"
-                                  ? "独立裁判"
-                                  : `观点 ${run.participants.indexOf(s.model_key) + 1}`}{" "}
-                                · {STAGES[s.stage]}
-                              </small>
-                              <h3>
-                                {
-                                  run.models.find((m) => m.key === s.model_key)
-                                    ?.name
-                                }
-                              </h3>
-                              <small>
-                                {councilConnectionNote(
-                                  run.models.find((m) => m.key === s.model_key),
-                                )}
-                              </small>
-                            </div>
-                            <span className={`council-step-status ${s.status}`}>
-                              {s.status === "succeeded" ? (
-                                <>
-                                  <Check size={14} /> 已保存
-                                </>
-                              ) : s.status === "failed" ? (
-                                "未成功"
-                              ) : s.status === "running" ? (
-                                "已提交"
-                              ) : (
-                                "等待中"
-                              )}
-                            </span>
-                          </header>
-                          {s.answer ? (
-                            <>
-                              <AdvisorMarkdown text={s.answer} />
-                              {s.usage?.truncated && (
-                                <p className="council-alert">
-                                  回答达到输出上限，可能不完整。
-                                </p>
-                              )}
-                              <footer>
-                                {s.usage?.input == null
-                                  ? "输入用量未返回"
-                                  : `${s.usage.input.toLocaleString()} 输入 tokens`}{" "}
-                                ·{" "}
-                                {s.usage?.output == null
-                                  ? "输出用量未返回"
-                                  : `${s.usage.output.toLocaleString()} 输出 tokens（可能含推理）`}
-                              </footer>
-                            </>
-                          ) : (
-                            <p
-                              className={
-                                s.error ? "council-alert" : "council-pending"
+                  <Results
+                    run={run}
+                    round={round}
+                    inspect={(target, seq) => {
+                      setTranscript(true);
+                      setStage(target);
+                      if (seq !== undefined)
+                        setTimeout(
+                          () =>
+                            document
+                              .getElementById(`council-step-${seq}`)
+                              ?.scrollIntoView({ block: "center" }),
+                          50,
+                        );
+                    }}
+                  />
+                  <button
+                    className="council-transcript-toggle"
+                    aria-expanded={transcript}
+                    onClick={() => setTranscript((v) => !v)}
+                  >
+                    {transcript ? "收起完整发言" : "展开完整发言"}
+                  </button>
+                  <div hidden={!transcript}>
+                    <nav className="council-stage-nav" aria-label="研讨阶段">
+                      {(Object.keys(STAGES) as CouncilStage[])
+                        .filter((s) =>
+                          currentRound?.steps.some((x) => x.stage === s),
+                        )
+                        .map((s) => (
+                          <button
+                            key={s}
+                            aria-current={stage === s ? "step" : undefined}
+                            onClick={() => setStage(s)}
+                          >
+                            <span>{STAGES[s]}</span>
+                            <small>
+                              {
+                                currentRound!.steps.filter(
+                                  (x) =>
+                                    x.stage === s && x.status === "succeeded",
+                                ).length
                               }
-                            >
-                              {s.error ||
-                                (run.status === "cancelled"
-                                  ? "本场已停止，此步骤不再执行。"
-                                  : s.status === "running"
-                                    ? "请求已提交，结果归档后可在这里查看。"
-                                    : "轮到这一步时，会使用前面阶段的同一份观点快照。")}
-                            </p>
-                          )}
-                        </article>
-                      ))}
+                              /
+                              {
+                                currentRound!.steps.filter((x) => x.stage === s)
+                                  .length
+                              }
+                            </small>
+                          </button>
+                        ))}
+                    </nav>
+                    {stage === "revision" && !currentRound?.judge && (
+                      <div className="council-no-judge">
+                        未设置裁判：以下并列展示各模型最终结论，不生成虚假的“统一答案”。
+                      </div>
+                    )}
+                    <div className="council-responses">
+                      {currentRound!.steps
+                        .filter((s) => s.stage === stage)
+                        .map((s) => (
+                          <article
+                            className="council-card council-answer"
+                            key={s.seq}
+                            id={`council-step-${s.seq}`}
+                          >
+                            <header>
+                              <div>
+                                <small>
+                                  {s.stage === "judge"
+                                    ? "独立裁判"
+                                    : councilSpeaker(run, s.model_key)}{" "}
+                                  · {STAGES[s.stage]}
+                                </small>
+                                <h3>
+                                  {
+                                    run.models.find(
+                                      (m) => m.key === s.model_key,
+                                    )?.name
+                                  }
+                                </h3>
+                                <small>
+                                  {councilConnectionNote(
+                                    run.models.find(
+                                      (m) => m.key === s.model_key,
+                                    ),
+                                  )}
+                                </small>
+                              </div>
+                              <span
+                                className={`council-step-status ${s.status}`}
+                              >
+                                {s.status === "succeeded" ? (
+                                  <>
+                                    <Check size={14} /> 已保存
+                                  </>
+                                ) : s.status === "failed" ? (
+                                  "未成功"
+                                ) : s.status === "running" ? (
+                                  "已提交"
+                                ) : (
+                                  "等待中"
+                                )}
+                              </span>
+                            </header>
+                            {s.answer ? (
+                              <>
+                                <AdvisorMarkdown text={s.answer} />
+                                {(s.usage?.truncated ||
+                                  s.usage?.interrupted) && (
+                                  <p className="council-alert">
+                                    {s.usage.interrupted
+                                      ? "连接中断，已保留收到的部分正文；请勿作为完整结论，补问会产生新调用。"
+                                      : "回答达到输出上限，可能不完整。"}
+                                  </p>
+                                )}
+                                <footer>
+                                  {s.usage?.input == null
+                                    ? "输入用量未返回"
+                                    : `${s.usage.input.toLocaleString()} 输入 tokens`}{" "}
+                                  ·{" "}
+                                  {s.usage?.output == null
+                                    ? "输出用量未返回"
+                                    : `${s.usage.output.toLocaleString()} 输出 tokens（可能含推理）`}
+                                </footer>
+                              </>
+                            ) : (
+                              <p
+                                className={
+                                  s.error ? "council-alert" : "council-pending"
+                                }
+                              >
+                                {s.error ||
+                                  (run.status === "cancelled"
+                                    ? "本场已停止，此步骤不再执行。"
+                                    : s.status === "running"
+                                      ? "请求已提交，结果归档后可在这里查看。"
+                                      : "轮到这一步时，会使用前面阶段的同一份观点快照。")}
+                              </p>
+                            )}
+                          </article>
+                        ))}
+                    </div>
                   </div>
+                  <Followup
+                    run={run}
+                    disabled={busy || auto}
+                    send={async (spec) => {
+                      if (flight.current)
+                        throw Error("已有请求进行中，请稍后继续。");
+                      flight.current = true;
+                      setBusy(true);
+                      stopAuto();
+                      setError("");
+                      try {
+                        const d = await api(spec);
+                        accept(d.run);
+                        const lastRound = d.run.turns?.length || 0;
+                        setRound(lastRound);
+                        setStage("followup");
+                        setTranscript(true);
+                        enabled.current = true;
+                        setAuto(true);
+                      } finally {
+                        flight.current = false;
+                        setBusy(false);
+                      }
+                    }}
+                  />
                 </>
               )
             )}

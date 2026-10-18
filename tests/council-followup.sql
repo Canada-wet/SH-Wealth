@@ -1,0 +1,36 @@
+-- Synthetic personal conversation only, all quota/history changes rolled back.
+begin;
+do $$
+declare u uuid; r uuid:=gen_random_uuid(); tid uuid:=gen_random_uuid(); d jsonb; p jsonb; answer jsonb; c uuid:=gen_random_uuid(); before_count integer;
+begin
+  select a.id into u from auth.users a where lower(a.email) in ('henrywhy233@gmail.com','sallyxie0378@gmail.com')
+    and not exists(select 1 from public.wealth_council_runs x where x.user_id=a.id and x.status in ('active','paused'))
+    and coalesce((select followups from public.wealth_council_quota q where q.user_id=a.id and q.day=(now() at time zone 'America/Toronto')::date),0)<8 limit 1;
+  if u is null then raise exception 'No idle allowed test owner; no user jobs will be changed'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(u::text,723));
+  d:=jsonb_build_object('id',r,'question','SYNTHETIC FOLLOWUP TEST','participants',jsonb_build_array('openai-light'),'judge',null,'models',jsonb_build_array(jsonb_build_object('key','openai-light','model','gpt-6-luna')),'status','complete','created_at',now(),'steps',jsonb_build_array(jsonb_build_object('seq',0,'model_key','openai-light','stage','revision','status','succeeded','answer','Synthetic prior conclusion','error','','usage','{}'::jsonb)));
+  insert into public.wealth_council_runs(id,user_id,question,status,document) values(r,u,d->>'question','complete',d);
+  p:=jsonb_build_object('turnId',tid,'question','SYNTHETIC NEW CONDITIONS','participants',jsonb_build_array('openai-light'),'judge','openai-light','baseRound',0);
+  d:=public.wealth_council_command('followup',u,r,p);
+  if jsonb_array_length(d->'turns')<>1 or jsonb_array_length(d->'steps')<>3 or d->>'status'<>'active' then raise exception 'followup append failed'; end if;
+  if d->'steps'->1->>'stage'<>'followup' or d->'steps'->1->>'round'<>'1' then raise exception 'round metadata missing'; end if;
+  if public.wealth_council_command('followup',u,r,p)<>d then raise exception 'followup idempotency failed'; end if;
+  begin perform public.wealth_council_command('followup',u,r,jsonb_set(p,'{question}','"changed question"')); raise exception 'duplicate ID accepted changed question';
+  exception when others then if sqlerrm not like '%council_conflict%' then raise; end if; end;
+  begin perform public.wealth_council_command('followup',u,r,jsonb_set(p,'{turnId}',to_jsonb(gen_random_uuid()))); raise exception 'stale round accepted';
+  exception when others then if sqlerrm not like '%council_conflict%' then raise; end if; end;
+  d:=public.wealth_council_command('claim',u,r,jsonb_build_object('claim',c));
+  if d->'steps'->1->>'claim'<>c::text then raise exception 'claim resumed wrong round'; end if;
+  d:=public.wealth_council_command('finish',u,r,jsonb_build_object('seq',1,'claim',c,'answer','SYNTHETIC NEW ANSWER','usage','{}'::jsonb));
+  c:=gen_random_uuid(); perform public.wealth_council_command('claim',u,r,jsonb_build_object('claim',c));
+  d:=public.wealth_council_command('finish',u,r,jsonb_build_object('seq',2,'claim',c,'answer','SYNTHETIC JUDGE','usage','{}'::jsonb));
+  if d->>'status'<>'complete' or d->'steps'->0->>'answer'<>'Synthetic prior conclusion' then raise exception 'prior conclusions changed'; end if;
+  p:=p||jsonb_build_object('turnId',gen_random_uuid(),'baseRound',1,'participants',jsonb_build_array('unknown-provider'));
+  begin perform public.wealth_council_command('followup',u,r,p); raise exception 'unconsented model accepted';
+  exception when others then if sqlerrm not like '%council_invalid%' then raise; end if; end;
+  select followups into before_count from public.wealth_council_quota where user_id=u and day=(now() at time zone 'America/Toronto')::date;
+  if before_count<1 then raise exception 'followup quota not reserved'; end if;
+  perform public.wealth_council_command('delete',u,r);
+  if (select followups from public.wealth_council_quota where user_id=u and day=(now() at time zone 'America/Toronto')::date)<>before_count then raise exception 'delete reset quota'; end if;
+end $$;
+rollback;

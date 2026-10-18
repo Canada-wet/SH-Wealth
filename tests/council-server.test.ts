@@ -143,6 +143,54 @@ it("开场不足两份就跳过后续付费请求，不伪造完整研讨", asyn
   expect(doc.steps[2].error).toContain("不足两份");
   expect(JSON.stringify(doc)).not.toContain("internal-secret");
 });
+it("追问只需一个响应者，读取历史后原子归档；当前轮全部失败时不付费让裁判猜测", async () => {
+  doc.steps.forEach((s) => {
+    s.status = "failed";
+    s.error = "initial unavailable";
+  });
+  doc.steps[0].status = "succeeded";
+  doc.steps[0].answer = "One useful initial view";
+  doc.turns = [
+    {
+      id,
+      question: "现在新条件呢？",
+      participants: ["openai-light"],
+      judge: "openai-light",
+      created_at: "2026-10-18",
+    },
+  ];
+  doc.steps.push(
+    {
+      ...doc.steps[0],
+      seq: 7,
+      round: 1,
+      model_key: "openai-light",
+      stage: "followup",
+      status: "pending",
+      answer: "",
+      error: "",
+    },
+    {
+      ...doc.steps[0],
+      seq: 8,
+      round: 1,
+      model_key: "openai-light",
+      stage: "judge",
+      status: "pending",
+      answer: "",
+      error: "",
+    },
+  );
+  await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mock.call.mock.calls[0][2]).question).toBe(
+    "现在新条件呢？",
+  );
+  doc.steps[7].status = "failed";
+  await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(1);
+  expect(doc.steps[8].error).toContain("本轮没有成功回应");
+});
 it("未配置或已暂停不调用；错误保留成明确状态", async () => {
   doc.status = "paused";
   await advanceCouncil("owner", id);

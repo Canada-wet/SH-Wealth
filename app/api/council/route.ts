@@ -4,12 +4,16 @@ import {
   COUNCIL_MODELS,
   CATALOG_DATE,
   councilSpec,
+  councilFollowupSpec,
   validCouncilId,
   type CouncilRun,
 } from "@/lib/council";
 import {
   councilAvailability,
   checkAlibabaConnection,
+  callCouncilModel,
+  councilModelSnapshot,
+  CouncilProviderError,
 } from "@/lib/council-provider";
 import {
   advanceCouncil,
@@ -18,7 +22,7 @@ import {
   createCouncil,
   publicCouncil,
 } from "@/lib/council-server";
-export const maxDuration = 60;
+export const maxDuration = 300;
 const headers = { "Cache-Control": "private, no-store" };
 const fail = (error: string, status = 503) =>
   NextResponse.json({ error }, { status, headers });
@@ -121,6 +125,46 @@ export async function POST(request: Request) {
         { headers },
       );
     }
+    if (raw.action === "check-model") {
+      if (
+        !["qwen-light", "qwen-flagship", "glm-flagship"].includes(
+          String(raw.modelKey),
+        ) ||
+        raw.consent !== true
+      )
+        return fail("请选择 Qwen 或 GLM，并确认小额 API 自检用量。", 400);
+      const slot = await auth.client.rpc("take_wealth_advisor_slot");
+      if (slot.error || !slot.data)
+        return fail("自检过于频繁，请稍后重试。", 429);
+      try {
+        const model = councilModelSnapshot(
+          COUNCIL_MODELS.find((m) => m.key === raw.modelKey)!,
+        );
+        const result = await callCouncilModel(
+          model,
+          "这是固定公开合成连通测试，不包含任何用户数据。只给简短正文。",
+          "请用一句中文解释什么是分散投资，不超过 50 字。",
+        );
+        return NextResponse.json(
+          {
+            check: {
+              ok: !result.usage.interrupted,
+              message: result.usage.interrupted
+                ? "只收到部分正文，连接未完整结束。"
+                : "已收到有效正文；此固定公开问题产生少量 API 用量，不使用研讨额度。",
+              usage: result.usage,
+            },
+          },
+          { headers },
+        );
+      } catch (e) {
+        return fail(
+          e instanceof CouncilProviderError
+            ? e.message
+            : "自检未完成，未自动重试。",
+        );
+      }
+    }
     if (raw.action === "create") {
       let spec;
       try {
@@ -129,6 +173,21 @@ export async function POST(request: Request) {
         return fail((e as Error).message, 400);
       }
       const run = await createCouncil(auth.user.id, spec);
+      return NextResponse.json({ run: publicCouncil(run) }, { headers });
+    }
+    if (raw.action === "followup") {
+      let spec;
+      try {
+        spec = councilFollowupSpec(raw);
+      } catch (e) {
+        return fail((e as Error).message, 400);
+      }
+      const run = await councilCommand(
+        "followup",
+        auth.user.id,
+        String(raw.id),
+        spec,
+      );
       return NextResponse.json({ run: publicCouncil(run) }, { headers });
     }
     if (
@@ -142,9 +201,71 @@ export async function POST(request: Request) {
       raw.action === "abandon" &&
       (!Number.isInteger(raw.seq) ||
         Number(raw.seq) < 0 ||
-        Number(raw.seq) > 18)
+        Number(raw.seq) > 74)
     )
       return fail("步骤编号无效。", 400);
+    if (raw.action === "advance" && raw.stream === true) {
+      let connected = true;
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          let last = 0,
+            phase = "";
+          const send = (data: unknown) => {
+            if (connected) {
+              try {
+                controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
+              } catch {
+                connected = false;
+              }
+            }
+          };
+          const timer = setInterval(() => send({ type: "heartbeat" }), 10000);
+          send({ type: "progress", phase: "waiting" });
+          try {
+            const run = await advanceCouncil(
+              auth.user.id,
+              String(raw.id),
+              (p) => {
+                if (Date.now() - last < 500 && p.phase === phase) return;
+                last = Date.now();
+                phase = p.phase;
+                send({
+                  type: "progress",
+                  ...p,
+                  ...(p.preview ? { preview: p.preview.slice(0, 8000) } : {}),
+                });
+              },
+            );
+            send({ type: "result", run: publicCouncil(run) });
+          } catch (e) {
+            send({
+              type: "error",
+              error:
+                e instanceof CouncilError
+                  ? e.message
+                  : "结果尚未确认，请重新读取；不会自动重发请求。",
+            });
+          } finally {
+            clearInterval(timer);
+            if (connected) {
+              connected = false;
+              controller.close();
+            }
+          }
+        },
+        cancel() {
+          connected = false;
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          ...headers,
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
     const run =
       raw.action === "advance"
         ? await advanceCouncil(auth.user.id, raw.id)

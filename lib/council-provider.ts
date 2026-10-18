@@ -6,6 +6,11 @@ import {
 } from "./council";
 import { createHash } from "node:crypto";
 import {
+  readCouncilStream,
+  CouncilStreamError,
+  type CouncilProgress,
+} from "./council-stream";
+import {
   councilCanSeeImages,
   validateCouncilAttachments,
   type CouncilAttachment,
@@ -193,6 +198,7 @@ export async function callCouncilModel(
   system: string,
   input: string,
   attachments: CouncilAttachment[] = [],
+  onProgress?: (p: CouncilProgress) => void,
 ) {
   const images = validateCouncilAttachments(attachments).filter(
     (a) => a.kind === "image",
@@ -260,8 +266,19 @@ export async function callCouncilModel(
       model: connection.model,
       messages,
       max_tokens: limit,
-      stream: false,
-      ...(p === "qwen" ? { enable_thinking: model.tier !== "light" } : {}),
+      stream: p === "qwen" || p === "glm",
+      ...(["qwen", "glm"].includes(p)
+        ? { stream_options: { include_usage: true } }
+        : {}),
+      ...(p === "qwen"
+        ? {
+            enable_thinking: model.tier !== "light",
+            ...(model.tier !== "light" ? { thinking_budget: 1024 } : {}),
+          }
+        : {}),
+      ...(p === "glm"
+        ? { enable_thinking: true, reasoning_effort: "low" }
+        : {}),
     };
   } else if (["openai", "meta"].includes(p)) {
     endpoint =
@@ -383,12 +400,34 @@ export async function callCouncilModel(
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(50000),
+      signal: AbortSignal.timeout(240000),
       redirect: "error",
       cache: "no-store",
     });
     if (!response.ok) {
-      await response.body?.cancel();
+      let hint = "";
+      if (response.status === 400) {
+        try {
+          const error = await boundedJson(response);
+          const description = String(
+            error.error?.message ?? error.message ?? "",
+          );
+          const parameter = [
+            "max_tokens",
+            "enable_thinking",
+            "reasoning_effort",
+            "thinking_budget",
+            "stream",
+          ].find((name) => description.includes(name));
+          if (parameter) hint = `涉及 ${parameter} 参数。`;
+          if (/not exist|not found|not supported.*model/i.test(description))
+            hint = "该地域不支持此精确型号，或尚未开通该型号。";
+          if (/activate|permission|access denied/i.test(description))
+            hint = "请先在百炼开通该模型服务权限。";
+        } catch {
+          /* Never expose an untrusted upstream body, question or key. */
+        }
+      } else await response.body?.cancel();
       throw new CouncilProviderError(
         response.status === 429
           ? "服务限流或额度不足；未自动重试。"
@@ -396,11 +435,30 @@ export async function callCouncilModel(
             ? "凭证、地域或模型访问权限不匹配；请检查服务商设置。"
             : response.status === 404
               ? "此账号或地域尚不支持该模型；请检查官方模型权限。"
-              : `服务商请求未成功（${response.status}）；未自动重试。`,
+              : response.status === 400
+                ? `服务商拒绝请求（400）。${hint || "请检查型号、推理模式或上下文长度。"}未自动重试。`
+                : `服务商请求未成功（${response.status}）；未自动重试。`,
       );
     }
     // Never persist hidden reasoning, tool requests or raw provider error bodies.
-    const data = await boundedJson(response);
+    const isStream = response.headers
+      .get("content-type")
+      ?.includes("text/event-stream");
+    const data = isStream
+      ? await readCouncilStream(response, onProgress)
+      : await boundedJson(response);
+    const collection =
+      viaAlibaba || !["openai", "meta", "anthropic", "gemini"].includes(p)
+        ? data?.choices
+        : p === "anthropic"
+          ? data?.content
+          : p === "gemini"
+            ? data?.candidates
+            : data?.output;
+    if (!data || typeof data !== "object" || !Array.isArray(collection))
+      throw new CouncilProviderError(
+        "服务商响应结构无效，未返回可读取的模型答案；未自动重发。",
+      );
     let text: string,
       incoming: unknown,
       outgoing: unknown,
@@ -452,7 +510,7 @@ export async function callCouncilModel(
       );
     const normalized = text.trim().toWellFormed().replaceAll("\0", "\ufffd");
     let answer = normalized.slice(0, 16000);
-    // Reserve space for attachments + all 19 replies within the unchanged 2 MB row limit.
+    // Per-answer bound; the database reserves headroom before appending follow-up steps.
     while (Buffer.byteLength(JSON.stringify(answer), "utf8") > 60000)
       answer = answer.slice(0, -256);
     if (/[\uD800-\uDBFF]$/.test(answer)) answer = answer.slice(0, -1);
@@ -462,12 +520,26 @@ export async function callCouncilModel(
         input: tokenCount(incoming),
         output: tokenCount(outgoing),
         truncated: truncated || normalized.length > answer.length,
+        ...(data.interrupted ? { interrupted: true } : {}),
       },
     };
   } catch (e) {
     if (e instanceof CouncilProviderError) throw e;
+    if (e instanceof CouncilStreamError)
+      throw new CouncilProviderError(e.message);
+    if (
+      e instanceof Error &&
+      (e.name === "TimeoutError" || e.name === "AbortError")
+    )
+      throw new CouncilProviderError(
+        "已等待 4 分钟仍未完成，已停止接收；服务商可能已计费，未自动重发。可稍后明确选择补问该模型。",
+      );
+    if (e instanceof SyntaxError)
+      throw new CouncilProviderError(
+        "服务商返回了无法解析的响应，而不是有效答案；未自动重发。",
+      );
     throw new CouncilProviderError(
-      "请求超时、连接中断或响应无效；服务商可能已计费，未自动重发。",
+      "连接在生成途中中断；服务商可能已计费，未自动重发。请先重新读取归档，确认后可补问该模型。",
     );
   }
 }
