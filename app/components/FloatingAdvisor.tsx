@@ -98,7 +98,9 @@ export default function FloatingAdvisor({
     }
   }, []);
   useEffect(() => {
-    const summaries = document.querySelectorAll(".pulse-next, #growth");
+    const summaries = document.querySelectorAll(
+      ".app-workspace-hub, .pulse-next, #growth",
+    );
     if (!summaries.length || typeof IntersectionObserver === "undefined")
       return;
     const visibility = new Map<Element, boolean>();

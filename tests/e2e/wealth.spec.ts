@@ -83,11 +83,17 @@ test("贡献、负债、目标、改名和图表完整联动，跨页刷新持�
   await expect(page.getByTestId("net-worth")).toHaveText("$95,500.00");
   if (await page.locator(".sidebar .people").isVisible())
     await page.locator(".sidebar .people").click();
-  else
+  else {
+    await page.getByRole("button", { name: "打开页面与功能搜索" }).click();
     await page
-      .locator(".mobile-nav")
-      .getByRole("button", { name: "成员" })
+      .getByRole("dialog")
+      .getByLabel("搜索页面与功能", { exact: true })
+      .fill("家庭成员");
+    await page
+      .getByRole("dialog")
+      .getByRole("link", { name: /家庭成员/ })
       .click();
+  }
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("成员一显示名").fill("Alice");
   await dialog.getByLabel("成员二显示名").fill("Bob");

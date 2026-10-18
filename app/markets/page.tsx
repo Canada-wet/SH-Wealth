@@ -12,6 +12,7 @@ import {
 import useWealth from "@/lib/useWealth";
 import { cloudClient } from "@/lib/cloud";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import { ModuleBridge } from "@/app/components/AppNavigation";
 import MarketSectionNav from "@/app/components/MarketSectionNav";
 import MarketPulse from "@/app/components/MarketPulse";
 import MarketInvestmentDesk from "@/app/components/MarketInvestmentDesk";
@@ -261,7 +262,7 @@ export default function Markets() {
   return (
     <main className="market-shell">
       <MarketNavigator />
-      <div className="markets-page">
+      <div className="markets-page" id="page-content" tabIndex={-1}>
         <header className="markets-header">
           <div>
             <a className="market-back" href="/">
@@ -292,6 +293,7 @@ export default function Markets() {
             </button>
           </div>
         </header>
+        <ModuleBridge featureId="markets" />
         <MarketSectionNav />
         {dataError && (
           <div className="error-banner" role="alert">

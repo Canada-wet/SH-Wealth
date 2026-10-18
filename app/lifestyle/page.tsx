@@ -12,6 +12,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import { ModuleBridge } from "@/app/components/AppNavigation";
 import TrackLibrary from "@/app/components/lifestyle/TrackLibrary";
 import SetBuilder from "@/app/components/lifestyle/SetBuilder";
 import PracticeJournal from "@/app/components/lifestyle/PracticeJournal";
@@ -62,6 +63,7 @@ export default function LifestylePage() {
   const navigate = (v: View) => {
     setView(v);
     history.replaceState(null, "", `#${v}`);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
     setError("");
   };
   const save: SaveLifestyle = (update, reason, expected) => {
@@ -87,7 +89,7 @@ export default function LifestylePage() {
   return (
     <main className="market-shell hobby-shell">
       <MarketNavigator active="lifestyle" />
-      <div className="markets-page hobby-page">
+      <div className="markets-page hobby-page" id="page-content" tabIndex={-1}>
         <header className="markets-header hobby-page-header">
           <div>
             <p className="eyebrow">TOGETHER · OFF THE CLOCK</p>
@@ -120,6 +122,7 @@ export default function LifestylePage() {
             </button>
           </div>
         </header>
+        <ModuleBridge featureId="lifestyle" />
         {(error || store.error) && (
           <p role="alert" className="form-error">
             {error || store.error}

@@ -82,7 +82,7 @@ import ValuationTable from "./components/ValuationTable";
 import HouseholdPlanning from "./components/HouseholdPlanning";
 import HistoryComparison from "./components/HistoryComparison";
 import WealthGrowth from "./components/WealthGrowth";
-import { APP_VERSION } from "@/lib/releases";
+import AppNavigation, { WorkspaceHub } from "./components/AppNavigation";
 
 type Modal =
   | {
@@ -277,6 +277,12 @@ export default function Home() {
   const close = () => {
     setModal(null);
     setFormError("");
+    if (
+      ["#settings", "#members", "#history", "#alerts"].includes(location.hash)
+    ) {
+      window.history.replaceState(null, "", "/#overview");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
   };
   useEffect(() => {
     if (!toast) return;
@@ -496,122 +502,61 @@ export default function Home() {
           : undefined,
       }),
     );
+  const handledEntry = useRef("");
+  useEffect(() => {
+    if (!ready || store.cloudLoading || privacy) return;
+    const navigate = () => {
+      const hash = location.hash.slice(1);
+      if (handledEntry.current === hash) return;
+      handledEntry.current = hash;
+      if (hash === "advisor") advisor();
+      else if (["settings", "members", "history", "alerts"].includes(hash)) {
+        open({ kind: hash as "settings" | "members" | "history" | "alerts" });
+      }
+    };
+    navigate();
+    window.addEventListener("hashchange", navigate);
+    return () => window.removeEventListener("hashchange", navigate);
+  }, [ready, store.cloudLoading, privacy, state]);
   if (!ready || (store.cloudLoading && !state.updatedAt))
     return <div className="loading-screen">正在读取家庭财富数据…</div>;
   return (
     <main>
-      <aside className="sidebar">
-        <a className="brand" href="#overview">
-          <span>t</span>ogether
-        </a>
-        <nav>
-          <a
-            href="#overview"
-            aria-current={activeSection === "overview" ? "location" : undefined}
-          >
-            <LineChart />
-            全景
-          </a>
-          <a
-            href="#growth"
-            aria-current={activeSection === "growth" ? "location" : undefined}
-          >
-            <Target />
-            增长行动
-          </a>
-          <a
-            href="#assets"
-            aria-current={activeSection === "assets" ? "location" : undefined}
-          >
-            <WalletCards />
-            资产与负债
-          </a>
-          <a
-            href="#cashflow"
-            aria-current={activeSection === "cashflow" ? "location" : undefined}
-          >
-            <WalletCards />
-            每月现金流
-          </a>
-          <a
-            href="#contributions"
-            aria-current={
-              activeSection === "contributions" ? "location" : undefined
-            }
-          >
-            <Users />
-            成员贡献
-          </a>
-          <a
-            href="#framework"
-            aria-current={
-              activeSection === "framework" ? "location" : undefined
-            }
-          >
-            <Landmark />
-            家庭计划
-          </a>
-          <a
-            href="#quarterly-review"
-            aria-current={
-              activeSection === "quarterly-review" ? "location" : undefined
-            }
-          >
-            <Target />
-            季度复盘
-          </a>
-          <a href="/markets">
-            <Globe2 />
-            市场看板
-          </a>
-          <button onClick={() => advisor()}>
-            <Sparkles />
-            财富顾问
-          </button>
-          <a href="/learn">
-            <Sparkles />
-            每日心理学
-          </a>
-          <a href="/lifestyle">
-            <Sparkles />
-            兴趣与生活
-          </a>
-          <a href="/council">
-            <Sparkles />
-            多模型研讨
-          </a>
-        </nav>
-        <div className="sidebar-bottom">
-          <a className="version-link" href="/updates">
-            v{APP_VERSION} · 版本更新 · Admin
-          </a>
-          <button
-            className="data-nav"
-            onClick={() => open({ kind: "settings" })}
-          >
-            <Database size={17} />
-            数据与同步
-          </button>
-          <button className="people" onClick={() => open({ kind: "members" })}>
-            <div className="avatars">
-              <i>{state.members.first.slice(0, 1)}</i>
-              <i>{state.members.second.slice(0, 1)}</i>
-            </div>
-            <div>
-              <b>
-                {state.members.first} & {state.members.second}
-              </b>
-              <small>共同空间 · 编辑名称</small>
-            </div>
-            <Pencil size={13} />
-          </button>
-        </div>
-      </aside>
-      <section className="content">
+      <AppNavigation
+        active={activeSection}
+        footer={
+          <>
+            <button
+              className="data-nav"
+              onClick={() => open({ kind: "settings" })}
+            >
+              <Database size={17} />
+              数据与同步
+            </button>
+            <button
+              className="people"
+              onClick={() => open({ kind: "members" })}
+            >
+              <div className="avatars">
+                <i>{state.members.first.slice(0, 1)}</i>
+                <i>{state.members.second.slice(0, 1)}</i>
+              </div>
+              <div>
+                <b>
+                  {state.members.first} & {state.members.second}
+                </b>
+                <small>共同空间 · 编辑名称</small>
+              </div>
+              <Pencil size={13} />
+            </button>
+          </>
+        }
+      />
+      <section className="content" id="page-content" tabIndex={-1}>
         <header id="overview">
           <div>
-            <p className="eyebrow">TOGETHER · FAMILY WEALTH</p>
-            <h1>家庭财富，一起掌握。</h1>
+            <p className="eyebrow">TOGETHER · FAMILY SPACE</p>
+            <h1>两个人的生活，一个共同空间。</h1>
             <button
               className="save-status"
               onClick={() => open({ kind: "settings" })}
@@ -693,22 +638,7 @@ export default function Home() {
           </div>
         )}
         <div className="financial-content" hidden={privacy}>
-          <div className="mobile-nav">
-            <a href="/markets">市场</a>
-            <a href="#overview">总览</a>
-            <a href="#growth">增长</a>
-            <a href="#assets">资产</a>
-            <a href="#cashflow">收支</a>
-            <a href="#contributions">贡献</a>
-            <a href="#framework">计划</a>
-            <a href="#quarterly-review">复盘</a>
-            <button onClick={() => open({ kind: "members" })}>成员</button>
-            <button onClick={() => open({ kind: "settings" })}>数据</button>
-            <a href="/learn">心理学</a>
-            <a href="/lifestyle">兴趣</a>
-            <a href="/council">研讨</a>
-            <a href="/updates">版本</a>
-          </div>
+          <WorkspaceHub />
           <QuarterlyReminder state={state} />
           <div className="hero">
             <div>

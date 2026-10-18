@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Bookmark, BookOpen } from "lucide-react";
 import useWealth from "@/lib/useWealth";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import { ModuleBridge } from "@/app/components/AppNavigation";
 import PushSettings from "@/app/components/PushSettings";
 import {
   EMPTY_LEARNING,
@@ -27,6 +28,22 @@ export default function Learn() {
     [query, setQuery] = useState(""),
     [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [today, setToday] = useState("");
+  useEffect(() => {
+    const change = () =>
+      setView(location.hash === "#favorites" ? "favorites" : "daily");
+    change();
+    window.addEventListener("hashchange", change);
+    return () => window.removeEventListener("hashchange", change);
+  }, []);
+  const changeView = (next: "daily" | "favorites") => {
+    setView(next);
+    history.replaceState(
+      null,
+      "",
+      next === "favorites" ? "#favorites" : "/learn",
+    );
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  };
   useEffect(() => {
     const update = () => setToday(torontoDay());
     update();
@@ -188,7 +205,11 @@ export default function Learn() {
   return (
     <main className="market-shell">
       <MarketNavigator active="learn" />
-      <div className="markets-page learning-page">
+      <div
+        className="markets-page learning-page"
+        id="page-content"
+        tabIndex={-1}
+      >
         <header className="markets-header">
           <div>
             <p className="eyebrow">ONE IDEA · BETTER DECISIONS</p>
@@ -201,19 +222,20 @@ export default function Learn() {
           </div>
           <span>{today} · Toronto</span>
         </header>
+        <ModuleBridge featureId="learn" />
         <div className="learning-toolbar">
           <div role="group" aria-label="心理学视图">
             <button
               className="secondary"
               aria-pressed={view === "daily"}
-              onClick={() => setView("daily")}
+              onClick={() => changeView("daily")}
             >
               每日与回看
             </button>
             <button
               className="secondary"
               aria-pressed={view === "favorites"}
-              onClick={() => setView("favorites")}
+              onClick={() => changeView("favorites")}
             >
               我的收藏（{loaded ? prefs.favorites.length : "…"}）
             </button>

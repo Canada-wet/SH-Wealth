@@ -10,6 +10,45 @@ export async function authenticate(
   page: Page,
   options: { email?: string; householdId?: string; seed?: WealthState } = {},
 ) {
+  // Navigation fixtures never write the real members' personal pins or recency.
+  if (process.env.RUN_NAVIGATION_INTEGRATION !== "1") {
+    const entries = new Map<
+      string,
+      {
+        feature_id: string;
+        pinned: boolean;
+        last_used_at: string | null;
+        pinned_at: string | null;
+      }
+    >();
+    await page.route("**/api/navigation", async (route) => {
+      if (route.request().method() === "POST") {
+        const { featureId, action } = route.request().postDataJSON();
+        const old = entries.get(featureId) ?? {
+          feature_id: featureId,
+          pinned: false,
+          last_used_at: null,
+          pinned_at: null,
+        };
+        const now = new Date().toISOString();
+        entries.set(featureId, {
+          ...old,
+          ...(action === "visit"
+            ? { last_used_at: now }
+            : {
+                pinned: action === "pin",
+                pinned_at: action === "pin" ? old.pinned_at || now : null,
+              }),
+        });
+      }
+      return route.fulfill({
+        json: {
+          userId: "00000000-0000-4000-8000-000000000001",
+          entries: [...entries.values()],
+        },
+      });
+    });
+  }
   // New public-market briefings must not spend real model credits during UI fixtures.
   if (process.env.RUN_MARKET_BRIEFING_INTEGRATION !== "1")
     await page.route("**/api/market/briefing", (route) =>
@@ -157,10 +196,14 @@ export async function authenticate(
 export async function assertFixtureConnection(page: Page, householdId: string) {
   if (!created.has(householdId))
     throw new Error("Refusing to verify or mutate a non-fixture household.");
-  await expect.poll(async () => page.evaluate(() => {
-    const link = localStorage.getItem("together-cloud-link");
-    return link ? JSON.parse(link).householdId : null;
-  })).toBe(householdId);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const link = localStorage.getItem("together-cloud-link");
+        return link ? JSON.parse(link).householdId : null;
+      }),
+    )
+    .toBe(householdId);
 }
 export async function cleanupAuthenticated(page: Page) {
   const fixture = fixtures.get(page);

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./styles.css";
+import NavigationProvider from "./components/NavigationProvider";
+import "./navigation.css";
 
 export const metadata: Metadata = {
-  title: "Together · 家庭财富",
-  description: "为两个人共同看见、计划和管理财富。",
+  title: "Together · 家庭生活空间",
+  description: "把家庭财富、市场、思考与兴趣放在一起。",
 };
 
 export default function RootLayout({
@@ -11,7 +13,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <NavigationProvider>{children}</NavigationProvider>
+      </body>
     </html>
   );
 }

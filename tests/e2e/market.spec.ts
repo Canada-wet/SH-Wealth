@@ -338,8 +338,12 @@ test("工作台固定导航、独立搜索和密度切换适配手机并保留�
     "location",
   );
   const position = await nav.boundingBox();
-  expect(position!.y).toBeGreaterThanOrEqual(-1);
-  expect(position!.y).toBeLessThan(20);
+  const shellBar = page.locator(".app-mobile-bar");
+  const offset = (await shellBar.isVisible())
+    ? (await shellBar.boundingBox())!.height
+    : 0;
+  expect(position!.y).toBeGreaterThanOrEqual(offset - 1);
+  expect(position!.y).toBeLessThan(offset + 20);
   await nav.getByRole("link", { name: "自选涨跌" }).click();
   await expect(
     pulse.getByRole("heading", { name: "自选涨跌速览" }),
@@ -642,14 +646,14 @@ test("独立看板保留导航和当前页状态，返回家庭资产定位正�
   await expect(
     page.locator(
       mobile
-        ? '.market-mobile-nav a[aria-current="page"]'
+        ? '.app-mobile-shortcuts a[aria-current="page"]'
         : '.market-sidebar a[aria-current="page"]',
     ),
   ).toHaveText("市场看板");
   if (mobile)
     await page
-      .locator(".market-mobile-nav")
-      .getByRole("link", { name: "家庭财富" })
+      .locator(".app-mobile-shortcuts")
+      .getByRole("link", { name: "家庭全景" })
       .click();
   else
     await page
@@ -665,10 +669,20 @@ test("市场看板入口、币种方向、宏观口径和来源都明确，手�
 }) => {
   await page.goto("/");
   await page
-    .getByRole("link", {
-      name: test.info().project.name.startsWith("mobile") ? "市场" : "市场看板",
+    .getByRole("button", {
+      name: test.info().project.name.startsWith("mobile")
+        ? "打开页面与功能搜索"
+        : "搜索页面与功能",
       exact: true,
     })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("搜索页面与功能", { exact: true })
+    .fill("市场看板");
+  await page
+    .getByRole("dialog")
+    .getByRole("link", { name: /市场看板/ })
     .click();
   await expect(
     page.getByRole("heading", { name: "市场看板", exact: true }),

@@ -45,10 +45,11 @@ test("已有有效登录自动回到看板，退出只清理当前设备并可�
   await expect(
     page.getByRole("heading", { name: "市场看板", exact: true }),
   ).toBeVisible();
+  if (test.info().project.name.startsWith("mobile"))
+    await page.getByRole("button", { name: "打开页面与功能搜索" }).click();
   await page
     .getByRole("button", {
-      name:
-        test.info().project.name.startsWith("mobile") ? "退出登录" : "退出当前设备登录",
+      name: "退出当前设备登录",
       exact: true,
     })
     .click();

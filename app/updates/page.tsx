@@ -26,7 +26,11 @@ export default function Updates() {
   return (
     <main className="market-shell">
       <MarketNavigator active="updates" />
-      <div className="markets-page learning-page">
+      <div
+        className="markets-page learning-page"
+        id="page-content"
+        tabIndex={-1}
+      >
         <header className="markets-header">
           <div>
             <p className="eyebrow">TOGETHER · RELEASE NOTES</p>

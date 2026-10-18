@@ -1,5 +1,11 @@
 "use client";
-import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useId,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { X } from "lucide-react";
 export default function Dialog({
   title,
@@ -17,6 +23,7 @@ export default function Dialog({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   const dirty = useRef(false);
   const requestClose = () => {
     if (
@@ -38,6 +45,7 @@ export default function Dialog({
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       className={`dialog ${wide ? "wide" : ""}`}
       onCancel={(event) => {
         event.preventDefault();
@@ -49,7 +57,7 @@ export default function Dialog({
     >
       <div className="dialog-body">
         <div className="dialog-heading">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button
             type="button"
             className="icon-button"

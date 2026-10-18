@@ -13,6 +13,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import MarketNavigator from "@/app/components/MarketNavigator";
+import { ModuleBridge } from "@/app/components/AppNavigation";
 import AdvisorMarkdown from "@/app/components/AdvisorMarkdown";
 import {
   COUNCIL_MODELS,
@@ -406,7 +407,11 @@ export default function CouncilPage() {
   return (
     <main className="market-shell council-shell">
       <MarketNavigator active="council" />
-      <div className="markets-page council-page">
+      <div
+        className="markets-page council-page"
+        id="page-content"
+        tabIndex={-1}
+      >
         <header className="markets-header">
           <div>
             <p className="eyebrow">TOGETHER · THINK TOGETHER</p>
@@ -423,6 +428,7 @@ export default function CouncilPage() {
             <Plus size={17} /> 新问题
           </button>
         </header>
+        <ModuleBridge featureId="council" />
         <div className="council-privacy">
           <ShieldCheck size={18} />
           <span>

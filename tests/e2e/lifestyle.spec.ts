@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { authenticate, cleanupAuthenticated, assertFixtureConnection } from "./auth-helper";
+import {
+  authenticate,
+  cleanupAuthenticated,
+  assertFixtureConnection,
+} from "./auth-helper";
 import { emptyState } from "../../lib/wealth";
 import { lifestyleFixture } from "../fixtures/lifestyle";
 const seed = (withTracks = false) => {
@@ -122,11 +126,9 @@ test("从曲库、可解释推荐、Cue时长到练习完整联动，刷新保�
   expect(state.history).toEqual([]);
   expect(state.preferences.lifestyle.practices[0].trackCount).toBe(2);
   await page.getByRole("tab", { name: "Set Builder", exact: true }).click();
-  await page
-    .locator(".hobby-builder")
-    .screenshot({
-      path: `test-results/lifestyle-set-${test.info().project.name}.png`,
-    });
+  await page.locator(".hobby-builder").screenshot({
+    path: `test-results/lifestyle-set-${test.info().project.name}.png`,
+  });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -156,7 +158,9 @@ test("CSV先预览再提交，整批校验、去重、备份、删除撤销和�
     buffer: Buffer.from("title,bpm\nGood,122\nBad,NaN"),
   });
   await expect(
-    page.getByRole("region", { name: "DJ 曲库", exact: true }).getByRole("alert"),
+    page
+      .getByRole("region", { name: "DJ 曲库", exact: true })
+      .getByRole("alert"),
   ).toContainText("第 3 行");
   expect(
     await page.evaluate(
@@ -208,13 +212,11 @@ test("CSV先预览再提交，整批校验、去重、备份、删除撤销和�
   expect((await download).suggestedFilename()).toBe(
     "Together-lifestyle-backup.json",
   );
-  await page
-    .getByLabel("选择兴趣备份", { exact: true })
-    .setInputFiles({
-      name: "synthetic-backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(lifestyleFixture())),
-    });
+  await page.getByLabel("选择兴趣备份", { exact: true }).setInputFiles({
+    name: "synthetic-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(lifestyleFixture())),
+  });
   await expect(page.getByRole("dialog")).toContainText("5 首曲目");
   await page
     .getByRole("button", { name: "确认替换兴趣空间", exact: true })
@@ -283,27 +285,32 @@ test("过期编辑不覆盖另一页兴趣数据；推荐偏好保存且未知�
   await expect(page.locator(".hobby-recipe")).toContainText("目标能量 -1");
   await expect(page.locator(".hobby-candidates")).toContainText("BPM 缺失");
   await page.getByRole("tab", { name: "曲库", exact: true }).click();
-  await page
-    .locator(".hobby-page")
-    .screenshot({
-      path: `test-results/lifestyle-library-${test.info().project.name}.png`,
-    });
+  await page.locator(".hobby-page").screenshot({
+    path: `test-results/lifestyle-library-${test.info().project.name}.png`,
+  });
 });
 test("家庭导航进入兴趣空间，推荐在桌面和手机完整可见且返回财富不改账", async ({
   page,
 }) => {
   await authenticate(page, { seed: seed(true) });
   await page.goto("/");
-  await page.locator('a[href="/lifestyle"]:visible').click();
+  await page
+    .getByRole("region", { name: "我的家庭工作台" })
+    .getByRole("link", { name: /兴趣与生活/ })
+    .click();
   await saved(page);
   await expect(page).toHaveURL(/\/lifestyle$/);
-  await expect(page.getByRole("heading", { name: "兴趣与生活", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "兴趣与生活", exact: true }),
+  ).toBeVisible();
   await page.locator(".hobby-page").screenshot({
     path: `test-results/lifestyle-overview-${test.info().project.name}.png`,
   });
   await page.getByRole("tab", { name: "Set Builder", exact: true }).click();
   await page.getByRole("button", { name: "新建 Set", exact: true }).click();
-  await page.getByLabel("Set 名称", { exact: true }).fill("Sunday · Slow listening");
+  await page
+    .getByLabel("Set 名称", { exact: true })
+    .fill("Sunday · Slow listening");
   await page.getByRole("button", { name: "保存 Set", exact: true }).click();
   await page.getByLabel("选择起始曲目", { exact: true }).selectOption("a");
   await page.getByRole("button", { name: "用这首开始", exact: true }).click();
@@ -314,10 +321,16 @@ test("家庭导航进入兴趣空间，推荐在桌面和手机完整可见且�
   await page.locator(".hobby-builder").screenshot({
     path: `test-results/lifestyle-recommendations-${test.info().project.name}.png`,
   });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await page.locator('a[href="/#overview"]:visible').first().click();
   await expect(page.locator("#assets")).toBeVisible();
-  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("together-wealth-v3")!));
+  const state = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("together-wealth-v3")!),
+  );
   expect(state.assets).toEqual(seed().assets);
   expect(state.history).toEqual([]);
 });
