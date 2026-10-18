@@ -1,6 +1,7 @@
 import { it, expect } from "vitest";
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
+import { APP_VERSION } from "../lib/releases";
 it.skipIf(process.env.RUN_COUNCIL_READ_INTEGRATION !== "1")(
   "真实存储与线上两位管理员只读核验；不建研讨、不消费每日限额",
   async () => {
@@ -75,7 +76,7 @@ it.skipIf(process.env.RUN_COUNCIL_READ_INTEGRATION !== "1")(
           Authorization: `Bearer ${login.data.session!.access_token}`,
         },
       });
-      expect((await releases.json()).version).toBe("0.6.0");
+      expect((await releases.json()).version).toBe(APP_VERSION);
     }
     const unauth = await fetch(app + "/api/council");
     expect(unauth.status).toBe(401);

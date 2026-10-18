@@ -8,7 +8,7 @@ import {
 } from "../../lib/council";
 async function councilFixture(
   page: Page,
-  { storage = true, interrupt = false } = {},
+  { storage = true, interrupt = false, alibaba = false } = {},
 ) {
   let run: CouncilRun | null = null;
   let calls = 0;
@@ -22,12 +22,25 @@ async function councilFixture(
           models: COUNCIL_MODELS,
           availability: COUNCIL_MODELS.map((m) => ({
             key: m.key,
-            ready: [
-              "deepseek-light",
-              "openai-light",
-              "openai-flagship",
-            ].includes(m.key),
+            ready: (alibaba
+              ? [
+                  "qwen-light",
+                  "qwen-flagship",
+                  "glm-flagship",
+                  "moonshot-alternative",
+                  "moonshot-flagship",
+                ]
+              : ["deepseek-light", "openai-light", "openai-flagship"]
+            ).includes(m.key),
             detail: "Synthetic configured state",
+            ...(alibaba
+              ? {
+                  connection: {
+                    channel: "alibaba",
+                    model: m.key === "glm-flagship" ? "ZHIPU/GLM-5.3" : m.model,
+                  },
+                }
+              : {}),
           })),
           storageReady: storage,
           runs: run
@@ -49,6 +62,16 @@ async function councilFixture(
     const body = request.postDataJSON();
     expect(body).not.toHaveProperty("assets");
     expect(body).not.toHaveProperty("household");
+    if (body.action === "check-alibaba")
+      return route.fulfill({
+        json: {
+          check: {
+            ok: true,
+            message: "百炼型号目录连接成功（合成测试，不生成回答）",
+            modelKeys: ["qwen-light", "glm-flagship", "moonshot-flagship"],
+          },
+        },
+      });
     if (body.action === "create") {
       run = {
         id: body.id,
@@ -59,6 +82,16 @@ async function councilFixture(
         created_at: new Date().toISOString(),
         models: COUNCIL_MODELS.filter(
           (m) => body.participants.includes(m.key) || body.judge === m.key,
+        ).map((m) =>
+          alibaba
+            ? {
+                ...m,
+                connection: {
+                  channel: "alibaba" as const,
+                  model: m.key === "glm-flagship" ? "ZHIPU/GLM-5.3" : m.model,
+                },
+              }
+            : m,
         ),
         steps: councilPlan(body.participants, body.judge).map((s) => ({
           ...s,
@@ -221,4 +254,38 @@ test("云端未安装时不允许启动，配置与型号解释仍可查看", as
     "K2.6 仅作在售备选",
   );
   expect(fixture.calls()).toBe(0);
+});
+test("同一百炼渠道可选 Qwen / Kimi / GLM；映射、连接检查及历史渠道明确", async ({
+  page,
+}) => {
+  await authenticate(page);
+  const f = await councilFixture(page, { alibaba: true });
+  await page.goto("/council");
+  await expect(
+    page.getByRole("checkbox", { name: /Qwen 3.8 Flash/ }),
+  ).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Kimi K2.6/ })).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: /GLM 5.3 Flash/ }),
+  ).toBeDisabled();
+  await expect(page.locator(".council-model-grid")).toContainText(
+    "阿里云百炼 · API 型号 ZHIPU/GLM-5.3",
+  );
+  await page.getByText(/模型来源与连接设置/).click();
+  await page
+    .getByRole("button", { name: "检查百炼连接（不生成回答）" })
+    .click();
+  await expect(page.getByRole("status")).toContainText("百炼型号目录连接成功");
+  expect(f.calls()).toBe(0);
+  await page
+    .getByLabel("问题与已知条件")
+    .fill("百炼合成问题：比较两种学习方法，不涉及私人资料。");
+  await page.getByRole("checkbox", { name: /我同意把问题及发言/ }).check();
+  await page.getByRole("button", { name: "开始研讨", exact: true }).click();
+  await expect(page.locator(".council-session")).toContainText("6/6 步已归档", {
+    timeout: 15000,
+  });
+  await expect(page.locator(".council-answer").first()).toContainText(
+    "阿里云百炼 · API 型号 qwen3.8-flash",
+  );
 });

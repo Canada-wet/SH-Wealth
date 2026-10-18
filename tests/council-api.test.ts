@@ -5,8 +5,16 @@ const mock = vi.hoisted(() => ({
   advance: vi.fn(),
   command: vi.fn(),
   from: vi.fn(),
+  rpc: vi.fn(),
+  check: vi.fn(),
 }));
 vi.mock("../lib/server-auth", () => ({ authorizeRequest: mock.auth }));
+vi.mock("../lib/council-provider", async () => ({
+  ...(await vi.importActual<typeof import("../lib/council-provider")>(
+    "../lib/council-provider",
+  )),
+  checkAlibabaConnection: mock.check,
+}));
 vi.mock("../lib/council-server", async () => {
   const actual = await vi.importActual<typeof import("../lib/council-server")>(
     "../lib/council-server",
@@ -44,11 +52,17 @@ beforeEach(() => {
   mock.auth.mockResolvedValue({
     status: 200,
     user: { id: "verified-user" },
-    client: { from: mock.from },
+    client: { from: mock.from, rpc: mock.rpc },
   });
   mock.create.mockResolvedValue(run);
   mock.advance.mockResolvedValue(run);
   mock.command.mockResolvedValue(run);
+  mock.rpc.mockResolvedValue({ data: true, error: null });
+  mock.check.mockResolvedValue({
+    ok: true,
+    message: "合成目录检查",
+    modelKeys: ["glm-flagship"],
+  });
 });
 const post = (body: unknown, origin = "https://app.test") =>
   POST(
@@ -58,6 +72,17 @@ const post = (body: unknown, origin = "https://app.test") =>
       body: JSON.stringify(body),
     }),
   );
+it("目录检查验证本人和频率，仅检查不生成；过频不碰服务商", async () => {
+  const r = await post({ action: "check-alibaba" });
+  expect(r.status).toBe(200);
+  expect(mock.rpc).toHaveBeenCalledWith("take_wealth_advisor_slot");
+  expect(mock.check).toHaveBeenCalledTimes(1);
+  expect(mock.create).not.toHaveBeenCalled();
+  expect(mock.advance).not.toHaveBeenCalled();
+  mock.rpc.mockResolvedValueOnce({ data: false });
+  expect((await post({ action: "check-alibaba" })).status).toBe(429);
+  expect(mock.check).toHaveBeenCalledTimes(1);
+});
 it("所有读写需验证登录，拒绝跨源请求、任意动作和过大内容", async () => {
   mock.auth.mockResolvedValueOnce({ status: 401, error: "login" });
   expect((await GET(new Request("https://app.test/api/council"))).status).toBe(

@@ -1,6 +1,11 @@
 import { it, expect, vi, afterEach } from "vitest";
 import { COUNCIL_MODELS } from "../lib/council";
-import { callCouncilModel, councilAvailability } from "../lib/council-provider";
+import {
+  callCouncilModel,
+  councilAvailability,
+  councilModelSnapshot,
+  checkAlibabaConnection,
+} from "../lib/council-provider";
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -16,12 +21,142 @@ const keys = [
   "MODEL_API_KEY",
 ];
 const enable = () => {
+  vi.stubEnv("COUNCIL_GLM_CHANNEL", "auto");
+  vi.stubEnv("COUNCIL_MOONSHOT_CHANNEL", "auto");
   keys.forEach((k) => vi.stubEnv(k, "private-test-secret"));
   vi.stubEnv(
     "QWEN_BASE_URL",
     "https://test-workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
   );
 };
+const onlyAlibaba = () => {
+  enable();
+  keys.filter((k) => k !== "QWEN_API_KEY").forEach((k) => vi.stubEnv(k, ""));
+};
+it("一把百炼key启用核实的五个型号；GLM Flash不自动替换", () => {
+  onlyAlibaba();
+  expect(
+    councilAvailability()
+      .filter((a) => a.ready)
+      .map((a) => a.key),
+  ).toEqual([
+    "qwen-light",
+    "qwen-flagship",
+    "glm-flagship",
+    "moonshot-alternative",
+    "moonshot-flagship",
+  ]);
+  const glm = councilAvailability().find((a) => a.key === "glm-flagship")!;
+  expect(glm.connection).toMatchObject({
+    channel: "alibaba",
+    model: "ZHIPU/GLM-5.3",
+  });
+  expect(
+    councilAvailability().find((a) => a.key === "glm-light")?.detail,
+  ).toContain("尚无已核实");
+  expect(JSON.stringify(councilAvailability())).not.toContain("test-workspace");
+});
+it.each([
+  ["moonshot-flagship", "kimi-k3"],
+  ["moonshot-alternative", "kimi-k2.6"],
+  ["glm-flagship", "ZHIPU/GLM-5.3"],
+])("%s 通过百炼地址和同一key发送正确别名，不混入原厂参数", async (k, id) => {
+  onlyAlibaba();
+  const m = councilModelSnapshot(COUNCIL_MODELS.find((m) => m.key === k)!);
+  const fetcher = vi.fn(async (url: unknown, options: RequestInit) => {
+    expect(String(url)).toBe(
+      "https://test-workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+    );
+    expect((options.headers as Record<string, string>).Authorization).toBe(
+      "Bearer private-test-secret",
+    );
+    const body = JSON.parse(String(options.body));
+    expect(body.model).toBe(id);
+    expect(body.thinking).toBeUndefined();
+    expect(body.reasoning_effort).toBeUndefined();
+    return Response.json({
+      choices: [{ message: { content: "百炼合成回答" } }],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  expect((await callCouncilModel(m, "system", "public question")).answer).toBe(
+    "百炼合成回答",
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("渠道偏好不静默降级，快照冻结渠道与业务空间，旧版直连不迁移", async () => {
+  onlyAlibaba();
+  const glm = COUNCIL_MODELS.find((m) => m.key === "glm-flagship")!,
+    snapshot = councilModelSnapshot(glm);
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  // Historical no-snapshot GLM remains direct and cannot borrow Alibaba credentials.
+  await expect(callCouncilModel(glm, "s", "q")).rejects.toThrow("未发起调用");
+  vi.stubEnv(
+    "QWEN_BASE_URL",
+    "https://other.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+  );
+  await expect(callCouncilModel(snapshot, "s", "q")).rejects.toThrow(
+    "业务空间地址已变化",
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+  enable();
+  expect(councilModelSnapshot(glm).connection?.channel).toBe("direct");
+  vi.stubEnv("COUNCIL_GLM_CHANNEL", "alibaba");
+  expect(councilModelSnapshot(glm).connection?.channel).toBe("alibaba");
+  expect(councilAvailability().find((a) => a.key === "glm-light")?.ready).toBe(
+    false,
+  );
+  vi.stubEnv("COUNCIL_GLM_CHANNEL", "invalid");
+  expect(
+    councilAvailability().find((a) => a.key === "glm-flagship")?.ready,
+  ).toBe(false);
+  vi.stubEnv("COUNCIL_GLM_CHANNEL", "direct");
+  vi.stubEnv("ZAI_API_KEY", "");
+  expect(
+    councilAvailability().find((a) => a.key === "glm-flagship")?.ready,
+  ).toBe(false);
+});
+it("百炼失败不转发至原厂，不重新调用或输出密钥", async () => {
+  enable();
+  vi.stubEnv("COUNCIL_GLM_CHANNEL", "alibaba");
+  const m = councilModelSnapshot(
+    COUNCIL_MODELS.find((m) => m.key === "glm-flagship")!,
+  );
+  const fetcher = vi.fn(
+    async () => new Response("private-test-secret", { status: 401 }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  await expect(callCouncilModel(m, "s", "q")).rejects.toThrow(
+    "凭证、地域或模型访问权限",
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("连接检查只读取目录，过滤非研讨型号；不发起付费生成", async () => {
+  onlyAlibaba();
+  const fetcher = vi.fn(async (url: unknown, options: RequestInit) => {
+    expect(String(url)).toMatch(/\/models$/);
+    expect(options.method).toBeUndefined();
+    expect(options.body).toBeUndefined();
+    return Response.json({
+      data: [
+        { id: "kimi-k3" },
+        { id: "ZHIPU/GLM-5.3" },
+        { id: "unrelated-private-model" },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const result = await checkAlibabaConnection();
+  expect(result.ok).toBe(true);
+  expect(result.modelKeys).toEqual(["moonshot-flagship", "glm-flagship"]);
+  expect(JSON.stringify(result)).not.toContain("unrelated-private-model");
+  fetcher.mockImplementationOnce(
+    async () => new Response("secret", { status: 404 }),
+  );
+  expect((await checkAlibabaConnection()).ok).toBe(false);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 it("只返回配置状态不返回密钥，Qwen 拒绝任意域名与错误地域地址", () => {
   keys.forEach((k) => vi.stubEnv(k, ""));
   expect(councilAvailability().every((x) => !x.ready)).toBe(true);

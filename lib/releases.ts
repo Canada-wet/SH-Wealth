@@ -2,6 +2,22 @@ import metadata from "../package.json";
 export const APP_VERSION = metadata.version;
 export const RELEASES = [
   {
+    version: "0.6.1",
+    date: "2026-10-18",
+    title: "同一个百炼 key，邀请不同模型上桌",
+    items: [
+      "Qwen、Kimi K3 / K2.6 与 GLM 5.3 支持共用同地域百炼 key，GLM 使用百炼目录中的 ZHIPU/GLM-5.3 映射。",
+      "卡片、裁判选项、发言与导出显示实际渠道及 API 型号，不再把模型厂商等同调用平台。",
+      "新研讨冻结渠道、型号和业务空间指纹；中途配置变化不会静默换渠道，旧版直连研讨保持原方式。",
+      "新增百炼连接检查，只读取型号目录，不自动发起付费生成；保留原厂直连与服务端渠道偏好。",
+    ],
+    limitations: [
+      "配置完整不等于模型已有权限、额度或实测通过；目录可访问也不能证明免费额度。",
+      "GLM Flash 暂无已核实的百炼映射，需要原厂 key；不自动替换成其他型号。",
+      "原厂 key 与百炼 key 同时存在时，auto 优先保持原厂；可用渠道变量明确指定。失败不跨渠道自动重试。",
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-10-18",
     title: "让难题，在不同观点之间变清楚",

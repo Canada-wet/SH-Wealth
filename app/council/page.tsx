@@ -20,6 +20,7 @@ import {
   PROVIDER_NAMES,
   STAGES,
   councilExport,
+  councilConnectionNote,
   type CouncilAvailability,
   type CouncilRun,
   type CouncilStage,
@@ -53,6 +54,7 @@ async function api(body?: unknown, id?: string) {
 }
 export default function CouncilPage() {
   const [showAllProviders, setShowAllProviders] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [availability, setAvailability] = useState<CouncilAvailability[]>([]),
     [storageReady, setStorageReady] = useState(false),
     [loading, setLoading] = useState(true),
@@ -119,6 +121,8 @@ export default function CouncilPage() {
         "openai-light",
         "anthropic-light",
         "gemini-light",
+        "qwen-light",
+        "moonshot-alternative",
       ].filter((k) =>
         d.availability.some((a: CouncilAvailability) => a.key === k && a.ready),
       );
@@ -241,6 +245,12 @@ export default function CouncilPage() {
         participants,
         judge: judge || null,
         consent,
+        expectedConnections: Object.fromEntries(
+          [...participants, ...(judge ? [judge] : [])].flatMap((key) => {
+            const c = availability.find((a) => a.key === key)?.connection;
+            return c ? [[key, c]] : [];
+          }),
+        ),
       });
       accept(d.run);
       setCompose(false);
@@ -477,6 +487,18 @@ export default function CouncilPage() {
                                       ? "凭证已配置"
                                       : "尚未配置"}
                                   </small>
+                                  {available(m.key) &&
+                                    availability.find((a) => a.key === m.key)
+                                      ?.connection && (
+                                      <small>
+                                        {councilConnectionNote({
+                                          ...m,
+                                          connection: availability.find(
+                                            (a) => a.key === m.key,
+                                          )?.connection,
+                                        })}
+                                      </small>
+                                    )}
                                 </span>
                               </label>
                             ),
@@ -506,6 +528,10 @@ export default function CouncilPage() {
                           disabled={!available(m.key)}
                         >
                           {m.name}
+                          {availability.find((a) => a.key === m.key)?.connection
+                            ?.channel === "alibaba"
+                            ? " · 百炼"
+                            : ""}
                           {!available(m.key) ? "（未配置）" : ""}
                         </option>
                       ))}
@@ -565,10 +591,35 @@ export default function CouncilPage() {
                   <summary>模型来源与连接设置 · 核对于 {CATALOG_DATE}</summary>
                   <p>
                     “凭证已配置”不代表模型已测试或有余额。新配置需重新部署。Qwen
-                    的凭证与业务空间地址必须属于同一地域。Moonshot
+                    的凭证与业务空间地址必须属于同一地域。Kimi / GLM 可复用百炼
+                    key，卡片显示实际渠道；未核实的百炼型号不会启用。通过百炼时由阿里云处理输入及计费，不会失败后自动切到原厂。Moonshot
                     未核实独立最新轻量型号，K2.6 仅作在售备选；Muse Spark
                     仅列已核实的正式型号。目录不是自动每日更新。
                   </p>
+                  <button
+                    disabled={checking}
+                    onClick={async () => {
+                      setChecking(true);
+                      setError("");
+                      try {
+                        const d = await api({ action: "check-alibaba" });
+                        setNotice(
+                          d.check.message +
+                            (d.check.ok
+                              ? ` 本页目录覆盖 ${d.check.modelKeys.length} 个映射型号。`
+                              : ""),
+                        );
+                      } catch (e) {
+                        setError((e as Error).message);
+                      } finally {
+                        setChecking(false);
+                      }
+                    }}
+                  >
+                    {checking
+                      ? "正在检查百炼连接…"
+                      : "检查百炼连接（不生成回答）"}
+                  </button>
                   {(Object.keys(PROVIDER_NAMES) as CouncilProvider[]).map(
                     (p) => (
                       <div key={p}>
@@ -582,11 +633,12 @@ export default function CouncilPage() {
                           {PROVIDER_NAMES[p]} 官方型号 ↗
                         </a>
                         <small>
-                          {availability.find(
-                            (a) =>
-                              COUNCIL_MODELS.find((m) => m.key === a.key)
-                                ?.provider === p,
-                          )?.detail || "正在读取配置…"}
+                          {COUNCIL_MODELS.filter((m) => m.provider === p)
+                            .map(
+                              (m) =>
+                                `${m.name}：${availability.find((a) => a.key === m.key)?.detail || "正在读取配置…"}`,
+                            )
+                            .join("；")}
                         </small>
                       </div>
                     ),
@@ -777,6 +829,11 @@ export default function CouncilPage() {
                                     ?.name
                                 }
                               </h3>
+                              <small>
+                                {councilConnectionNote(
+                                  run.models.find((m) => m.key === s.model_key),
+                                )}
+                              </small>
                             </div>
                             <span className={`council-step-status ${s.status}`}>
                               {s.status === "succeeded" ? (

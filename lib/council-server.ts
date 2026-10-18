@@ -6,11 +6,13 @@ import {
   councilPlan,
   councilPrompt,
   type CouncilRun,
+  type CouncilModel,
 } from "./council";
 import {
   callCouncilModel,
   CouncilProviderError,
   councilAvailability,
+  councilModelSnapshot,
 } from "./council-provider";
 export class CouncilError extends Error {
   constructor(
@@ -81,15 +83,39 @@ export async function createCouncil(
     question: string;
     participants: string[];
     judge: string | null;
+    expectedConnections?: Record<
+      string,
+      NonNullable<CouncilModel["connection"]>
+    >;
   },
 ) {
   const keys = [...spec.participants, ...(spec.judge ? [spec.judge] : [])];
   if (keys.some((k) => !councilAvailability().find((a) => a.key === k)?.ready))
     throw new CouncilError("选中的服务尚未配置完整；请选择可用模型。", 400);
+  const models = COUNCIL_MODELS.filter((m) => keys.includes(m.key)).map(
+    councilModelSnapshot,
+  );
+  for (const m of models) {
+    const expected = spec.expectedConnections?.[m.key],
+      actual = m.connection!;
+    if (
+      (spec.expectedConnections ||
+        (actual.channel === "alibaba" && m.provider !== "qwen")) &&
+      (!expected ||
+        expected.channel !== actual.channel ||
+        expected.model !== actual.model ||
+        expected.endpointHash !== actual.endpointHash)
+    )
+      throw new CouncilError(
+        "模型渠道或型号配置已变化，请重新连接并核对实际渠道后再开始。尚未调用模型。",
+        409,
+      );
+  }
+  const { expectedConnections: _expected, ...specification } = spec;
   return councilCommand("create", user, spec.id, {
-    ...spec,
+    ...specification,
     catalogDate: CATALOG_DATE,
-    models: COUNCIL_MODELS.filter((m) => keys.includes(m.key)),
+    models,
     steps: councilPlan(spec.participants, spec.judge).map((s) => ({
       ...s,
       status: "pending",

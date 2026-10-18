@@ -15,6 +15,11 @@ export type CouncilModel = {
   model: string;
   tier: "light" | "flagship" | "alternative";
   source: string;
+  connection?: {
+    channel: "direct" | "alibaba";
+    model: string;
+    endpointHash?: string;
+  };
 };
 export const CATALOG_DATE = "2026-10-18";
 const pair = (
@@ -144,6 +149,7 @@ export type CouncilAvailability = {
   key: string;
   ready: boolean;
   detail: string;
+  connection?: CouncilModel["connection"];
 };
 export function councilSpec(raw: unknown) {
   const r = raw as {
@@ -152,6 +158,7 @@ export function councilSpec(raw: unknown) {
     participants?: unknown;
     judge?: unknown;
     consent?: unknown;
+    expectedConnections?: unknown;
   };
   if (
     !r ||
@@ -170,11 +177,41 @@ export function councilSpec(raw: unknown) {
     throw Error(
       "请填写 5–6,000 字问题，选择 2–6 个不同模型，并确认外部服务处理授权。",
     );
+  if (r.expectedConnections !== undefined) {
+    if (
+      !r.expectedConnections ||
+      typeof r.expectedConnections !== "object" ||
+      Array.isArray(r.expectedConnections) ||
+      Object.keys(r.expectedConnections).length > 7
+    )
+      throw Error("连接确认格式无效，请刷新后重试。");
+    for (const [k, v] of Object.entries(r.expectedConnections)) {
+      const c = v as CouncilModel["connection"];
+      if (
+        !COUNCIL_MODELS.some((m) => m.key === k) ||
+        !c ||
+        typeof c !== "object" ||
+        !["direct", "alibaba"].includes(c.channel) ||
+        typeof c.model !== "string" ||
+        c.model.length > 100 ||
+        (c.endpointHash !== undefined && !/^[a-f\d]{64}$/.test(c.endpointHash))
+      )
+        throw Error("连接确认格式无效，请刷新后重试。");
+    }
+  }
   return {
     id: r.id,
     question: r.question.trim(),
     participants: r.participants as string[],
     judge: r.judge as string | null,
+    ...(r.expectedConnections === undefined
+      ? {}
+      : {
+          expectedConnections: r.expectedConnections as Record<
+            string,
+            NonNullable<CouncilModel["connection"]>
+          >,
+        }),
   };
 }
 export const validCouncilId = (v: unknown): v is string =>
@@ -252,8 +289,12 @@ export function councilExport(run: CouncilRun) {
       .filter((s) => s.status !== "pending")
       .map(
         (s) =>
-          `## ${STAGES[s.stage]} · ${run.models.find((m) => m.key === s.model_key)?.name ?? s.model_key}\n\n${s.answer || s.error || "提交状态待确认"}`,
+          `## ${STAGES[s.stage]} · ${run.models.find((m) => m.key === s.model_key)?.name ?? s.model_key}\n\n${councilConnectionNote(run.models.find((m) => m.key === s.model_key))}\n\n${s.answer || s.error || "提交状态待确认"}`,
       )
       .join("\n\n---\n\n")
   );
+}
+export function councilConnectionNote(model?: CouncilModel) {
+  if (!model?.connection) return "旧版记录：未保存渠道快照";
+  return `${model.connection.channel === "alibaba" ? "阿里云百炼" : "原厂直连"} · API 型号 ${model.connection.model}`;
 }

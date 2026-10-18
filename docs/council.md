@@ -1,4 +1,4 @@
-# 多模型研讨 · v0.6.0
+# 多模型研讨 · v0.6.1
 
 入口 `/council`。两位白名单成员均可用，但问题及历史按本人账号隔离，不自动共享给伴侣，不自动附带家庭资产、兴趣资料或既有聊天。页面明确同意后，所选服务商接收问题以及后续阶段需要的发言；他们的存储和处理取决于各自条款。
 
@@ -22,12 +22,18 @@
 | Anthropic | `ANTHROPIC_API_KEY` | Claude Haiku 5.5 / Fable 5.1 |
 | DeepSeek | `DEEPSEEK_API_KEY` | DeepSeek V4.1 Flash / V4 Pro |
 | Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL` | Qwen 3.8 Flash / Max |
-| GLM | `ZAI_API_KEY` | GLM 5.3 Flash / 5.3 |
-| Moonshot | `MOONSHOT_API_KEY` | Kimi K3；K2.6 为在售通用备选，不是最新轻量型号 |
+| GLM | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `ZAI_API_KEY` | 百炼旗舰 `ZHIPU/GLM-5.3`；Flash 暂仅原厂 |
+| Moonshot | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `MOONSHOT_API_KEY` | 百炼 `kimi-k3` / `kimi-k2.6`；K2.6 不是最新轻量型号 |
 | Gemini | `GEMINI_API_KEY` | Gemini 3.5 Flash-Lite / Gemini 4 Argon |
 | Meta | `MODEL_API_KEY` | Muse Spark 1.3；未核实独立 Lite 型号 |
 
-不要使用 `NEXT_PUBLIC_` 前缀保存服务商密钥，不在浏览器存储密钥。Qwen 地址使用该 API key 同地域的官方业务空间地址，例如 `https://WORKSPACE.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`；只接受固定官方域名格式，拒绝任意代理地址。GLM 使用按量付费 Model API，不自动使用 Coding Plan；Meta 不是 WhatsApp Graph 凭证。网页订阅不等于 API 余额。配置变化后需重新部署。
+不要使用 `NEXT_PUBLIC_` 前缀保存服务商密钥，不在浏览器存储密钥。百炼地址使用该 API key 同地域的官方业务空间地址，例如 `https://WORKSPACE.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`；只接受固定官方域名格式，拒绝任意代理地址。仅有这两个变量时，启用 Qwen 两种、Kimi 两种和 GLM 旗舰共五种已核实映射；不等于账号对这五种均已开通权限或免费额度。
+
+`COUNCIL_GLM_CHANNEL` / `COUNCIL_MOONSHOT_CHANNEL` 支持 `auto`（默认）、`alibaba`、`direct`。auto 在已有原厂 key 时保持原厂，否则使用已配置的百炼；强制渠道无效时明确禁用，不静默回退。GLM 原厂使用按量付费 Model API，不自动使用 Coding Plan；Meta 不是 WhatsApp Graph 凭证。网页订阅不等于 API 余额。配置变化后需重新部署。
+
+每个新研讨保存 `connection.channel`、精确 API 型号与百炼地址的 SHA-256 指纹（非密钥），用于发言和导出标注。运行中保持原渠道，业务空间变化则在下一步发出请求前阻止，不将旧请求转到新空间。旧版缺少快照的 Kimi / GLM 仍按原厂直连处理，不能自动借用百炼 key。旧版 Qwen 本来就通过百炼调用。
+
+“检查百炼连接”仅请求同业务空间 `/models`，返回本页固定映射的覆盖情况，不返回密钥、完整目录或上游错误原文；不调用生成接口，也不因目录 404 自动改成付费测试。沿用现有顾问请求频率限制，操作前需白名单登录和同源 JSON 请求。
 
 ## 型号依据（核对日期 2026-10-18）
 

@@ -7,7 +7,10 @@ import {
   validCouncilId,
   type CouncilRun,
 } from "@/lib/council";
-import { councilAvailability } from "@/lib/council-provider";
+import {
+  councilAvailability,
+  checkAlibabaConnection,
+} from "@/lib/council-provider";
 import {
   advanceCouncil,
   councilCommand,
@@ -84,6 +87,15 @@ export async function POST(request: Request) {
     return fail("请求格式无效或内容过长。", 400);
   }
   try {
+    if (raw.action === "check-alibaba") {
+      const slot = await auth.client.rpc("take_wealth_advisor_slot");
+      if (slot.error || !slot.data)
+        return fail("连接检查暂不可用或过于频繁，请稍后重试。", 429);
+      return NextResponse.json(
+        { check: await checkAlibabaConnection() },
+        { headers },
+      );
+    }
     if (raw.action === "create") {
       let spec;
       try {

@@ -23,12 +23,15 @@ import {
   councilCommand,
 } from "../lib/council-server";
 import { COUNCIL_MODELS, councilPlan, type CouncilRun } from "../lib/council";
+import { councilModelSnapshot } from "../lib/council-provider";
 const id = "00000000-0000-4000-8000-000000000003";
 let doc: CouncilRun;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "private-server-test-key");
+  vi.stubEnv("OPENAI_API_KEY", "test-openai");
+  vi.stubEnv("DEEPSEEK_API_KEY", "test-deepseek");
   doc = {
     id,
     question: "Explain opportunity costs",
@@ -161,4 +164,47 @@ it("存储失败后不重发模型，认领状态保留供用户处理", async (
   await expect(advanceCouncil("owner", id)).rejects.toThrow("存储暂不可用");
   await advanceCouncil("owner", id);
   expect(mock.call).toHaveBeenCalledTimes(1);
+});
+it("新研讨保存实际渠道和API型号，忽略客户端自行提供的快照", async () => {
+  await createCouncil("owner", {
+    id,
+    question: doc.question,
+    participants: doc.participants,
+    judge: null,
+  });
+  const payload = mock.rpc.mock.calls[0][1].payload;
+  expect(
+    payload.models.find((m: { key: string }) => m.key === "openai-light")
+      .connection,
+  ).toEqual({ channel: "direct", model: "gpt-6-luna" });
+  expect(JSON.stringify(payload)).not.toContain("test-openai");
+});
+it("开场前渠道变化要求重新确认，不把旧客户端的问题静默转发至百炼", async () => {
+  vi.stubEnv("QWEN_API_KEY", "test-bailian");
+  vi.stubEnv(
+    "QWEN_BASE_URL",
+    "https://example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+  );
+  vi.stubEnv("ZAI_API_KEY", "");
+  const spec = {
+    id,
+    question: "SYNTHETIC public question",
+    participants: ["openai-light", "glm-flagship"],
+    judge: null,
+  };
+  await expect(createCouncil("owner", spec)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(mock.rpc).not.toHaveBeenCalled();
+  const expectedConnections = Object.fromEntries(
+    COUNCIL_MODELS.filter((m) => spec.participants.includes(m.key)).map((m) => [
+      m.key,
+      councilModelSnapshot(m).connection!,
+    ]),
+  );
+  await createCouncil("owner", { ...spec, expectedConnections });
+  expect(mock.rpc).toHaveBeenCalledTimes(1);
+  expect(mock.rpc.mock.calls[0][1].payload).not.toHaveProperty(
+    "expectedConnections",
+  );
 });
