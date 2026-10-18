@@ -576,6 +576,10 @@ export default function Home() {
             <Sparkles />
             兴趣与生活
           </a>
+          <a href="/council">
+            <Sparkles />
+            多模型研讨
+          </a>
         </nav>
         <div className="sidebar-bottom">
           <a className="version-link" href="/updates">
@@ -702,6 +706,7 @@ export default function Home() {
             <button onClick={() => open({ kind: "settings" })}>数据</button>
             <a href="/learn">心理学</a>
             <a href="/lifestyle">兴趣</a>
+            <a href="/council">研讨</a>
             <a href="/updates">版本</a>
           </div>
           <QuarterlyReminder state={state} />

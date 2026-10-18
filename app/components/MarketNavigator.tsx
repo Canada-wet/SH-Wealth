@@ -11,11 +11,12 @@ import {
   ArrowUpRight,
   Target,
   Headphones,
+  MessagesSquare,
 } from "lucide-react";
 export default function MarketNavigator({
   active = "markets",
 }: {
-  active?: "markets" | "learn" | "updates" | "lifestyle";
+  active?: "markets" | "learn" | "updates" | "lifestyle" | "council";
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -106,6 +107,13 @@ export default function MarketNavigator({
             <Headphones />
             兴趣与生活
           </a>
+          <a
+            href="/council"
+            aria-current={active === "council" ? "page" : undefined}
+          >
+            <MessagesSquare />
+            多模型研讨
+          </a>
         </nav>
         <div className="sidebar-bottom market-sidebar-note">
           <a className="version-link" href="/updates">
@@ -126,6 +134,12 @@ export default function MarketNavigator({
         </div>
       </aside>
       <nav className="market-mobile-nav" aria-label="手机主导航">
+        <a
+          href="/council"
+          aria-current={active === "council" ? "page" : undefined}
+        >
+          多模型研讨
+        </a>
         <a href="/#overview">家庭财富</a>
         <a
           href="/markets"

@@ -1,0 +1,156 @@
+import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
+import {
+  COUNCIL_MODELS,
+  CATALOG_DATE,
+  councilPlan,
+  councilPrompt,
+  type CouncilRun,
+} from "./council";
+import {
+  callCouncilModel,
+  CouncilProviderError,
+  councilAvailability,
+} from "./council-provider";
+export class CouncilError extends Error {
+  constructor(
+    message: string,
+    readonly status = 503,
+  ) {
+    super(message);
+  }
+}
+function councilAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
+    key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key)
+    throw new CouncilError("研讨数据库尚未配置。请设置服务端 Supabase 凭证。");
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+export async function councilCommand(
+  action: string,
+  user: string,
+  id: string,
+  payload: unknown = {},
+) {
+  const { data, error } = await councilAdmin().rpc("wealth_council_command", {
+    action,
+    target_user: user,
+    run_id: id,
+    payload,
+  });
+  if (error) {
+    const message = error.message ?? "";
+    if (
+      message.includes("council_not_found") ||
+      message.includes("council_forbidden")
+    )
+      throw new CouncilError("研讨不存在或没有访问权限。", 404);
+    if (message.includes("council_quota"))
+      throw new CouncilError(
+        "已达到每日 3 场研讨的上限（多伦多日期），避免意外支出。",
+        429,
+      );
+    if (message.includes("council_active"))
+      throw new CouncilError("请先继续或结束已有研讨，再开始新问题。", 409);
+    if (message.includes("council_capacity"))
+      throw new CouncilError(
+        "已保存 100 场研讨，请先导出并删除不再需要的历史。",
+        409,
+      );
+    if (
+      message.includes("council_running") ||
+      message.includes("council_conflict")
+    )
+      throw new CouncilError(
+        "存在进行中的请求或版本冲突；请刷新，等待两分钟后再处理。",
+        409,
+      );
+    throw new CouncilError(
+      "研讨存储暂不可用。请确认已安装 supabase/council.sql，再重试；未自动重发模型请求。",
+    );
+  }
+  return data as CouncilRun;
+}
+export async function createCouncil(
+  user: string,
+  spec: {
+    id: string;
+    question: string;
+    participants: string[];
+    judge: string | null;
+  },
+) {
+  const keys = [...spec.participants, ...(spec.judge ? [spec.judge] : [])];
+  if (keys.some((k) => !councilAvailability().find((a) => a.key === k)?.ready))
+    throw new CouncilError("选中的服务尚未配置完整；请选择可用模型。", 400);
+  return councilCommand("create", user, spec.id, {
+    ...spec,
+    catalogDate: CATALOG_DATE,
+    models: COUNCIL_MODELS.filter((m) => keys.includes(m.key)),
+    steps: councilPlan(spec.participants, spec.judge).map((s) => ({
+      ...s,
+      status: "pending",
+      answer: "",
+      error: "",
+      usage: { input: null, output: null },
+      started_at: null,
+      finished_at: null,
+    })),
+  });
+}
+export async function advanceCouncil(user: string, id: string) {
+  const claim = randomUUID();
+  const run = await councilCommand("claim", user, id, { claim });
+  const step = run.steps.find(
+    (s) => (s as typeof s & { claim?: string }).claim === claim,
+  );
+  if (!step) return run; // Another tab owns the call; never duplicate it.
+  let answer = "",
+    error = "",
+    usage: {
+      input: number | null;
+      output: number | null;
+      truncated?: boolean;
+    } = { input: null, output: null };
+  const openings = run.steps.filter(
+    (s) => s.stage === "opening" && s.status === "succeeded",
+  );
+  const model = run.models.find((m) => m.key === step.model_key);
+  try {
+    if (!model) throw new CouncilProviderError("模型快照缺失，未发起调用。");
+    if (step.stage !== "opening" && openings.length < 2)
+      throw new CouncilProviderError(
+        "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
+      );
+    const prompt = councilPrompt(run, step),
+      result = await callCouncilModel(model, prompt.system, prompt.input);
+    answer = result.answer;
+    usage = result.usage;
+  } catch (e) {
+    error =
+      e instanceof CouncilProviderError
+        ? e.message
+        : "模型执行异常；没有自动重试，其他结果仍保留。";
+  }
+  // If this write fails, the claim stays running. Only explicit skip can unlock it.
+  return councilCommand("finish", user, id, {
+    seq: step.seq,
+    claim,
+    answer,
+    error,
+    usage,
+  });
+}
+export function publicCouncil(run: CouncilRun): CouncilRun {
+  return {
+    ...run,
+    steps: run.steps.map((s) => {
+      const clean = { ...s } as typeof s & { claim?: string };
+      delete clean.claim;
+      return clean;
+    }),
+  };
+}
