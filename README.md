@@ -2,6 +2,8 @@
 
 伴侣共同维护的家庭财富工作台：资产与负债、成员贡献、每月现金流、目标与规划、完整历史，以及可修改数据的浮动财富顾问。
 
+v0.5.0 [智能 DJ 编排与本机音频 Cue](docs/dj-smart.md)：按时长 / 风格 / 能量曲线一键生成新 Set；曲库逐首选择本地音频，试听并确认 Cue 候选，再导出到 rekordbox。音频不上传、不持久保存，候选是能量启发式而非精准 Drop / 人声识别；不消耗模型额度。
+
 新增独立 [兴趣与生活 · DJ Set Assistant](docs/lifestyle.md)（`/lifestyle`）：共享元数据曲库、CSV 预览导入、可解释的下一首推荐、Cue / 转场 / 时长编排，以及轻量练习与快乐记录。沿用家庭云端与备份，不改财富余额；不上传音频、不依赖 Spotify，也不消耗模型额度。上一步 [季度财富复盘](docs/quarterly-review.md) 保留在家庭工作台，兴趣空间不替代财务主线。
 
 v0.4.2 简化 [rekordbox XML 兼容交换](docs/rekordbox.md)：`/lifestyle#rekordbox` 拖入 XML 自动预览、按路径匹配并展示异常清单，确认后保存；支持 Cue / Hot Cue / Loop、来源 BeatGrid 与 Set 歌单导回。兼容的桌面浏览器可记住只读 XML，页面打开时检查变化并提示确认；仍需在 rekordbox 更新导出文件，不是实时同步或整个数据库的无损备份，初次请在 rekordbox 测试歌单核对。

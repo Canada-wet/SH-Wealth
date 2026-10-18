@@ -9,6 +9,7 @@ import {
   Download,
   SlidersHorizontal,
   Headphones,
+  WandSparkles,
 } from "lucide-react";
 import Dialog from "../Dialog";
 import { ownerLabel } from "@/lib/wealth";
@@ -27,6 +28,7 @@ import {
   type SetEntry,
 } from "@/lib/lifestyle-schema";
 import { downloadText, type SaveLifestyle } from "./shared";
+import SmartSetPlanner from "./SmartSetPlanner";
 
 export default function SetBuilder({
   life,
@@ -43,6 +45,7 @@ export default function SetBuilder({
 }) {
   const [selected, setSelected] = useState(""),
     [starter, setStarter] = useState("");
+  const [planning, setPlanning] = useState(false);
   const [editing, setEditing] = useState<{
       value: DJSet;
       expected: string;
@@ -96,13 +99,25 @@ export default function SetBuilder({
             <h2>从一首歌，走向一整段氛围</h2>
             <p>你来决定方向，评分只提供可解释的候选。</p>
           </div>
-          <button
-            className="primary"
-            disabled={disabled || life.sets.length >= 60}
-            onClick={() => editSet()}
-          >
-            <Plus size={16} /> 新建 Set
-          </button>
+          <div className="hobby-smart-actions">
+            <button
+              className="secondary"
+              disabled={
+                disabled || !life.tracks.length || life.sets.length >= 60
+              }
+              onClick={() => setPlanning(true)}
+            >
+              <WandSparkles size={16} />
+              一键智能编排
+            </button>
+            <button
+              className="primary"
+              disabled={disabled || life.sets.length >= 60}
+              onClick={() => editSet()}
+            >
+              <Plus size={16} /> 新建 Set
+            </button>
+          </div>
         </div>
         {!!life.sets.length && (
           <div className="hobby-toolbar">
@@ -575,6 +590,15 @@ export default function SetBuilder({
             }
             return false;
           }}
+        />
+      )}
+      {planning && (
+        <SmartSetPlanner
+          life={life}
+          save={save}
+          disabled={disabled}
+          onClose={() => setPlanning(false)}
+          onSaved={(id) => setSelected(id)}
         />
       )}
       {transition && (

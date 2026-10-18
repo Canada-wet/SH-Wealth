@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   Music2,
+  AudioLines,
 } from "lucide-react";
 import Dialog from "../Dialog";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/lifestyle-schema";
 import { CSV_TEMPLATE, previewCSV, tracksCSV } from "@/lib/dj-import";
 import { normalizeFileLocation } from "@/lib/dj-location";
+import AudioCueStudio from "./AudioCueStudio";
 import { downloadText, type SaveLifestyle } from "./shared";
 
 export default function TrackLibrary({
@@ -43,6 +45,7 @@ export default function TrackLibrary({
   const [query, setQuery] = useState(""),
     [genre, setGenre] = useState("all"),
     [sort, setSort] = useState("title");
+  const [audioTrack, setAudioTrack] = useState<string | null>(null);
   const [editor, setEditor] = useState<{
     track: DJTrack;
     expected: string;
@@ -104,7 +107,10 @@ export default function TrackLibrary({
         <div>
           <span className="hobby-kicker">YOUR OWN COLLECTION</span>
           <h2>每一首，都有自己的位置</h2>
-          <p>只保存元数据，不上传音频。空白字段表示未知。</p>
+          <p>
+            只保存元数据，不上传音频。点击曲目后的「智能
+            Cue」本机分析、试听候选。
+          </p>
         </div>
         <button
           className="primary"
@@ -356,6 +362,16 @@ export default function TrackLibrary({
                   </td>
                   <td className="hobby-row-actions">
                     <button
+                      className="text-button"
+                      aria-label={`分析音频：${t.title}`}
+                      title="本机音频分析与 Cue 候选"
+                      disabled={disabled}
+                      onClick={() => setAudioTrack(t.id)}
+                    >
+                      <AudioLines size={16} />
+                      智能 Cue
+                    </button>
+                    <button
                       className="icon-button"
                       aria-label={`编辑曲目：${t.title}`}
                       disabled={disabled}
@@ -419,6 +435,15 @@ export default function TrackLibrary({
             }
             return false;
           }}
+        />
+      )}
+      {audioTrack && (
+        <AudioCueStudio
+          life={life}
+          trackId={audioTrack}
+          save={save}
+          disabled={disabled}
+          onClose={() => setAudioTrack(null)}
         />
       )}
     </section>

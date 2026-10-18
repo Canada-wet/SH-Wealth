@@ -1,6 +1,136 @@
 .hobby-page {
   max-width: 1600px;
 }
+.hobby-smart-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hobby-smart-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.hobby-smart-fields label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.hobby-smart-fields input,
+.hobby-smart-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.hobby-smart-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 18px 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.hobby-smart-check input {
+  width: 18px;
+  min-height: 18px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.hobby-smart-preview {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #dce5d6;
+  overflow-wrap: anywhere;
+}
+.hobby-smart-preview h3 {
+  font-size: 17px;
+  line-height: 1.6;
+}
+.hobby-smart-preview p,
+.hobby-smart-preview li {
+  font-size: 13px;
+  line-height: 1.9;
+}
+.hobby-smart-preview > label:not(.hobby-smart-check) {
+  display: grid;
+  gap: 9px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.hobby-smart-preview select {
+  max-width: 100%;
+}
+.hobby-smart-preview details {
+  margin: 20px 0;
+}
+.hobby-smart-preview summary {
+  cursor: pointer;
+}
+.hobby-smart-sequence {
+  padding-left: 24px;
+}
+.hobby-smart-sequence li {
+  padding: 12px 0;
+  border-bottom: 1px solid #e4eadd;
+}
+.hobby-smart-sequence span {
+  display: block;
+  color: #66785e;
+}
+.hobby-smart-sequence p {
+  margin: 6px 0;
+}
+.hobby-cue-candidates article {
+  border: 1px solid #dfe6d8;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 14px 0;
+  background: #f8faf4;
+}
+.hobby-cue-candidates article > label {
+  font-weight: 600;
+  margin: 0;
+}
+.hobby-audio-envelope {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 18px 0;
+  color: #73816b;
+  font-size: 11px;
+}
+.hobby-audio-envelope svg {
+  height: 110px;
+  width: 100%;
+  border-radius: 12px;
+  background: #f2f6ed;
+}
+.hobby-audio-envelope rect {
+  fill: #789777;
+}
+.hobby-audio-envelope line {
+  stroke: #b87a3d;
+  stroke-width: 2;
+}
+.hobby-audio-player {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+@media (max-width: 540px) {
+  .hobby-smart-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hobby-smart-actions {
+    width: 100%;
+  }
+  .hobby-smart-actions button {
+    max-width: 100%;
+  }
+}
 .hobby-page-header {
   gap: 20px;
 }

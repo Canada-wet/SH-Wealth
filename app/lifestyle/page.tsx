@@ -171,7 +171,7 @@ export default function LifestylePage() {
                   <em>慢慢混成你喜欢的样子。</em>
                 </h2>
                 <p>
-                  整理曲目 → 选择下一首 → 试着放一段。
+                  整理曲目 → 试听 Cue → 编排一套氛围。
                   <br />
                   不需要把快乐也做成待办清单。
                 </p>
