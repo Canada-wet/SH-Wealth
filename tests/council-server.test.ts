@@ -3,9 +3,16 @@ const mock = vi.hoisted(() => ({
   rpc: vi.fn(),
   call: vi.fn(),
   availability: vi.fn(),
+  search: vi.fn(),
 }));
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({ rpc: mock.rpc }),
+}));
+vi.mock("../lib/council-tools", async () => ({
+  ...(await vi.importActual<typeof import("../lib/council-tools")>(
+    "../lib/council-tools",
+  )),
+  councilPublicSearch: mock.search,
 }));
 vi.mock("../lib/council-provider", async () => {
   const actual = await vi.importActual<
@@ -67,7 +74,37 @@ beforeEach(() => {
     answer: "A visible conclusion",
     usage: { input: 10, output: 20 },
   });
+  mock.search.mockResolvedValue({
+    output: "合成公开证据",
+    sources: [
+      {
+        title: "Synthetic original source",
+        url: "https://www.bankofcanada.ca/",
+      },
+    ],
+  });
   mock.rpc.mockImplementation(async (_name, args) => {
+    if (args.action === "tool-start" && doc.status === "active") {
+      const step = doc.steps[args.payload.seq];
+      const existing = doc.steps
+        .flatMap((s) => s.tool_receipts ?? [])
+        .find(
+          (r) =>
+            r.tool === "search_public" && r.queryId === args.payload.queryId,
+        );
+      if (!existing)
+        step.tool_receipts = [
+          {
+            id: args.payload.receiptId,
+            tool: "search_public",
+            status: "running",
+            input: doc.research!.publicQueries[args.payload.queryId],
+            output: "",
+            queryId: args.payload.queryId,
+            checkedAt: "2026-10-18",
+          },
+        ];
+    }
     if (
       args.action === "claim" &&
       doc.status === "active" &&
@@ -93,6 +130,100 @@ beforeEach(() => {
         doc.status = "complete";
     }
     return { data: structuredClone(doc), error: null };
+  });
+});
+function researchFixture() {
+  doc.research = {
+    depth: "deep",
+    tools: true,
+    publicQueries: ["Bank of Canada official rate"],
+    webConsent: true,
+  };
+  doc.steps = councilPlan(doc.participants, doc.judge, "deep").map((s, i) => ({
+    ...s,
+    status: i < 4 ? "succeeded" : "pending",
+    answer: i < 4 ? "合成开场与质询" : "",
+    error: "",
+    usage: { input: 1, output: 2 },
+    started_at: null,
+    finished_at: null,
+  }));
+  mock.call.mockResolvedValue({
+    answer: JSON.stringify({
+      focus: "核查观点1的C1",
+      requests: [
+        { tool: "calculate", expression: "2+2" },
+        { tool: "search_public", queryId: 0 },
+      ],
+    }),
+    usage: { input: 20, output: 40 },
+  });
+}
+it("深入核查真实运行工具，联网前持久化意图，同轮复用只搜索一次，答辩收到回执", async () => {
+  researchFixture();
+  mock.search.mockImplementationOnce(async () => {
+    expect(doc.steps[4].tool_receipts?.[0].status).toBe("running");
+    return { output: "实际合成工具输出", sources: [] };
+  });
+  await advanceCouncil("owner", id);
+  expect(doc.steps[4].tool_receipts?.map((r) => r.tool)).toEqual([
+    "calculate",
+    "search_public",
+  ]);
+  expect(doc.steps[4].tool_receipts?.[0].output).toContain("= 4");
+  expect(mock.call.mock.calls[0][5]).toBe("deep");
+  await advanceCouncil("owner", id);
+  expect(mock.search).toHaveBeenCalledTimes(1);
+  expect(doc.steps[5].tool_receipts?.[1]).toMatchObject({
+    id: "T6.2",
+    reusedFrom: "T5.2",
+    status: "succeeded",
+  });
+  mock.call.mockResolvedValueOnce({
+    answer: "按回执逐项答辩",
+    usage: { input: 1, output: 2 },
+  });
+  await advanceCouncil("owner", id);
+  const context = JSON.parse(mock.call.mock.calls[2][2]);
+  expect(JSON.stringify(context.responses)).toContain("实际合成工具输出");
+  expect(JSON.stringify(context.responses)).toContain("T5.2");
+});
+it("联网意图保存失败不接触搜索服务；计划格式错误或未经授权也不执行工具", async () => {
+  researchFixture();
+  const rpc = mock.rpc.getMockImplementation()!;
+  mock.rpc.mockImplementation(async (name, args) =>
+    args.action === "tool-start"
+      ? { error: { message: "storage unavailable" } }
+      : rpc(name, args),
+  );
+  await expect(advanceCouncil("owner", id)).rejects.toThrow("存储暂不可用");
+  expect(mock.search).not.toHaveBeenCalled();
+  expect(doc.steps[4].status).toBe("running");
+  doc.steps[4].status = "failed";
+  mock.call.mockResolvedValueOnce({
+    answer: "```json\n{broken}\n```",
+    usage: { input: 1, output: 2 },
+  });
+  await advanceCouncil("owner", id);
+  expect(doc.steps[5].answer).toContain("未执行任何工具");
+  expect(mock.search).not.toHaveBeenCalled();
+});
+it("联网已提交但归档失败后，下一模型复用未知状态，不再收费重查", async () => {
+  researchFixture();
+  const rpc = mock.rpc.getMockImplementation()!;
+  mock.rpc.mockImplementation(async (name, args) =>
+    args.action === "finish" && args.payload.seq === 4
+      ? { error: { message: "storage unavailable" } }
+      : rpc(name, args),
+  );
+  await expect(advanceCouncil("owner", id)).rejects.toThrow();
+  expect(mock.search).toHaveBeenCalledTimes(1);
+  doc.steps[4].status = "failed"; // Explicit abandon, not an automatic retry.
+  await advanceCouncil("owner", id);
+  expect(mock.search).toHaveBeenCalledTimes(1);
+  expect(doc.steps[5].tool_receipts?.[1]).toMatchObject({
+    status: "unknown",
+    reusedFrom: "T5.2",
   });
 });
 afterEach(() => vi.unstubAllEnvs());

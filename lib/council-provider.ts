@@ -206,6 +206,7 @@ export async function callCouncilModel(
   input: string,
   attachments: CouncilAttachment[] = [],
   onProgress?: (p: CouncilProgress) => void,
+  depth: "standard" | "deep" = "standard",
 ) {
   const images = validateCouncilAttachments(attachments).filter(
     (a) => a.kind === "image",
@@ -266,7 +267,8 @@ export async function callCouncilModel(
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
     };
-  const limit = 4096;
+  const deep = depth === "deep";
+  const limit = deep ? 8192 : 4096;
   if (viaAlibaba) {
     endpoint = base + "/chat/completions";
     body = {
@@ -279,12 +281,14 @@ export async function callCouncilModel(
         : {}),
       ...(p === "qwen"
         ? {
-            enable_thinking: model.tier !== "light",
-            ...(model.tier !== "light" ? { thinking_budget: 1024 } : {}),
+            enable_thinking: deep || model.tier !== "light",
+            ...(deep || model.tier !== "light"
+              ? { thinking_budget: deep ? 4096 : 1024 }
+              : {}),
           }
         : {}),
       ...(p === "glm"
-        ? { enable_thinking: true, reasoning_effort: "low" }
+        ? { enable_thinking: true, reasoning_effort: deep ? "high" : "low" }
         : {}),
     };
   } else if (["openai", "meta"].includes(p)) {
@@ -313,7 +317,11 @@ export async function callCouncilModel(
       max_output_tokens: limit,
       store: false,
       ...(p === "openai"
-        ? { reasoning: { effort: model.tier === "light" ? "low" : "medium" } }
+        ? {
+            reasoning: {
+              effort: deep ? "high" : model.tier === "light" ? "low" : "medium",
+            },
+          }
         : p === "meta"
           ? { reasoning: { effort: "high" } }
           : { reasoning: { effort: "low" } }),
@@ -347,6 +355,9 @@ export async function callCouncilModel(
         },
       ],
       max_tokens: limit,
+      ...(deep
+        ? { thinking: { type: "adaptive" }, output_config: { effort: "high" } }
+        : {}),
     };
   } else if (p === "gemini") {
     endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:generateContent`;
@@ -366,8 +377,8 @@ export async function callCouncilModel(
       ],
       generationConfig: {
         maxOutputTokens: limit,
-        ...(model.tier === "flagship"
-          ? { thinkingConfig: { thinkingLevel: "low" } }
+        ...(deep || model.tier === "flagship"
+          ? { thinkingConfig: { thinkingLevel: deep ? "high" : "low" } }
           : {}),
       },
     };
@@ -388,17 +399,23 @@ export async function callCouncilModel(
       messages,
       max_tokens: limit,
       ...(p === "glm"
-        ? { thinking: { type: "enabled" }, reasoning_effort: "low" }
+        ? {
+            thinking: { type: "enabled" },
+            reasoning_effort: deep ? "high" : "low",
+          }
         : {}),
       ...(p === "deepseek"
         ? {
-            thinking: { type: model.tier === "light" ? "disabled" : "enabled" },
+            thinking: {
+              type: deep || model.tier !== "light" ? "enabled" : "disabled",
+            },
+            ...(deep ? { reasoning_effort: "high" } : {}),
           }
         : {}),
       ...(p === "moonshot"
         ? model.model === "kimi-k3"
-          ? { reasoning_effort: "low" }
-          : { thinking: { type: "disabled" } }
+          ? { reasoning_effort: deep ? "high" : "low" }
+          : { thinking: { type: deep ? "enabled" : "disabled" } }
         : {}),
     };
   }

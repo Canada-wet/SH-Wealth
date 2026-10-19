@@ -1,5 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import {
+  councilResearchFor,
+  validateCouncilResearch,
+  parseInvestigation,
+  type CouncilResearch,
+  type CouncilToolReceipt,
+} from "./council-research";
+import { councilPublicSearch, councilLocalTool } from "./council-tools";
 import type { CouncilProgress } from "./council-stream";
 import {
   COUNCIL_MODELS,
@@ -110,6 +118,7 @@ export async function createCouncil(
     participants: string[];
     judge: string | null;
     attachments?: CouncilAttachment[];
+    research?: CouncilResearch;
     expectedConnections?: Record<
       string,
       NonNullable<CouncilModel["connection"]>
@@ -123,6 +132,12 @@ export async function createCouncil(
     councilModelSnapshot,
   );
   const attachments = validateCouncilAttachments(spec.attachments);
+  const research = validateCouncilResearch(spec.research);
+  if (research?.publicQueries.length && !process.env.OPENAI_API_KEY)
+    throw new CouncilError(
+      "联网搜索尚未配置；请清空公开检索词后开始，尚未调用模型。",
+      400,
+    );
   if (
     attachments.some((a) => a.kind === "image") &&
     models.some((m) => !councilCanSeeImages(m))
@@ -149,15 +164,17 @@ export async function createCouncil(
     ...specification,
     catalogDate: CATALOG_DATE,
     models,
-    steps: councilPlan(spec.participants, spec.judge).map((s) => ({
-      ...s,
-      status: "pending",
-      answer: "",
-      error: "",
-      usage: { input: null, output: null },
-      started_at: null,
-      finished_at: null,
-    })),
+    steps: councilPlan(spec.participants, spec.judge, research?.depth).map(
+      (s) => ({
+        ...s,
+        status: "pending",
+        answer: "",
+        error: "",
+        usage: { input: null, output: null },
+        started_at: null,
+        finished_at: null,
+      }),
+    ),
   });
 }
 export async function advanceCouncil(
@@ -190,6 +207,8 @@ export async function advanceCouncil(
       !s.usage?.truncated,
   );
   const model = run.models.find((m) => m.key === step.model_key);
+  const research = councilResearchFor(run, step.round ?? 0);
+  let receipts: CouncilToolReceipt[] = [];
   try {
     if (!model) throw new CouncilProviderError("模型快照缺失，未发起调用。");
     if (
@@ -212,6 +231,21 @@ export async function advanceCouncil(
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
       );
     if (
+      research.depth === "deep" &&
+      ["investigation", "rebuttal", "revision"].includes(step.stage) &&
+      !run.steps.some(
+        (s) =>
+          (s.round ?? 0) === (step.round ?? 0) &&
+          s.stage === "critique" &&
+          s.status === "succeeded" &&
+          !s.usage?.interrupted &&
+          !s.usage?.truncated,
+      )
+    )
+      throw new CouncilProviderError(
+        "本轮没有完整质询，无法继续有效追证；此步骤未调用模型。",
+      );
+    if (
       step.stage === "judge" &&
       !run.steps.some(
         (s) =>
@@ -231,11 +265,107 @@ export async function advanceCouncil(
         validateCouncilAttachments(run.attachments).filter(
           (a) => a.kind === "image",
         ),
-        (p) => onProgress?.({ ...p, seq: step.seq }),
+        (p) =>
+          onProgress?.({
+            ...p,
+            ...(step.stage === "investigation" ? { preview: undefined } : {}),
+            seq: step.seq,
+          }),
+        research.depth,
       );
     answer = result.answer;
     usage = result.usage;
+    if (step.stage === "investigation") {
+      if (usage.interrupted || usage.truncated) {
+        answer =
+          "### 证据核查未完成\n\n工具计划不完整，未执行任何工具；保留不完整用量标记，不把它当作已验证证据。";
+      } else {
+        let plan;
+        try {
+          plan = parseInvestigation(answer, research);
+        } catch {
+          plan = null;
+        }
+        if (!plan)
+          answer =
+            "### 证据核查未完成\n\n模型未返回符合授权和安全边界的结构化计划；未执行任何工具，也未自动重发。下一阶段须明确证据缺口。";
+        else {
+          answer = `### 本轮核查焦点\n\n${plan.focus}\n\n${plan.requests.length ? "工具执行结果见本步骤的真实回执，不能将计算或搜索摘要当作因果证明。" : "本模型未请求工具；不代表问题已被外部验证。"}`;
+          for (const [ordinal, request] of plan.requests.entries()) {
+            onProgress?.({ phase: "tools", seq: step.seq });
+            const receiptId = `T${step.seq + 1}.${ordinal + 1}`;
+            if (request.tool !== "search_public")
+              receipts.push(
+                councilLocalTool(
+                  request,
+                  validateCouncilAttachments(run.attachments),
+                  receiptId,
+                ),
+              );
+            else {
+              // Persist intent before the external request; uncertain submissions are never automatically repeated.
+              const marked = await councilCommand("tool-start", user, id, {
+                seq: step.seq,
+                claim,
+                receiptId,
+                queryId: request.queryId,
+              });
+              const existing = marked.steps
+                .filter((s) => (s.round ?? 0) === (step.round ?? 0))
+                .flatMap((s) => s.tool_receipts ?? [])
+                .find(
+                  (r) =>
+                    r.tool === "search_public" && r.queryId === request.queryId,
+                );
+              if (!existing && marked.status !== "active") {
+                receipts.push({
+                  id: receiptId,
+                  tool: "search_public",
+                  status: "failed",
+                  input: research.publicQueries[request.queryId],
+                  output: "用户已暂停或停止，本次未发起联网请求。",
+                  checkedAt: new Date().toISOString(),
+                  queryId: request.queryId,
+                });
+                continue;
+              }
+              if (!existing)
+                throw new CouncilError("联网请求认领未确认；未发起搜索。");
+              if (existing.id !== receiptId)
+                receipts.push({
+                  ...existing,
+                  id: receiptId,
+                  reusedFrom: existing.id,
+                  status:
+                    existing.status === "running" ? "unknown" : existing.status,
+                });
+              else {
+                const receipt = { ...existing };
+                try {
+                  Object.assign(
+                    receipt,
+                    await councilPublicSearch(
+                      research.publicQueries[request.queryId],
+                    ),
+                    {
+                      status: "succeeded",
+                      checkedAt: new Date().toISOString(),
+                    },
+                  );
+                } catch {
+                  receipt.status = "failed";
+                  receipt.output =
+                    "联网未完成或来源无效；可能已计费，未自动重发，不能视为事实核验。";
+                }
+                receipts.push(receipt);
+              }
+            }
+          }
+        }
+      }
+    }
   } catch (e) {
+    if (e instanceof CouncilError) throw e; // Failed durable intent: leave claim uncertain, never silently continue.
     errorKind = e instanceof CouncilProviderError ? e.kind : undefined;
     error =
       e instanceof CouncilProviderError
@@ -243,6 +373,24 @@ export async function advanceCouncil(
         : "模型执行异常；没有自动重试，其他结果仍保留。";
   }
   // If this write fails, the claim stays running. Only explicit skip can unlock it.
+  for (const r of receipts) {
+    const clean = (text: string) =>
+      text.toWellFormed().replaceAll("\0", "\ufffd");
+    r.input = clean(r.input);
+    r.output = clean(r.output);
+    r.sources = r.sources?.map((s) => ({
+      title: clean(s.title),
+      url: clean(s.url),
+    }));
+  }
+  while (Buffer.byteLength(JSON.stringify(receipts), "utf8") > 23500) {
+    const largest = receipts
+      .slice()
+      .sort((a, b) => b.output.length - a.output.length)[0];
+    largest.output =
+      largest.output.slice(0, Math.max(0, largest.output.length - 500)) +
+      "…[工具结果截取，不能推断省略部分]";
+  }
   return councilCommand("finish", user, id, {
     seq: step.seq,
     claim,
@@ -250,6 +398,7 @@ export async function advanceCouncil(
     error,
     error_kind: errorKind ?? null,
     usage,
+    ...(receipts.length ? { tool_receipts: receipts } : {}),
   });
 }
 export function publicCouncil(run: CouncilRun): CouncilRun {

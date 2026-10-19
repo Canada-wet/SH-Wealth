@@ -37,6 +37,81 @@ const onlyAlibaba = () => {
 it.each([
   "openai-light",
   "anthropic-light",
+  "qwen-light",
+  "glm-flagship",
+  "deepseek-light",
+  "gemini-flagship",
+  "moonshot-flagship",
+  "moonshot-alternative",
+])(
+  "%s 深入模式使用真实推理参数和8192总输出预算，不返回隐藏思考",
+  async (key) => {
+    enable();
+    const m = COUNCIL_MODELS.find((m) => m.key === key)!;
+    const fetcher = vi.fn(async (_url: unknown, options: RequestInit) => {
+      const b = JSON.parse(String(options.body));
+      expect(
+        b.max_tokens ??
+          b.max_output_tokens ??
+          b.generationConfig.maxOutputTokens,
+      ).toBe(8192);
+      if (m.provider === "openai") expect(b.reasoning.effort).toBe("high");
+      if (m.provider === "anthropic") {
+        expect(b.thinking.type).toBe("adaptive");
+        expect(b.output_config.effort).toBe("high");
+        expect(b.thinking).not.toHaveProperty("budget_tokens");
+      }
+      if (m.provider === "qwen") {
+        expect(b.enable_thinking).toBe(true);
+        expect(b.thinking_budget).toBe(4096);
+      }
+      if (m.provider === "glm" || m.provider === "deepseek")
+        expect(b.reasoning_effort).toBe("high");
+      if (m.provider === "gemini")
+        expect(b.generationConfig.thinkingConfig.thinkingLevel).toBe("high");
+      if (m.key === "moonshot-flagship")
+        expect(b.reasoning_effort).toBe("high");
+      if (m.key === "moonshot-alternative")
+        expect(b.thinking.type).toBe("enabled");
+      return Response.json({
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "visible" }],
+          },
+        ],
+        content: [
+          { type: "thinking", thinking: "HIDDEN" },
+          { type: "text", text: "visible" },
+        ],
+        candidates: [
+          {
+            content: {
+              parts: [{ thought: true, text: "HIDDEN" }, { text: "visible" }],
+            },
+          },
+        ],
+        choices: [
+          { message: { content: "visible", reasoning_content: "HIDDEN" } },
+        ],
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await callCouncilModel(
+      m,
+      "system",
+      "synthetic",
+      [],
+      undefined,
+      "deep",
+    );
+    expect(result.answer).toBe("visible");
+    expect(JSON.stringify(result)).not.toContain("HIDDEN");
+  },
+);
+it.each([
+  "openai-light",
+  "anthropic-light",
   "anthropic-opus",
   "gemini-light",
   "qwen-light",
@@ -259,6 +334,10 @@ it.each(COUNCIL_MODELS.map((m) => [m.key, m] as const))(
       expect(body.model ?? String(_url)).toContain(
         m.provider === "gemini" ? "gemini" : m.model,
       );
+      if (m.key === "moonshot-flagship")
+        expect(body.reasoning_effort).toBe("low");
+      if (m.key === "moonshot-alternative")
+        expect(body.thinking.type).toBe("disabled");
       expect(body.tools).toBeUndefined();
       expect(options.redirect).toBe("error");
       if (m.provider === "glm") {

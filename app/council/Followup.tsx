@@ -6,6 +6,12 @@ import {
   councilConnectionNote,
   councilFollowupPlan,
 } from "@/lib/council";
+import ResearchSettings from "./ResearchSettings";
+import {
+  STANDARD_RESEARCH,
+  validateCouncilResearch,
+  type CouncilResearch,
+} from "@/lib/council-research";
 export default function Followup({
   run,
   disabled,
@@ -19,6 +25,9 @@ export default function Followup({
     [models, setModels] = useState<string[]>(run.participants),
     [judge, setJudge] = useState(run.judge || ""),
     [mode, setMode] = useState<CouncilFollowupMode>("debate"),
+    [research, setResearch] = useState<CouncilResearch>(
+      run.turns?.at(-1)?.research ?? run.research ?? STANDARD_RESEARCH,
+    ),
     [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -29,6 +38,9 @@ export default function Followup({
     setModels(run.participants);
     setJudge(run.judge || "");
     setMode("debate");
+    setResearch(
+      run.turns?.at(-1)?.research ?? run.research ?? STANDARD_RESEARCH,
+    );
     setConsent(false);
     draft.current = null;
     setError("");
@@ -44,8 +56,16 @@ export default function Followup({
     mode,
     count + 1,
     run.steps.length,
+    mode === "debate" ? research.depth : "standard",
   ).length;
   const tooFew = models.length < (mode === "debate" ? 2 : 1);
+  let researchError = "";
+  if (mode === "debate")
+    try {
+      validateCouncilResearch(research);
+    } catch (e) {
+      researchError = (e as Error).message;
+    }
   return (
     <section className="council-card council-followup" aria-label="继续追问">
       <div className="council-section-label">
@@ -95,7 +115,11 @@ export default function Followup({
             }}
           />
           <span>
-            相互研讨<small>每个模型 3 次调用 · 至少 2 个模型</small>
+            相互研讨
+            <small>
+              每个模型 {research.depth === "deep" ? 5 : 3} 次调用 · 至少 2
+              个模型
+            </small>
           </span>
         </label>
         <label>
@@ -115,6 +139,21 @@ export default function Followup({
         </label>
       </fieldset>
       {mode === "debate" && (
+        <ResearchSettings
+          value={research}
+          disabled={disabled || busy || !canAsk}
+          change={(r) => {
+            setResearch(r);
+            setConsent(false);
+          }}
+        />
+      )}
+      {researchError && (
+        <p role="alert" className="council-alert">
+          {researchError}
+        </p>
+      )}
+      {mode === "debate" && (
         <ol className="council-followup-flow" aria-label="本轮研讨流程">
           <li>
             <strong>1 · 独立回应</strong>
@@ -124,13 +163,25 @@ export default function Followup({
             <strong>2 · 交叉质询</strong>
             <span>阅读彼此观点，指出分歧与证据缺口</span>
           </li>
+          {research.depth === "deep" && (
+            <>
+              <li>
+                <strong>3 · 证据核查</strong>
+                <span>请求已授权工具，记录来源与不确定性</span>
+              </li>
+              <li>
+                <strong>4 · 逐项答辩</strong>
+                <span>用实际证据回应最强质疑</span>
+              </li>
+            </>
+          )}
           <li>
-            <strong>3 · 修订结论</strong>
+            <strong>{research.depth === "deep" ? 5 : 3} · 修订结论</strong>
             <span>回应质疑，说明采纳与保留的意见</span>
           </li>
           {judge && (
             <li>
-              <strong>4 · 裁判汇总</strong>
+              <strong>{research.depth === "deep" ? 6 : 4} · 裁判汇总</strong>
               <span>汇总本轮共识、分歧和下一步</span>
             </li>
           )}
@@ -192,9 +243,12 @@ export default function Followup({
       )}
       <p className="council-muted">
         本次 {calls} 次新调用（{models.length} 个模型 ×{" "}
-        {mode === "debate" ? 3 : 1}
-        {judge ? " + 裁判 1 次" : ""}）；每人每天最多 10
-        次追问。失败步骤不会自动重发，未执行步骤不调用；补问同一模型仍可能再次计费。
+        {mode === "debate" ? (research.depth === "deep" ? 5 : 3) : 1}
+        {judge ? " + 裁判 1 次" : ""}）；每人每天最多 10 次追问。
+        {mode === "debate" && research.tools && research.webConsent
+          ? `另最多 ${Math.min(models.length, research.publicQueries.length)} 次联网搜索。`
+          : ""}
+        失败步骤不会自动重发，未执行步骤不调用；补问同一模型仍可能再次计费。
       </p>
       <label className="council-consent">
         <input
@@ -220,7 +274,8 @@ export default function Followup({
           !canAsk ||
           !consent ||
           question.trim().length < 2 ||
-          tooFew
+          tooFew ||
+          !!researchError
         }
         onClick={async () => {
           const signature = JSON.stringify({
@@ -228,6 +283,7 @@ export default function Followup({
             models,
             judge,
             mode,
+            research,
             count,
             run: run.id,
           });
@@ -244,6 +300,7 @@ export default function Followup({
               participants: models,
               judge: judge || null,
               mode,
+              ...(mode === "debate" ? { research } : {}),
               baseRound: count,
               consent,
             });

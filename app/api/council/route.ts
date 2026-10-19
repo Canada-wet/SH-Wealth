@@ -183,6 +183,11 @@ export async function POST(request: Request) {
       } catch (e) {
         return fail((e as Error).message, 400);
       }
+      if (spec.research?.publicQueries.length && !process.env.OPENAI_API_KEY)
+        return fail(
+          "联网搜索尚未配置；请清空公开检索词后继续，未调用模型。",
+          400,
+        );
       const run = await councilCommand(
         "followup",
         auth.user.id,

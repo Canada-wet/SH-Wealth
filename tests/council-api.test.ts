@@ -161,7 +161,8 @@ it("追问三阶段模式校验后交给数据库，不能伪造计划；新增�
   });
   expect(mock.command.mock.calls[0][3]).not.toHaveProperty("steps");
   expect((await post({ action: "abandon", id, seq: 170 })).status).toBe(200);
-  expect((await post({ action: "abandon", id, seq: 171 })).status).toBe(400);
+  expect((await post({ action: "abandon", id, seq: 278 })).status).toBe(200);
+  expect((await post({ action: "abandon", id, seq: 279 })).status).toBe(400);
 });
 it("服务端强制本人 ID 与模型白名单，不接受伪造 owner / secret / URL", async () => {
   const response = await post({

@@ -75,7 +75,8 @@ it("相互研讨至少两人，新增三阶段和可选裁判，序号接续历�
     "openai-light",
     "debate",
     8,
-    19 * 8,
+    31 * 8,
+    "deep",
   );
   expect(max.at(-1)?.seq).toBe(COUNCIL_MAX_STEPS - 1);
 });

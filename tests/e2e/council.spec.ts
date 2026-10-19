@@ -79,6 +79,7 @@ async function councilFixture(
         id: body.id,
         question: body.question,
         attachments: body.attachments,
+        research: body.research,
         participants: body.participants,
         judge: body.judge,
         status: "active",
@@ -96,7 +97,11 @@ async function councilFixture(
               }
             : m,
         ),
-        steps: councilPlan(body.participants, body.judge).map((s) => ({
+        steps: councilPlan(
+          body.participants,
+          body.judge,
+          body.research?.depth,
+        ).map((s) => ({
           ...s,
           status: "pending",
           answer: "",
@@ -115,6 +120,7 @@ async function councilFixture(
           participants: body.participants,
           judge: body.judge,
           mode: body.mode || "direct",
+          research: body.research,
           created_at: new Date().toISOString(),
         },
       ];
@@ -125,6 +131,7 @@ async function councilFixture(
         body.mode || "direct",
         round,
         run.steps.length,
+        body.research?.depth,
       ))
         run.steps.push({
           ...step,
@@ -152,6 +159,20 @@ async function councilFixture(
             : `### 合成测试结论\n\n**阶段 ${s.stage}**：比较机会成本，保留分歧。\n\n- 核验假设\n- 先做小规模试验`;
         s.finished_at = new Date().toISOString();
         s.usage = { input: 20, output: 40 };
+        if (s.stage === "investigation") {
+          s.answer =
+            "### 本轮核查焦点\n\n核查观点1的C1，明确计算输入只是合成假设。";
+          s.tool_receipts = [
+            {
+              id: `T${s.seq + 1}.1`,
+              tool: "calculate",
+              status: "succeeded",
+              input: "2+2",
+              output: "2+2 = 4（仅验证算式）",
+              checkedAt: new Date().toISOString(),
+            },
+          ];
+        }
       }
       if (
         run.steps.every(
@@ -174,6 +195,94 @@ async function councilFixture(
   return { calls: () => calls, run: () => run };
 }
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("深入研讨默认五阶段，公开检索需另确认，回执、答辩、追问与导出联动", async ({
+  page,
+}, info) => {
+  test.setTimeout(55000);
+  await authenticate(page);
+  const fixture = await councilFixture(page);
+  await page.goto("/council");
+  await expect(page.getByLabel("研讨深度", { exact: true })).toHaveValue(
+    "deep",
+  );
+  await page
+    .getByLabel("问题与已知条件")
+    .fill("合成问题：结合基准率和敏感性，深入比较两个方案，不能只泛泛总结。");
+  await page.getByText("可选：允许查证公开资料", { exact: true }).click();
+  await page
+    .getByLabel("公开检索词", { exact: true })
+    .fill("Bank of Canada latest official policy rate");
+  await page.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await expect(
+    page.getByRole("button", { name: "开始研讨", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("checkbox", { name: /我确认上述检索词可发送/ }).check();
+  // Research changes revoke the previous model-cost consent too.
+  await expect(
+    page.getByRole("checkbox", { name: /我同意把问题/ }),
+  ).not.toBeChecked();
+  await page.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await expect(page.locator(".council-composer")).toContainText(
+    "10 次付费调用",
+  );
+  await page.getByRole("button", { name: "开始研讨", exact: true }).click();
+  await expect(page.locator(".council-session")).toContainText(
+    "10/10 步已归档",
+    { timeout: 20000 },
+  );
+  expect(fixture.calls()).toBe(10);
+  expect(fixture.run()?.research?.publicQueries).toEqual([
+    "Bank of Canada latest official policy rate",
+  ]);
+  await expect(page.getByLabel("研讨结论速览")).toContainText("证据与计算记录");
+  const receipts = page.locator(".council-results .council-tool-receipts");
+  await receipts.locator("summary").first().click();
+  await expect(receipts).toContainText("2+2 = 4");
+  await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
+  await page.getByRole("button", { name: /^逐项答辩/ }).click();
+  await expect(page.locator(".council-answer").first()).toContainText(
+    "rebuttal",
+  );
+  await page.reload();
+  await expect(page.locator(".council-session")).toContainText(
+    "10/10 步已归档",
+  );
+  expect(fixture.calls()).toBe(10);
+  const form = page.getByRole("region", { name: "继续追问", exact: true });
+  await expect(form.getByLabel("研讨深度", { exact: true })).toHaveValue(
+    "deep",
+  );
+  await form
+    .getByRole("textbox", { name: "继续追问", exact: true })
+    .fill("在这些边界条件下，请继续深入质询与答辩。");
+  await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();
+  await form.getByRole("button", { name: "发送追问" }).click();
+  await expect(page.locator(".council-session")).toContainText(
+    "20/20 步已归档",
+    { timeout: 20000 },
+  );
+  expect(fixture.calls()).toBe(20);
+  expect(fixture.run()?.turns?.[0].research?.depth).toBe("deep");
+  const exported = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出", exact: true }).click();
+  expect(await readFile((await (await exported).path())!, "utf8")).toContain(
+    "工具回执",
+  );
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+  }
+  if (info.project.name !== "desktop")
+    await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: `/private/tmp/council-deep-${info.project.name}.png`,
+    fullPage: true,
+  });
+});
 test("浏览器真实 ReadableStream 逐段显示临时正文，只有 result 归档帧才完成", async ({
   page,
 }) => {
@@ -232,6 +341,7 @@ test("浏览器真实 ReadableStream 逐段显示临时正文，只有 result �
     };
   });
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成流式问题：请按固定阶段比较两个方案。");
@@ -258,6 +368,7 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   await authenticate(page);
   const fixture = await councilFixture(page);
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await expect(
     page.getByRole("heading", { name: "多模型研讨", exact: true }),
   ).toBeVisible();
@@ -327,6 +438,7 @@ test("研讨结束后只问一位模型并可选裁判，轮次与材料刷新�
   await authenticate(page);
   const fixture = await councilFixture(page);
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成深度问题：应该如何比较两种选择？");
@@ -385,6 +497,7 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   await authenticate(page);
   const fixture = await councilFixture(page);
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成研讨：比较两种学习和生活计划。");
@@ -494,6 +607,7 @@ test("图片、PDF、DOCX 和文字本机预览，检查看图兼容，归档后
   await authenticate(page);
   await councilFixture(page);
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成材料测试：请比较这些研究材料，不涉及真实资产。");
@@ -621,6 +735,7 @@ test("中断后刷新不会重扣请求；明确跳过与无裁判结论", async
   await authenticate(page);
   const fixture = await councilFixture(page, { interrupt: true });
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成问题：给一个可验证的比较框架。");
@@ -653,6 +768,7 @@ test("云端未安装时不允许启动，配置与型号解释仍可查看", as
   await authenticate(page);
   const fixture = await councilFixture(page, { storage: false });
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
     .fill("合成问题：不应发起真实收费请求。");
@@ -672,6 +788,7 @@ test("同一百炼渠道可选 Qwen / Kimi / GLM；映射、连接检查及历�
   await authenticate(page);
   const f = await councilFixture(page, { alibaba: true });
   await page.goto("/council");
+  await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await expect(
     page.getByRole("checkbox", { name: /Qwen 3.8 Flash/ }),
   ).toBeChecked();

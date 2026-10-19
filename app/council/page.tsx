@@ -23,6 +23,7 @@ import {
   councilExport,
   councilConnectionNote,
   councilSpeaker,
+  councilPlan,
   COUNCIL_STALE_MS,
   type CouncilAvailability,
   type CouncilRun,
@@ -33,6 +34,13 @@ import "./council.css";
 import Attachments, { AttachmentList } from "./Attachments";
 import Followup from "./Followup";
 import Results from "./Results";
+import ResearchSettings from "./ResearchSettings";
+import ToolReceipts from "./ToolReceipts";
+import {
+  DEEP_RESEARCH,
+  validateCouncilResearch,
+  type CouncilResearch,
+} from "@/lib/council-research";
 import { councilRound } from "@/lib/council-results";
 import { readCouncilResponse } from "@/lib/council-client";
 import type { CouncilProgress } from "@/lib/council-stream";
@@ -76,6 +84,13 @@ async function api(
 }
 export default function CouncilPage() {
   const [showAllProviders, setShowAllProviders] = useState(false);
+  const [research, setResearch] = useState<CouncilResearch>(DEEP_RESEARCH);
+  let researchError = "";
+  try {
+    validateCouncilResearch(research);
+  } catch (e) {
+    researchError = (e as Error).message;
+  }
   const [checking, setChecking] = useState(false);
   const [attachments, setAttachments] = useState<CouncilAttachment[]>([]);
   const [processingFiles, setProcessingFiles] = useState(false);
@@ -292,6 +307,7 @@ export default function CouncilPage() {
     );
     const signature = JSON.stringify({
       question,
+      research,
       participants,
       judge,
       attachments,
@@ -308,6 +324,7 @@ export default function CouncilPage() {
         judge: judge || null,
         consent,
         attachments,
+        research,
         expectedConnections,
       });
       accept(d.run);
@@ -487,7 +504,10 @@ export default function CouncilPage() {
                   问题与已知条件
                   <textarea
                     value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
+                    onChange={(e) => {
+                      setQuestion(e.target.value);
+                      setConsent(false);
+                    }}
                     maxLength={6000}
                     rows={5}
                     placeholder="例如：未来三年，我该继续深耕现有职业，还是尝试创业？请比较机会成本、风险与可验证的第一步。"
@@ -506,6 +526,19 @@ export default function CouncilPage() {
                   onBusy={setProcessingFiles}
                   disabled={busy}
                 />
+                <ResearchSettings
+                  value={research}
+                  disabled={busy || processingFiles}
+                  change={(r) => {
+                    setResearch(r);
+                    setConsent(false);
+                  }}
+                />
+                {researchError && (
+                  <p role="alert" className="council-alert">
+                    {researchError}
+                  </p>
+                )}
                 {incompatibleImages && (
                   <p role="alert" className="council-alert">
                     图片需要所有参与者及裁判均支持看图。请选择
@@ -559,13 +592,14 @@ export default function CouncilPage() {
                                     (!participants.includes(m.key) &&
                                       participants.length >= 6)
                                   }
-                                  onChange={() =>
+                                  onChange={() => {
+                                    setConsent(false);
                                     setParticipants((list) =>
                                       list.includes(m.key)
                                         ? list.filter((k) => k !== m.key)
                                         : [...list, m.key],
-                                    )
-                                  }
+                                    );
+                                  }}
                                 />
                                 <span>
                                   <strong>{m.name}</strong>
@@ -619,7 +653,10 @@ export default function CouncilPage() {
                     <span className="sr-only">裁判模型</span>
                     <select
                       value={judge}
-                      onChange={(e) => setJudge(e.target.value)}
+                      onChange={(e) => {
+                        setJudge(e.target.value);
+                        setConsent(false);
+                      }}
                     >
                       <option value="">不设裁判 · 并列看最终结论</option>
                       {COUNCIL_MODELS.map((m) => (
@@ -644,17 +681,37 @@ export default function CouncilPage() {
                   <ChevronRight size={15} />
                   <span>2 交叉质询</span>
                   <ChevronRight size={15} />
-                  <span>3 修订结论</span>
+                  {research.depth === "deep" && (
+                    <>
+                      <span>3 证据核查</span>
+                      <ChevronRight size={15} />
+                      <span>4 逐项答辩</span>
+                      <ChevronRight size={15} />
+                    </>
+                  )}
+                  <span>{research.depth === "deep" ? 5 : 3} 修订结论</span>
                   {judge && (
                     <>
                       <ChevronRight size={15} />
-                      <span>4 裁判汇总</span>
+                      <span>{research.depth === "deep" ? 6 : 4} 裁判汇总</span>
                     </>
                   )}
                 </div>
                 <p className="council-muted">
-                  本场最多 {participants.length * 3 + (judge ? 1 : 0)}{" "}
-                  次付费调用；每次输出上限 4,096
+                  本场最多{" "}
+                  {
+                    councilPlan(participants, judge || null, research.depth)
+                      .length
+                  }{" "}
+                  次付费调用；另最多{" "}
+                  {research.tools && research.webConsent
+                    ? Math.min(
+                        participants.length,
+                        research.publicQueries.length,
+                      )
+                    : 0}{" "}
+                  次已授权联网搜索。每次输出上限{" "}
+                  {research.depth === "deep" ? "8,192" : "4,096"}
                   tokens（可能含推理），价格和权限由各服务商决定。每天最多 3
                   场，失败不自动重试。页面关闭后不启动后续调用；已提交请求可能继续计费。
                 </p>
@@ -679,7 +736,8 @@ export default function CouncilPage() {
                     incompatibleImages ||
                     participants.length < 2 ||
                     question.trim().length < 5 ||
-                    !consent
+                    !consent ||
+                    !!researchError
                   }
                   onClick={() => void start()}
                 >
@@ -928,12 +986,14 @@ export default function CouncilPage() {
                           : ""}
                         {progress?.phase === "thinking"
                           ? "模型正在推理"
-                          : progress?.phase === "answering"
-                            ? "正在接收正文"
-                            : "请求已提交，正在等待服务商"}{" "}
+                          : progress?.phase === "tools"
+                            ? "正在执行已授权只读工具"
+                            : progress?.phase === "answering"
+                              ? "正在接收正文"
+                              : "请求已提交，正在等待服务商"}{" "}
                         · 已等待{" "}
                         {Math.max(0, Math.floor((now - requestAt) / 1000))}{" "}
-                        秒；最多 4 分钟，不自动重发。
+                        秒；模型接收最多 4 分钟，工具另计，不自动重发。
                       </p>
                     )}
                     {busy && progress?.preview && (
@@ -1088,6 +1148,7 @@ export default function CouncilPage() {
                                 )}
                               </span>
                             </header>
+                            <ToolReceipts receipts={s.tool_receipts ?? []} />
                             {s.answer ? (
                               <>
                                 <AdvisorMarkdown text={s.answer} />

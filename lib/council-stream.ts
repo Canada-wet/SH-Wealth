@@ -1,6 +1,6 @@
 // Server-side OpenAI-compatible SSE reader. Hidden reasoning is deliberately discarded.
 export type CouncilProgress = {
-  phase: "waiting" | "thinking" | "answering";
+  phase: "waiting" | "thinking" | "answering" | "tools";
   preview?: string;
   seq?: number;
 };

@@ -32,7 +32,10 @@ export type WebResearch = {
   sources: SearchSource[];
   topic?: SearchTopic;
 };
-const safeSource = (raw: unknown): SearchSource | null => {
+const safeSource = (
+  raw: unknown,
+  domains: readonly string[] = PRIMARY_DOMAINS,
+): SearchSource | null => {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Record<string, unknown>;
   if (source.type !== "url_citation" || typeof source.url !== "string")
@@ -43,10 +46,16 @@ const safeSource = (raw: unknown): SearchSource | null => {
       url.protocol !== "https:" ||
       url.username ||
       url.password ||
-      !PRIMARY_DOMAINS.some(
-        (domain) =>
-          url.hostname === domain || url.hostname.endsWith(`.${domain}`),
-      )
+      url.href.length > 1500 ||
+      !/^[a-z\d-]+(?:\.[a-z\d-]+)*\.[a-z]{2,}$/i.test(url.hostname) ||
+      /(?:^|\.)(?:localhost|local|internal|test|example|invalid)$/i.test(
+        url.hostname,
+      ) ||
+      (domains.length > 0 &&
+        !domains.some(
+          (domain) =>
+            url.hostname === domain || url.hostname.endsWith(`.${domain}`),
+        ))
     )
       return null;
     const title =
@@ -63,6 +72,7 @@ export function parseWebResearch(
   data: unknown,
   query: string,
   checkedAt: string,
+  domains: readonly string[] = PRIMARY_DOMAINS,
 ): WebResearch {
   if (!data || typeof data !== "object")
     throw new Error("Invalid search response");
@@ -88,7 +98,7 @@ export function parseWebResearch(
     .filter((row) => row.type === "output_text");
   const sources = blocks
     .flatMap((row) => (Array.isArray(row.annotations) ? row.annotations : []))
-    .map(safeSource)
+    .map((raw) => safeSource(raw, domains))
     .filter((row): row is SearchSource => Boolean(row));
   const unique = [
     ...new Map(sources.map((row) => [row.url, row])).values(),
@@ -100,7 +110,7 @@ export function parseWebResearch(
         Array.isArray(row.annotations) ? row.annotations : []
       )
         .map((raw) => {
-          const source = safeSource(raw);
+          const source = safeSource(raw, domains);
           const end = (raw as { end_index?: unknown })?.end_index;
           return source &&
             Number.isInteger(end) &&

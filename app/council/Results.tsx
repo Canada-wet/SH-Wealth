@@ -6,6 +6,7 @@ import {
   councilSections,
 } from "@/lib/council-results";
 import AdvisorMarkdown from "@/app/components/AdvisorMarkdown";
+import ToolReceipts from "./ToolReceipts";
 export default function Results({
   run,
   round,
@@ -79,6 +80,17 @@ export default function Results({
       <p className="council-muted">
         圆点只表示执行状态，不是意见投票或可信度评分。汇总来自模型，未经独立事实核验。
       </p>
+      {!!current.steps.some((s) => s.tool_receipts?.length) && (
+        <section className="council-evidence-board">
+          <h3>证据与计算记录</h3>
+          <p className="council-muted">
+            仅展示实际工具回执。模型相互同意不是事实核验；失败、未知和复用记录均保留。
+          </p>
+          <ToolReceipts
+            receipts={current.steps.flatMap((s) => s.tool_receipts ?? [])}
+          />
+        </section>
+      )}
       {judge && (
         <div className="council-synthesis">
           <h3>

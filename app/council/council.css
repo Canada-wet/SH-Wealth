@@ -723,6 +723,112 @@
 .council-followup {
   margin-top: 24px;
 }
+.council-research-settings {
+  min-width: 0;
+  border: 1px solid #dce5dd;
+  background: #f6f8f2;
+  border-radius: 14px;
+  padding: 18px;
+  margin: 20px 0;
+}
+.council-research-settings legend {
+  font-size: 14px;
+  font-weight: 650;
+  padding: 0 6px;
+}
+.council-research-settings p,
+.council-research-settings small {
+  font-size: 12px;
+  line-height: 1.75;
+  font-weight: 400;
+  color: #627969;
+  margin: 10px 0;
+}
+.council-research-settings select {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 44px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1decd;
+  border-radius: 10px;
+  background: white;
+  color: #315d50;
+  box-sizing: border-box;
+}
+.council-research-toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 14px;
+}
+.council-research-toggle small {
+  display: block;
+  margin: 3px 0;
+}
+.council-web-settings {
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 1px solid #dce5dd;
+}
+.council-web-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.council-web-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  margin-top: 6px;
+}
+.council-evidence-board {
+  margin: 20px 0;
+}
+.council-tool-receipts {
+  display: grid;
+  gap: 9px;
+  margin: 12px 0 18px;
+}
+.council-tool-receipts details {
+  min-width: 0;
+  border: 1px solid #dce5dd;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f7f9f4;
+  font-size: 12px;
+}
+.council-tool-receipts summary {
+  cursor: pointer;
+  line-height: 1.8;
+}
+.council-tool-receipts summary span {
+  color: #627969;
+  margin-left: 10px;
+}
+.council-tool-receipts pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  max-height: 350px;
+  overflow-y: auto;
+}
+.council-tool-receipts blockquote {
+  margin: 10px 0;
+  border-left: 3px solid #8aa590;
+  padding-left: 12px;
+}
+.council-tool-receipts a {
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.council-stage-nav {
+  overflow-x: auto;
+}
 .council-followup-mode {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
