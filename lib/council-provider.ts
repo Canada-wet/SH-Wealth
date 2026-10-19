@@ -274,7 +274,11 @@ export async function callCouncilModel(
     body = {
       model: connection.model,
       messages,
-      max_tokens: limit,
+      // Bailian's max_tokens excludes reasoning for Qwen/Kimi. New deep runs use
+      // the documented combined budget; legacy standard requests stay unchanged.
+      ...(deep && (p === "qwen" || p === "moonshot")
+        ? { max_completion_tokens: limit }
+        : { max_tokens: limit }),
       stream: p === "qwen" || p === "glm",
       ...(["qwen", "glm"].includes(p)
         ? { stream_options: { include_usage: true } }
@@ -289,6 +293,9 @@ export async function callCouncilModel(
         : {}),
       ...(p === "glm"
         ? { enable_thinking: true, reasoning_effort: deep ? "high" : "low" }
+        : {}),
+      ...(deep && p === "moonshot" && model.model === "kimi-k2.6"
+        ? { enable_thinking: true, thinking_budget: 4096 }
         : {}),
     };
   } else if (["openai", "meta"].includes(p)) {

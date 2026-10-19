@@ -52,6 +52,7 @@ it.each([
       const b = JSON.parse(String(options.body));
       expect(
         b.max_tokens ??
+          b.max_completion_tokens ??
           b.max_output_tokens ??
           b.generationConfig.maxOutputTokens,
       ).toBe(8192);
@@ -109,6 +110,44 @@ it.each([
     expect(JSON.stringify(result)).not.toContain("HIDDEN");
   },
 );
+it.each([
+  "qwen-light",
+  "qwen-flagship",
+  "moonshot-alternative",
+  "moonshot-flagship",
+])("%s 百炼深入模式使用含思考的总输出参数，不沿用仅回答预算", async (key) => {
+  onlyAlibaba();
+  const m = councilModelSnapshot(COUNCIL_MODELS.find((m) => m.key === key)!);
+  const fetcher = vi.fn(async (_url: unknown, options: RequestInit) => {
+    const b = JSON.parse(String(options.body));
+    expect(b.max_completion_tokens).toBe(8192);
+    expect(b.max_tokens).toBeUndefined();
+    if (key === "moonshot-alternative" || m.provider === "qwen") {
+      expect(b.enable_thinking).toBe(true);
+      expect(b.thinking_budget).toBe(4096);
+    }
+    if (key === "moonshot-flagship") {
+      expect(b.thinking_budget).toBeUndefined();
+      expect(b.reasoning_effort).toBeUndefined();
+    }
+    return Response.json({
+      choices: [
+        { message: { content: "visible", reasoning_content: "HIDDEN" } },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const result = await callCouncilModel(
+    m,
+    "system",
+    "synthetic",
+    [],
+    undefined,
+    "deep",
+  );
+  expect(result.answer).toBe("visible");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it.each([
   "openai-light",
   "anthropic-light",
