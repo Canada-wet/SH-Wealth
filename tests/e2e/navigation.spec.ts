@@ -77,9 +77,9 @@ test("统一搜索精确进入子功能，分类与空结果有效；手机和�
 test("置顶子功能刷新与跨页面保留，置顶排在最近使用之前且可取消", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/space");
   await expect(
-    page.getByRole("region", { name: "我的家庭工作台" }),
+    page.getByRole("region", { name: "家庭状态摘要" }),
   ).toBeVisible();
   await page.screenshot({
     path: `/private/tmp/together-home-${test.info().project.name}.png`,

@@ -1,5 +1,6 @@
 // One catalogue for the sidebar, command search, deep links and related workflows.
 export const NAV_GROUPS = [
+  "家庭空间",
   "家庭财富",
   "市场投资",
   "思考与成长",
@@ -21,12 +22,23 @@ export type Feature = {
 };
 export const FEATURES: Feature[] = [
   {
+    id: "space",
+    title: "家庭首页",
+    description: "关注今天要紧的事，继续财富、思考与生活",
+    href: "/space",
+    group: "家庭空间",
+    keywords: "首页 home space 家庭 生活 工作台 今天 继续",
+    icon: "home",
+    primary: true,
+    related: ["markets", "growth", "learn", "lifestyle"],
+  },
+  {
     id: "overview",
-    title: "家庭全景",
+    title: "财富总览",
     description: "资产、目标与家庭进展，一起看见",
     href: "/#overview",
     group: "家庭财富",
-    keywords: "首页 home overview 总览 净资产 dashboard",
+    keywords: "家庭全景 财富 overview 总览 净资产 dashboard",
     icon: "home",
     primary: true,
     related: ["growth", "quarterly-review", "lifestyle"],
@@ -201,10 +213,11 @@ export const FEATURES: Feature[] = [
   {
     id: "council",
     title: "多模型研讨",
-    description: "不同观点、持续追问与可选裁判",
+    description: "深度研讨、证据核查、工具与可选裁判",
     href: "/council",
     group: "思考与成长",
-    keywords: "debate llm ai qwen glm claude gpt 讨论 辩论 图片 附件",
+    keywords:
+      "debate llm ai qwen glm claude gpt 深度研讨 讨论 辩论 证据 工具 追问 图片 附件",
     icon: "messages",
     primary: true,
     related: ["investment-desk", "learn", "framework"],
@@ -344,6 +357,31 @@ export type NavEntry = {
 };
 export type NavAction = "visit" | "pin" | "unpin";
 export const featureById = (id: string) => FEATURES.find((f) => f.id === id);
+export const SPACE_ROOT_IDS = [
+  "space",
+  "overview",
+  "markets",
+  "council",
+  "learn",
+  "lifestyle",
+] as const;
+const WEALTH_FEATURE_IDS = new Set([
+  "assets",
+  "cashflow",
+  "growth",
+  "contributions",
+  "framework",
+  "quarterly-review",
+  "history",
+  "settings",
+  "members",
+  "alerts",
+  "advisor",
+]);
+export function navigationSpaceId(featureId: string): string {
+  if (WEALTH_FEATURE_IDS.has(featureId)) return "overview";
+  return featureById(featureId)?.parent ?? featureId;
+}
 const stamp = (value: string | null | undefined) =>
   value ? Date.parse(value) || 0 : 0;
 export function validNavEntries(value: unknown): value is NavEntry[] {
@@ -404,6 +442,46 @@ export function orderedFeatures(
       FEATURES.indexOf(a) - FEATURES.indexOf(b)
     );
   });
+}
+export function spaceFeatures(entries: NavEntry[] = []): Feature[] {
+  const roots = SPACE_ROOT_IDS.map((id) => featureById(id)!);
+  // Usage of an internal feature brings its space forward. A pinned internal
+  // feature remains a shortcut, not an implicit pin of the whole space.
+  const spaces = roots.map((feature): NavEntry => {
+    const own = entries.find((entry) => entry.feature_id === feature.id);
+    const latest = entries
+      .filter((entry) => navigationSpaceId(entry.feature_id) === feature.id)
+      .sort((a, b) => stamp(b.last_used_at) - stamp(a.last_used_at))[0];
+    return {
+      feature_id: feature.id,
+      pinned: own?.pinned ?? false,
+      pinned_at: own?.pinned_at ?? null,
+      last_used_at: latest?.last_used_at ?? null,
+    };
+  });
+  return [roots[0], ...orderedFeatures(roots.slice(1), spaces)];
+}
+export function continueFeatures(
+  entries: NavEntry[] = [],
+  limit = 3,
+): Feature[] {
+  if (!Number.isFinite(limit) || limit <= 0) return [];
+  const usedAt = (feature: Feature) =>
+    entries.find((entry) => entry.feature_id === feature.id)?.last_used_at;
+  return FEATURES.filter((feature) => {
+    const at = usedAt(feature);
+    return (
+      feature.id !== "space" &&
+      typeof at === "string" &&
+      Number.isFinite(Date.parse(at))
+    );
+  })
+    .sort(
+      (a, b) =>
+        stamp(usedAt(b)) - stamp(usedAt(a)) ||
+        FEATURES.indexOf(a) - FEATURES.indexOf(b),
+    )
+    .slice(0, Math.floor(limit));
 }
 const normalize = (s: string) => s.normalize("NFKC").trim().toLowerCase();
 export function searchFeatures(

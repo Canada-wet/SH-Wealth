@@ -27,7 +27,9 @@ describe("私密账号白名单", () => {
       "/auth/reset-password",
       null,
     ])
-      expect(safeReturnPath(path)).toBe("/");
+      expect(safeReturnPath(path)).toBe("/space");
+    expect(safeReturnPath("/#assets")).toBe("/#assets");
+    expect(safeReturnPath("/")).toBe("/");
     expect(safeReturnPath("/?section=assets")).toBe("/?section=assets");
   });
 });

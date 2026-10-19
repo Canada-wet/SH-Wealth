@@ -34,6 +34,25 @@ it.skipIf(process.env.RUN_NAVIGATION_READ_INTEGRATION !== "1")(
       const data = await result.json();
       expect(data.userId).toBe(session.user.id);
       expect(validNavEntries(data.entries)).toBe(true);
+      // Render the real private home without executing client-side visit effects.
+      // Credentials stay in memory; no real navigation preference is changed.
+      const encoded =
+        "base64-" + Buffer.from(JSON.stringify(session)).toString("base64url");
+      const parts = encoded.match(/.{1,3180}/g)!;
+      const cookieName = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+      const cookie = parts
+        .map(
+          (value, i) =>
+            `${cookieName}${parts.length > 1 ? `.${i}` : ""}=${value}`,
+        )
+        .join("; ");
+      const home = await fetch("https://sh-wealth.vercel.app/space", {
+        headers: { Cookie: cookie },
+        redirect: "manual",
+      });
+      expect(home.status).toBe(200);
+      expect(home.headers.get("cache-control")).toContain("private");
+      expect(await home.text()).toContain("把今天，留给真正重要的事。");
       const other = await c
         .from("wealth_navigation_preferences")
         .select("feature_id")
@@ -44,6 +63,11 @@ it.skipIf(process.env.RUN_NAVIGATION_READ_INTEGRATION !== "1")(
     expect(
       (await fetch("https://sh-wealth.vercel.app/api/navigation")).status,
     ).toBe(401);
+    const deniedHome = await fetch("https://sh-wealth.vercel.app/space", {
+      redirect: "manual",
+    });
+    expect(deniedHome.status).toBe(307);
+    expect(deniedHome.headers.get("location")).toContain("/login");
   },
   60000,
 );

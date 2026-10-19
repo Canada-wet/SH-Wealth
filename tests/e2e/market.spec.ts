@@ -653,13 +653,18 @@ test("独立看板保留导航和当前页状态，返回家庭资产定位正�
   if (mobile)
     await page
       .locator(".app-mobile-shortcuts")
-      .getByRole("link", { name: "家庭全景" })
+      .getByRole("link", { name: "财富总览" })
       .click();
-  else
+  else {
+    await page
+      .locator(".market-sidebar")
+      .getByRole("link", { name: "财富总览", exact: true })
+      .click();
     await page
       .locator(".market-sidebar")
       .getByRole("link", { name: "资产与负债" })
       .click();
+  }
   await expect(page).toHaveURL(mobile ? /#overview$/ : /#assets$/);
   await expect(page.locator(mobile ? "#overview" : "#assets")).toBeInViewport();
   await expect(page.getByTestId("net-worth")).toContainText("500");

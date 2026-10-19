@@ -15,5 +15,5 @@ export function safeReturnPath(path: string | null) {
     !path.startsWith("/login") &&
     !path.startsWith("/auth/")
     ? path
-    : "/";
+    : "/space";
 }

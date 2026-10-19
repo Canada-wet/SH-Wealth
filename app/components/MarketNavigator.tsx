@@ -5,7 +5,7 @@ import AppNavigation from "./AppNavigation";
 export default function MarketNavigator({
   active = "markets",
 }: {
-  active?: "markets" | "learn" | "updates" | "lifestyle" | "council";
+  active?: "space" | "markets" | "learn" | "updates" | "lifestyle" | "council";
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");

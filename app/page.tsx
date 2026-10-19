@@ -82,7 +82,7 @@ import ValuationTable from "./components/ValuationTable";
 import HouseholdPlanning from "./components/HouseholdPlanning";
 import HistoryComparison from "./components/HistoryComparison";
 import WealthGrowth from "./components/WealthGrowth";
-import AppNavigation, { WorkspaceHub } from "./components/AppNavigation";
+import AppNavigation from "./components/AppNavigation";
 
 type Modal =
   | {
@@ -538,12 +538,14 @@ export default function Home() {
               onClick={() => open({ kind: "members" })}
             >
               <div className="avatars">
-                <i>{state.members.first.slice(0, 1)}</i>
-                <i>{state.members.second.slice(0, 1)}</i>
+                <i>{privacy ? "·" : state.members.first.slice(0, 1)}</i>
+                <i>{privacy ? "·" : state.members.second.slice(0, 1)}</i>
               </div>
               <div>
                 <b>
-                  {state.members.first} & {state.members.second}
+                  {privacy
+                    ? "家庭成员"
+                    : `${state.members.first} & ${state.members.second}`}
                 </b>
                 <small>共同空间 · 编辑名称</small>
               </div>
@@ -555,8 +557,8 @@ export default function Home() {
       <section className="content" id="page-content" tabIndex={-1}>
         <header id="overview">
           <div>
-            <p className="eyebrow">TOGETHER · FAMILY SPACE</p>
-            <h1>两个人的生活，一个共同空间。</h1>
+            <p className="eyebrow">TOGETHER · WEALTH WORKSPACE</p>
+            <h1>看清家庭财富，安排下一步。</h1>
             <button
               className="save-status"
               onClick={() => open({ kind: "settings" })}
@@ -638,7 +640,6 @@ export default function Home() {
           </div>
         )}
         <div className="financial-content" hidden={privacy}>
-          <WorkspaceHub />
           <QuarterlyReminder state={state} />
           <div className="hero">
             <div>

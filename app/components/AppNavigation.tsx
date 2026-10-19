@@ -24,6 +24,7 @@ import {
   ArrowUpRight,
   LayoutGrid,
   Clock3,
+  ChevronDown,
 } from "lucide-react";
 import {
   FEATURES,
@@ -33,6 +34,8 @@ import {
   featureById,
   relatedFeatures,
   recentTime,
+  spaceFeatures,
+  navigationSpaceId,
   type Feature,
   type NavGroup,
 } from "@/lib/navigation";
@@ -99,23 +102,26 @@ function PinButton({ feature }: { feature: Feature }) {
 function NavigationSearch({
   close,
   footer,
+  restoreFocus,
 }: {
   close: () => void;
   footer?: ReactNode;
+  restoreFocus: HTMLElement | null;
 }) {
   const nav = useNavigation(),
     [query, setQuery] = useState(""),
     [group, setGroup] = useState<NavGroup | undefined>(),
     [selected, setSelected] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null),
-    list = useRef<HTMLDivElement>(null);
+    list = useRef<HTMLDivElement>(null),
+    composing = useRef(false);
   const results = searchFeatures(query, nav.entries, group);
   useEffect(() => {
-    const before = document.activeElement as HTMLElement;
+    const before = restoreFocus;
     dialog.current?.showModal();
     return () => {
       dialog.current?.close();
-      before?.focus?.();
+      if (before?.isConnected) before.focus({ preventScroll: true });
     };
   }, []);
   useEffect(() => {
@@ -155,9 +161,24 @@ function NavigationSearch({
           type="search"
           placeholder="搜索页面、功能或关键词…"
           aria-label="搜索页面与功能"
+          aria-controls="app-search-results"
+          aria-describedby="app-search-selection"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
           onKeyDown={(e) => {
+            // Enter and arrows belong to the IME while choosing Chinese text.
+            if (
+              composing.current ||
+              e.nativeEvent.isComposing ||
+              e.nativeEvent.keyCode === 229
+            )
+              return;
             if (["ArrowDown", "ArrowUp"].includes(e.key)) {
               e.preventDefault();
               const next = Math.max(
@@ -203,7 +224,19 @@ function NavigationSearch({
         </span>
         <span>↑ ↓ 选择 · Enter 打开</span>
       </div>
+      <p
+        id="app-search-selection"
+        className="app-visually-hidden"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {results[selected]
+          ? `当前选择：${results[selected].title}，第 ${selected + 1} 项，共 ${results.length} 项。按回车打开，可用上下方向键选择。`
+          : "没有匹配的功能入口。"}
+      </p>
       <div
+        id="app-search-results"
         className="app-search-results"
         ref={list}
         role="list"
@@ -291,15 +324,23 @@ export default function AppNavigation({
 }) {
   const nav = useNavigation(),
     [search, setSearch] = useState(false);
+  const searchOrigin = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const show = () => setSearch(true);
+    const show = () => {
+      if (!search) searchOrigin.current = document.activeElement as HTMLElement;
+      setSearch(true);
+    };
     const key = (e: KeyboardEvent) => {
       if (
+        !e.isComposing &&
+        e.keyCode !== 229 &&
         (e.metaKey || e.ctrlKey) &&
         e.key.toLowerCase() === "k" &&
         (!document.querySelector("dialog[open]") || search)
       ) {
         e.preventDefault();
+        if (!search)
+          searchOrigin.current = document.activeElement as HTMLElement;
         setSearch((s) => !s);
       }
     };
@@ -316,22 +357,63 @@ export default function AppNavigation({
     ),
     nav.entries,
   );
-  const rest = orderedFeatures(
-    FEATURES.filter((f) => f.primary && !pinned.some((p) => p.id === f.id)),
-    nav.entries,
-  );
-  const current = active || featureById(nav.current)?.parent || nav.current;
-  const row = (f: Feature) => (
+  const spaces = spaceFeatures(nav.entries);
+  const wealthSections = [
+    "overview",
+    "assets",
+    "cashflow",
+    "growth",
+    "contributions",
+    "quarterly-review",
+    "framework",
+  ];
+  const activeFeature = featureById(active || "");
+  const current =
+    activeFeature &&
+    (navigationSpaceId(activeFeature.id) !== navigationSpaceId(nav.current) ||
+      (wealthSections.includes(activeFeature.id) &&
+        wealthSections.includes(nav.current)))
+      ? activeFeature.id
+      : featureById(nav.current)?.id || activeFeature?.id || "space";
+  const space = navigationSpaceId(current);
+  const wealth = wealthSections
+    .filter((id) => id !== "overview")
+    .map((id) => featureById(id)!)
+    .filter(Boolean);
+  const pinnedCurrent = pinned.some((f) => f.id === current);
+  const shortcutItems = [
+    ...pinned,
+    ...spaces.filter((f) => !pinned.some((p) => p.id === f.id)),
+  ].slice(0, 6);
+  useEffect(() => {
+    const before = document.title;
+    document.title = `${featureById(current)?.title || "家庭空间"} · Together`;
+    return () => {
+      document.title = before;
+    };
+  }, [current]);
+  const row = (f: Feature, section: "pinned" | "space" | "wealth") => (
     <div className="app-nav-row" key={f.id}>
       <a
         href={f.href}
         onClick={() => revisit(f)}
-        aria-current={current === f.id ? "page" : undefined}
+        className={
+          section === "space" && space === f.id ? "is-active-space" : undefined
+        }
+        aria-current={
+          current === f.id && (section === "pinned" || !pinnedCurrent)
+            ? "page"
+            : section === "space" && space === f.id && current !== f.id
+              ? "location"
+              : undefined
+        }
       >
         <FeatureIcon feature={f} />
         <span>{f.title}</span>
       </a>
-      <PinButton feature={f} />
+      {(section === "pinned" || !pinned.some((p) => p.id === f.id)) && (
+        <PinButton feature={f} />
+      )}
     </div>
   );
   return (
@@ -343,7 +425,7 @@ export default function AppNavigation({
         className="sidebar market-sidebar app-sidebar"
         aria-label="家庭空间导航"
       >
-        <a className="brand" href="/#overview">
+        <a className="brand" href="/space">
           <span>t</span>ogether<small>家庭 · 生活 · 成长</small>
         </a>
         <button
@@ -362,20 +444,29 @@ export default function AppNavigation({
               置顶常用<span>{pinned.length}</span>
             </h2>
             {pinned.length ? (
-              pinned.map(row)
+              pinned.map((f) => row(f, "pinned"))
             ) : (
               <button className="app-pin-empty" onClick={openSearch}>
                 把常用功能钉在这里 <span>+</span>
               </button>
             )}
           </div>
-          <div className="app-nav-section">
+          <div className="app-nav-section app-space-navigation">
             <h2>
               <Clock3 size={12} />
-              最近使用<span>自动排序</span>
+              我的空间<span>最近使用排序</span>
             </h2>
-            {rest.map(row)}
+            {spaces.map((f) => row(f, "space"))}
           </div>
+          {space === "overview" && (
+            <div className="app-nav-section app-wealth-navigation">
+              <h2>
+                <WalletCards size={12} />
+                财富工作台
+              </h2>
+              {wealth.map((f) => row(f, "wealth"))}
+            </div>
+          )}
         </nav>
         <div className="sidebar-bottom app-sidebar-footer">
           <button className="app-all-features" onClick={openSearch}>
@@ -395,7 +486,7 @@ export default function AppNavigation({
         </div>
       </aside>
       <div className="app-mobile-bar">
-        <a className="app-mobile-brand" href="/#overview">
+        <a className="app-mobile-brand" href="/space">
           <b>t</b>ogether
         </a>
         <span>{featureById(current)?.title || "家庭空间"}</span>
@@ -405,10 +496,11 @@ export default function AppNavigation({
         </button>
       </div>
       <nav className="app-mobile-shortcuts" aria-label="手机主导航">
-        {[...pinned, ...rest].slice(0, 6).map((f) => (
+        {shortcutItems.map((f) => (
           <a
             key={f.id}
             href={f.href}
+            onClick={() => revisit(f)}
             aria-current={current === f.id ? "page" : undefined}
           >
             {f.title}
@@ -417,7 +509,11 @@ export default function AppNavigation({
         <button onClick={openSearch}>全部功能</button>
       </nav>
       {search && (
-        <NavigationSearch close={() => setSearch(false)} footer={footer} />
+        <NavigationSearch
+          close={() => setSearch(false)}
+          footer={footer}
+          restoreFocus={searchOrigin.current}
+        />
       )}
     </>
   );
@@ -460,7 +556,7 @@ export function WorkspaceHub() {
       <div className="app-hub-grid">
         {choices.map((f) => (
           <div className="app-hub-item" key={f.id}>
-            <a href={f.href}>
+            <a href={f.href} onClick={() => revisit(f)}>
               <FeatureIcon feature={f} />
               <span>
                 <b>{f.title}</b>
@@ -478,17 +574,23 @@ export function ModuleBridge({ featureId }: { featureId: string }) {
   const links = relatedFeatures(featureId);
   return (
     <section className="app-module-bridge" aria-label="关联功能">
-      <span>
-        <Link2 size={14} />
-        接着做
-      </span>
-      {links.map((f) => (
-        <a href={f.href} key={f.id}>
-          <FeatureIcon feature={f} size={14} />
-          <span>{f.title}</span>
-          <ArrowUpRight size={12} />
-        </a>
-      ))}
+      <details>
+        <summary>
+          <Link2 size={14} aria-hidden="true" />
+          关联功能
+          <span>需要时，接着做</span>
+          <ChevronDown size={14} aria-hidden="true" />
+        </summary>
+        <div className="app-module-links">
+          {links.map((f) => (
+            <a href={f.href} key={f.id} onClick={() => revisit(f)}>
+              <FeatureIcon feature={f} size={14} />
+              <span>{f.title}</span>
+              <ArrowUpRight size={12} />
+            </a>
+          ))}
+        </div>
+      </details>
     </section>
   );
 }

@@ -10,6 +10,12 @@ end $$;
 set local role authenticated;
 select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('test.navigation_one'),'role','authenticated')::text,true) is not null as identity_set;
 do $$ declare data jsonb; used timestamptz; pin_time timestamptz; begin
+  perform public.update_wealth_navigation('space','unpin');
+  perform public.update_wealth_navigation('space','pin');
+  select pinned_at into pin_time from public.wealth_navigation_preferences where feature_id='space';
+  perform public.update_wealth_navigation('space','visit');
+  if not exists(select 1 from public.wealth_navigation_preferences where feature_id='space' and pinned and pinned_at=pin_time and last_used_at is not null) then raise exception 'Home feature upgrade not usable'; end if;
+  if exists(select 1 from public.wealth_navigation_preferences where feature_id='space' and user_id<>auth.uid()) then raise exception 'Home feature exposes another member'; end if;
   perform public.update_wealth_navigation('fx-research','unpin');
   perform public.update_wealth_navigation('fx-research','pin');
   select pinned_at into pin_time from public.wealth_navigation_preferences where feature_id='fx-research';
@@ -34,6 +40,8 @@ select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting(
 do $$ begin
   if exists(select 1 from public.wealth_navigation_preferences where user_id<>auth.uid()) then raise exception 'Partner can read first member preferences'; end if;
   perform public.update_wealth_navigation('sets','pin');
+  perform public.update_wealth_navigation('space','visit');
+  if not exists(select 1 from public.wealth_navigation_preferences where feature_id='space' and user_id=auth.uid() and last_used_at is not null) then raise exception 'Partner cannot visit home'; end if;
 end $$;
 reset role;
 set local role anon;

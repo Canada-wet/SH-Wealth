@@ -128,7 +128,7 @@ export default function Login() {
         <div className="auth-icon">
           <LockKeyhole size={24} />
         </div>
-        <h1>{reset ? "找回你的访问权限" : "两个人，一个财富计划"}</h1>
+        <h1>{reset ? "找回你的访问权限" : "两个人，一个共同空间"}</h1>
         <p>私密家庭空间，仅限已授权的两位成员。</p>
         {checking && (
           <small role="status">

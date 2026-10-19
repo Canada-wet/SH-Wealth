@@ -2,12 +2,16 @@
 begin;
 create table if not exists public.wealth_navigation_preferences (
   user_id uuid not null references auth.users(id) on delete cascade,
-  feature_id text not null check(feature_id in ('overview','assets','cashflow','growth','contributions','framework','quarterly-review','markets','watchlist-pulse','market-intelligence','market-wealth','investment-desk','macro-research','rates-research','fx-research','securities','research-archive','council','learn','learning-favorites','lifestyle','library','sets','practice','rekordbox','advisor','history','settings','members','alerts','updates')),
+  feature_id text not null check(feature_id in ('space','overview','assets','cashflow','growth','contributions','framework','quarterly-review','markets','watchlist-pulse','market-intelligence','market-wealth','investment-desk','macro-research','rates-research','fx-research','securities','research-archive','council','learn','learning-favorites','lifestyle','library','sets','practice','rekordbox','advisor','history','settings','members','alerts','updates')),
   pinned boolean not null default false,
   last_used_at timestamptz,
   pinned_at timestamptz,
   primary key(user_id,feature_id)
 );
+-- Upgrade the existing allowlist in place; keep every member's pins and usage.
+alter table public.wealth_navigation_preferences drop constraint if exists wealth_navigation_preferences_feature_id_check;
+alter table public.wealth_navigation_preferences add constraint wealth_navigation_preferences_feature_id_check
+check(feature_id in ('space','overview','assets','cashflow','growth','contributions','framework','quarterly-review','markets','watchlist-pulse','market-intelligence','market-wealth','investment-desk','macro-research','rates-research','fx-research','securities','research-archive','council','learn','learning-favorites','lifestyle','library','sets','practice','rekordbox','advisor','history','settings','members','alerts','updates'));
 alter table public.wealth_navigation_preferences enable row level security;
 drop policy if exists "own navigation" on public.wealth_navigation_preferences;
 create policy "own navigation" on public.wealth_navigation_preferences for select to authenticated

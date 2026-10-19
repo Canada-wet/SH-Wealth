@@ -293,9 +293,9 @@ test("家庭导航进入兴趣空间，推荐在桌面和手机完整可见且�
   page,
 }) => {
   await authenticate(page, { seed: seed(true) });
-  await page.goto("/");
+  await page.goto("/space");
   await page
-    .getByRole("region", { name: "我的家庭工作台" })
+    .getByRole("region", { name: "家庭生活空间" })
     .getByRole("link", { name: /兴趣与生活/ })
     .click();
   await saved(page);
