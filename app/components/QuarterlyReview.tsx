@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import ActionCapture from "./ActionCapture";
 import {
   CalendarCheck,
   ArrowUpRight,
@@ -380,6 +381,12 @@ export default function QuarterlyReview({
         </div>
         <div className="quarter-workspace quarter-actions">
           <h3>03 · 下一季度，落实到人</h3>
+          <ActionCapture
+            sourceFeature="quarterly-review"
+            sourceRef={selected}
+            label="另建跨模块跟进行动"
+            disabled={disabled}
+          />
           <p className="quarter-caption">
             最多 12 项；建议先做最重要的 1–3
             项。归档后仍可勾选完成，原结论与证据保留。

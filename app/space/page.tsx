@@ -24,6 +24,7 @@ import { lessonForDay } from "@/lib/learning";
 import { continueFeatures } from "@/lib/navigation";
 import { useNavigation } from "../components/NavigationProvider";
 import MarketNavigator from "../components/MarketNavigator";
+import ActionCenter from "../components/ActionCenter";
 import "./space.css";
 
 const spaces = [
@@ -397,6 +398,12 @@ export default function FamilySpace() {
             ))}
           </div>
         </section>
+
+        <ActionCenter
+          householdId={store.cloudHousehold}
+          state={state}
+          hidden={!visible}
+        />
 
         {lesson && (
           <section className="space-lesson" aria-label="今日思考模型">

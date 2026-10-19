@@ -1,0 +1,48 @@
+// Current deployment/data boundaries. Regenerate SVG with Graphviz; no user data.
+digraph togetherArchitecture {
+  graph [rankdir=LR, bgcolor="#F7F8F4", pad="0.35", nodesep="0.40", ranksep="0.82", fontname="Arial", fontsize=16, compound=true, splines=polyline, label="Together · 系统运行边界 | v0.10.0 · 2026-10-18", labelloc=t, labeljust=l];
+  node [shape=box, style="rounded,filled", color="#C8D4CA", fillcolor="#FFFFFF", fontcolor="#193C32", fontname="Arial", fontsize=14, margin="0.36,0.20", penwidth=1.1];
+  edge [color="#759084", fontcolor="#52685E", fontname="Arial", fontsize=10, arrowsize=0.7, penwidth=1.1];
+
+  subgraph clusterClient {
+    label="用户设备"; color="#C7D8C9"; style="rounded,filled"; fillcolor="#EDF3EC"; fontcolor="#365B4D";
+    webApp [label="Web UI\n六个空间 · 浮动财富顾问"];
+    localCache [label="本机缓存与恢复\n草稿 · 设备偏好", fillcolor="#F8FBF6"];
+  }
+  subgraph clusterCloud {
+    label="Vercel · 同一个 Next.js 应用"; color="#C7D8C9"; style="rounded,filled"; fillcolor="#E8F0EA"; fontcolor="#365B4D";
+    nextApp [label="页面鉴权 + API + 领域逻辑\n财富 · 市场 · 研讨\n学习 · 兴趣", fillcolor="#365B4D", fontcolor="#FFFFFF", color="#365B4D"];
+    cronJobs [label="Vercel Cron\n周报 · 日报 · 学习 · 季度提醒"];
+  }
+  subgraph clusterSupabase {
+    label="Supabase · 身份与持久数据"; color="#C5D6D7"; style="rounded,filled"; fillcolor="#EDF4F5"; fontcolor="#3D6470";
+    authService [label="Auth\n已验证双账号 · 会话"];
+    postgresDb [label="Postgres + RLS + RPC\n共享 JSONB 文档及版本历史\n个人研讨 / 导航 / 收藏\n研究归档 / 提醒 / 认领", fillcolor="#FFFFFF"];
+  }
+  subgraph clusterExternal {
+    label="外部服务 · 独立权限与可用性"; color="#DAD3BC"; style="rounded,filled"; fillcolor="#F6F2E9"; fontcolor="#7B673C";
+    modelApis [label="LLM API\n顾问 · 研讨 · 搜索 · 音频"];
+    officialData [label="加拿大央行 / FRED\n固定公开数据 · 非逐笔行情"];
+    tradingView [label="TradingView 组件\n授权后浏览器直载\n覆盖 / 延迟由源决定"];
+    deliveryApis [label="Email / Telegram / WhatsApp\nWeb Push · 验证绑定与订阅"];
+    fundaSite [label="Funda 网页\n已授权的公开市场提问"];
+  }
+  subgraph clusterDesktop {
+    label="本机独立路径 · 非云端常驻"; color="#D1CCE0"; style="rounded,filled"; fillcolor="#F1EFF7"; fontcolor="#6A5983";
+    fundaRunner [label="Codex 定时唤醒 + Chrome\nComputer Use + 原文归档助手\n需本机运行、登录与管理授权"];
+  }
+
+  localCache -> webApp [dir=both, label="本机保存"];
+  webApp -> nextApp [label="HTTPS"];
+  webApp -> authService [label="登录 / 会话"];
+  webApp -> postgresDb [label="RLS / 版本 RPC / 实时更新"];
+  nextApp -> authService [label="验证身份"];
+  nextApp -> postgresDb [label="限定作用域读写"];
+  cronJobs -> nextApp [style=dashed, label="Cron secret"];
+  nextApp -> modelApis [style=dashed, label="按用途授权上下文"];
+  nextApp -> officialData [style=dashed, label="仅固定公共查询"];
+  webApp -> tradingView [style=dashed, label="不传家庭账本"];
+  nextApp -> deliveryApis [style=dashed, label="验证绑定 / 投递"];
+  fundaRunner -> fundaSite [style=dashed, label="可见网页交互"];
+  fundaRunner -> postgresDb [label="官方 CLI / 归档 / 回读核验"];
+}

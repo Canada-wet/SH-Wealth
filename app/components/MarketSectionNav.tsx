@@ -21,9 +21,14 @@ export default function MarketSectionNav() {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         let current = sections[0][0];
+        // Safari can land a hash anchor a fractional pixel below scroll-margin.
+        // Include the sticky shell and a small tolerance, so scrollspy does not
+        // immediately undo the section selected by the user's click.
+        const activationTop =
+          Math.max(140, nav.current?.getBoundingClientRect().bottom ?? 0) + 2;
         for (const [id] of sections) {
           const section = document.getElementById(id);
-          if (section && section.getBoundingClientRect().top <= 140)
+          if (section && section.getBoundingClientRect().top <= activationTop)
             current = id;
         }
         setActive(current);

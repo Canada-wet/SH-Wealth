@@ -13,9 +13,16 @@ import {
   BACKUP_KEY,
   MIGRATION_KEY,
 } from "./storage";
-import { cloudClient, cloudRead, cloudWrite, sharedHousehold } from "./cloud";
+import {
+  cloudClient,
+  cloudRead,
+  cloudWrite,
+  sharedHousehold,
+  type CloudConflictError,
+} from "./cloud";
 import { connectionPlan, hasSavedData, sameData } from "./cloud-plan";
 import { mergeChatHistory } from "./conversations";
+import { AGGREGATE_LABELS, mergeHouseholdAggregates } from "./aggregate-merge";
 export type CloudChoice = {
   householdId: string;
   remoteRevision: number;
@@ -30,6 +37,20 @@ type CloudLink = {
   localRevision: number;
   userId: string;
 };
+type AcknowledgedBaseline = {
+  householdId: string;
+  userId: string;
+  remoteRevision: number;
+  document: WealthState;
+};
+function revisionConflict(reason: unknown): reason is CloudConflictError {
+  return (
+    reason instanceof Error &&
+    reason.name === "CloudConflictError" &&
+    "code" in reason &&
+    reason.code === "HOUSEHOLD_REVISION_CONFLICT"
+  );
+}
 const CLOUD_KEY = "together-cloud-link";
 export default function useWealth() {
   const [state, setState] = useState<WealthState>(emptyState);
@@ -44,38 +65,147 @@ export default function useWealth() {
   const booting = useRef(false);
   const localReadable = useRef(true);
   const remote = useRef<CloudLink | null>(null);
+  // Never restore this from localStorage. A persisted revision is not proof of
+  // a common content baseline after refresh, account changes or an unknown ACK.
+  const baseline = useRef<AcknowledgedBaseline | null>(null);
+  const connection = useRef(0);
   const syncing = useRef(false);
   const syncCloud = useCallback(async function sync(): Promise<void> {
     if (!remote.current || syncing.current) return;
     syncing.current = true;
+    let attemptedMerge = false;
+    let attemptedLink: CloudLink | null = null;
+    const unchangedLocal = (expected: WealthState) => {
+      const stored = readState(localStorage);
+      return (
+        current.current === expected &&
+        stored.revision === expected.revision &&
+        sameData(stored, expected)
+      );
+    };
     try {
       while (
         remote.current &&
         remote.current.localRevision !== current.current.revision
       ) {
         const link: CloudLink = remote.current;
-        const document = current.current;
+        attemptedLink = link;
+        let document = current.current;
         setCloudStatus("正在同步云端…");
-        const revision = await cloudWrite(
-          link.householdId,
-          link.remoteRevision,
-          document,
-        );
+        let revision: number;
+        try {
+          revision = await cloudWrite(
+            link.householdId,
+            link.remoteRevision,
+            document,
+          );
+        } catch (reason) {
+          if (remote.current !== link) return;
+          const common = baseline.current;
+          if (
+            !revisionConflict(reason) ||
+            attemptedMerge ||
+            !common ||
+            common.householdId !== link.householdId ||
+            common.userId !== link.userId ||
+            common.remoteRevision !== link.remoteRevision
+          )
+            throw reason;
+          attemptedMerge = true;
+          setCloudStatus("检测到并发修改 · 正在核对模块…");
+          const row = await cloudRead(link.householdId);
+          if (remote.current !== link) return;
+          if (!unchangedLocal(document))
+            throw new Error(
+              "核对云端期间本机又有新修改，已全部保留；请重新连接确认版本。",
+            );
+          if (
+            row.household_id !== link.householdId ||
+            !row.document ||
+            !Number.isSafeInteger(row.revision) ||
+            row.revision <= link.remoteRevision
+          )
+            throw new Error(
+              "云端版本无法确认，未自动合并；请重新连接确认版本。",
+            );
+          const merged = mergeHouseholdAggregates(
+            common.document,
+            document,
+            row.document,
+          );
+          if (merged.status === "conflict") {
+            const modules = merged.domains
+              .map((key) => AGGREGATE_LABELS[key])
+              .join("、");
+            throw new Error(
+              modules
+                ? `${modules}在两边都有修改，未自动合并；本机已保留，请选择家庭版本。`
+                : "数据含未知或无效字段，未自动合并；本机已保留，请选择家庭版本。",
+            );
+          }
+          const client = cloudClient();
+          const user = client ? (await client.auth.getUser()).data.user : null;
+          if (remote.current !== link) return;
+          if (!user || user.id !== link.userId)
+            throw new Error("登录账号已变化，未自动合并；本机数据已保留。");
+          if (!unchangedLocal(document))
+            throw new Error(
+              "核对云端期间本机又有新修改，已全部保留；请重新连接确认版本。",
+            );
+          // One CAS retry only, with whole financial history kept from its owner.
+          // A non-financial merge must never append a financial snapshot.
+          const previousRevision = Math.max(
+            document.revision,
+            row.document.revision,
+          );
+          if (!Number.isSafeInteger(previousRevision + 1))
+            throw new Error(
+              "本机文档版本超出安全范围，未自动合并；请保留备份后检查版本。",
+            );
+          const combined = finishChange(
+            {
+              ...document,
+              revision: previousRevision,
+            },
+            merged.document,
+            "合并不同模块的并发修改",
+          );
+          setCloudStatus("不同模块修改可兼容 · 正在合并同步…");
+          revision = await cloudWrite(link.householdId, row.revision, combined);
+          if (remote.current !== link) return;
+          if (!unchangedLocal(document))
+            throw new Error(
+              "模块合并已保存云端，但期间本机又有新修改；新修改已保留，请重新连接确认版本。",
+            );
+          writeState(localStorage, combined, document.revision);
+          current.current = combined;
+          setState(combined);
+          document = combined;
+        }
         if (remote.current !== link) break;
+        baseline.current = {
+          householdId: link.householdId,
+          userId: link.userId,
+          remoteRevision: revision,
+          document: structuredClone(document),
+        };
         remote.current = {
           ...link,
           remoteRevision: revision,
           localRevision: document.revision,
         };
+        attemptedLink = remote.current;
         localStorage.setItem(CLOUD_KEY, JSON.stringify(remote.current));
       }
       if (remote.current) setCloudStatus("已同步 Supabase");
     } catch (reason) {
+      if (remote.current !== attemptedLink) return;
       const message = reason instanceof Error ? reason.message : "云端同步失败";
       setCloudStatus("云端同步失败 · 本机已保存");
       setError(message);
       // Pause retries on a conflict; local saves remain available.
       remote.current = null;
+      baseline.current = null;
     } finally {
       syncing.current = false;
       if (
@@ -98,14 +228,21 @@ export default function useWealth() {
       householdId: string,
       mode: "load" | "upload" | "resume" | "auto" = "load",
     ) => {
+      const request = ++connection.current;
+      remote.current = null;
+      baseline.current = null;
       const client = cloudClient();
       if (!client) throw new Error("尚未配置 Supabase URL 与公开密钥。");
       const {
         data: { user },
       } = await client.auth.getUser();
+      if (connection.current !== request)
+        throw new Error("家庭连接已变化，请使用当前家庭版本。");
       if (!user) throw new Error("请先登录。");
       const observedRevision = current.current.revision;
       const row = await cloudRead(householdId);
+      if (connection.current !== request)
+        throw new Error("家庭连接已变化，请使用当前家庭版本。");
       let operation = mode;
       let merged = false;
       if (mode === "auto") {
@@ -207,6 +344,13 @@ export default function useWealth() {
         localRevision: shouldUpload ? -1 : current.current.revision,
         userId: user.id,
       };
+      if (!shouldUpload && row.document)
+        baseline.current = {
+          householdId,
+          userId: user.id,
+          remoteRevision: row.revision,
+          document: structuredClone(row.document),
+        };
       localStorage.setItem(CLOUD_KEY, JSON.stringify(remote.current));
       setCloudHousehold(householdId);
       choice.current = null;
@@ -359,6 +503,12 @@ export default function useWealth() {
             remoteRevision: row.revision,
             localRevision: row.document.revision,
           };
+          baseline.current = {
+            householdId: link.householdId,
+            userId: link.userId,
+            remoteRevision: row.revision,
+            document: structuredClone(row.document),
+          };
           localStorage.setItem(CLOUD_KEY, JSON.stringify(remote.current));
           setCloudStatus("已同步 Supabase");
         }
@@ -399,7 +549,9 @@ export default function useWealth() {
     };
   }, [cloudHousehold, replaceFromCloud]);
   const disconnectCloud = () => {
+    connection.current += 1;
     remote.current = null;
+    baseline.current = null;
     localStorage.removeItem(CLOUD_KEY);
     setCloudHousehold("");
     setCloudStatus("仅保存于本机");

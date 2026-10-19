@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./styles.css";
 import NavigationProvider from "./components/NavigationProvider";
 import "./navigation.css";
+import "./actions.css";
 
 export const metadata: Metadata = {
   title: "Together · 家庭生活空间",

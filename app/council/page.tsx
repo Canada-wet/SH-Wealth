@@ -15,6 +15,7 @@ import {
 import MarketNavigator from "@/app/components/MarketNavigator";
 import { ModuleBridge } from "@/app/components/AppNavigation";
 import AdvisorMarkdown from "@/app/components/AdvisorMarkdown";
+import ActionCapture from "@/app/components/ActionCapture";
 import {
   COUNCIL_MODELS,
   CATALOG_DATE,
@@ -920,6 +921,12 @@ export default function CouncilPage() {
                       <span>逐步云端保存</span>
                     </div>
                     <div className="council-actions">
+                      <ActionCapture
+                        sourceFeature="council"
+                        sourceRef={run.id}
+                        label="记录下一步行动"
+                        disabled={busy}
+                      />
                       {["active", "paused"].includes(run.status) && (
                         <>
                           {auto ? (

@@ -87,6 +87,7 @@ it("按中英文关键词、多个词与分类查找，精准标题优先；空�
     ["家庭首页", "space"],
     ["家庭全景", "overview"],
     ["深度研讨", "council"],
+    ["行动中心", "action-center"],
   ])
     expect(searchFeatures(query)[0].id).toBe(id);
   expect(searchFeatures("xyzunknown")).toEqual([]);
@@ -133,6 +134,7 @@ it("空间目录包含六个根空间，财富深链归入财富总览，不改�
     expect(FEATURES.find((feature) => feature.id === id)?.href).toBe(`/#${id}`);
   }
   expect(navigationSpaceId("fx-research")).toBe("markets");
+  expect(navigationSpaceId("action-center")).toBe("space");
   expect(navigationSpaceId("sets")).toBe("lifestyle");
   expect(navigationSpaceId("learning-favorites")).toBe("learn");
   for (const id of [...SPACE_ROOT_IDS, "updates", "unknown"])

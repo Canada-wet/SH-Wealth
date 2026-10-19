@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import ActionCapture from "./ActionCapture";
 import { instrumentKey, type MarketInstrument } from "@/lib/market";
 import {
   cadScenario,
@@ -169,6 +170,12 @@ export default function MarketInvestmentDesk({
             <button className="secondary" onClick={() => onChart(row)}>
               查看 {row.ticker} 图表 ↓
             </button>
+            <ActionCapture
+              sourceFeature="investment-desk"
+              suggestedTitle={`核对 ${row.ticker} 的投资逻辑与失效条件`}
+              label="安排研究行动"
+              disabled={!ready}
+            />
           </div>
           <div className="desk-context">
             <span className="market-badge">{theme.label}</span>

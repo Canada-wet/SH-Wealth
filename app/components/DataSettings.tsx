@@ -7,6 +7,7 @@ import type { WealthState } from "@/lib/wealth";
 import type { CloudChoice } from "@/lib/useWealth";
 import { allChats } from "@/lib/conversations";
 import Dialog from "./Dialog";
+import BackupBundle from "./BackupBundle";
 export default function DataSettings({
   state,
   onClose,
@@ -70,7 +71,12 @@ export default function DataSettings({
     const file = event.target.files?.[0];
     if (file)
       void run(async () => {
-        const next = parseBackup(await file.text());
+        const text = await file.text();
+        if (JSON.parse(text)?.kind === "together-user-visible-export")
+          throw new Error(
+            "这是跨模块导出数据包，不是家庭账本导入格式。未修改数据；请按包内 restorePlan 在隔离环境恢复，或使用原家庭 JSON 备份。",
+          );
+        const next = parseBackup(text);
         const messages = allChats(next).reduce(
           (sum, chat) => sum + chat.messages.length,
           0,
@@ -233,6 +239,7 @@ export default function DataSettings({
         <p>
           localhost 与 Vercel
           的浏览器存储互不相通。旧本地数据可导出后在这里导入；备份包含所有财务历史和全部聊天会话。
+          这是家庭文档的完整备份，不包含独立保存的个人研讨、导航、收藏、行动或研究归档。
         </p>
         <div className="button-row">
           <button
@@ -280,6 +287,12 @@ export default function DataSettings({
           </button>
         </div>
       </div>
+      <BackupBundle
+        key={`${householdId}:${session?.user.id ?? ""}`}
+        householdId={householdId}
+        userId={session?.user.id ?? ""}
+        disabled={busy || !session}
+      />
       <div className="button-row">
         <a className="text-button" href="/login">
           通过邮箱重置密码

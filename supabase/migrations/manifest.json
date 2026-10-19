@@ -1,0 +1,106 @@
+{
+  "manifestVersion": 1,
+  "mode": "verification-only",
+  "existingDatabasePolicy": "manual-baseline-required",
+  "notes": "Historical SQL inventory, not remote migration history. Never rerun schema.sql on an existing project. Baseline actual applied state manually.",
+  "migrations": [
+    {
+      "id": "001-schema",
+      "path": "supabase/schema.sql",
+      "sha256": "4e5b9ac80e32479c527fae646c6547b799291eb2c2d37e7f3b79b5c4412799c6",
+      "dependsOn": [],
+      "kind": "bootstrap"
+    },
+    {
+      "id": "002-persistence",
+      "path": "supabase/persistence.sql",
+      "sha256": "53515d06d46f90e4a04ee5f953e8486537eca605a19bd8fe78e7be3631f307a3",
+      "dependsOn": ["001-schema"],
+      "kind": "additive"
+    },
+    {
+      "id": "003-push",
+      "path": "supabase/push.sql",
+      "sha256": "21ed66bbabb5072a8f0b17a4ac73a70c92deb8c9ebe09ad862ba31d628ee46f2",
+      "dependsOn": ["002-persistence"],
+      "kind": "additive"
+    },
+    {
+      "id": "004-access",
+      "path": "supabase/access.sql",
+      "sha256": "c98aad8b714951cb01abc1b92f881038e90d29e285be2da5078cfee2565a56f8",
+      "dependsOn": ["002-persistence", "003-push"],
+      "kind": "additive"
+    },
+    {
+      "id": "005-shared-home",
+      "path": "supabase/shared-home.sql",
+      "sha256": "5405aecf63c984b2bd878311f80e8b024658795c5da1dc4b0db8b880648a4c3c",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "006-channels",
+      "path": "supabase/channels.sql",
+      "sha256": "da63d38842f2214e6c5333d08d019a72ee41faea43cf85be7940ccf2353a921c",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "007-voice",
+      "path": "supabase/voice.sql",
+      "sha256": "9858ca8059613f20cc9a2d67f340f6331439286cf1002b60e7e0f435787c89b6",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "008-learning",
+      "path": "supabase/learning.sql",
+      "sha256": "4bb433ecfee0eae9d90dee95d9e478eab943084ad5b47922d300b4d13be48f28",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "009-market-briefings",
+      "path": "supabase/market-briefings.sql",
+      "sha256": "45a6e61b6523bb975c4249342e2eb0dcc8d08449668b81eebdd7584b93caf655",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "010-council",
+      "path": "supabase/council.sql",
+      "sha256": "ccfa95758eb2ee7ad6393d30163f551b93c3897b1e0ddd54fa84043144e0f5fd",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "011-research-archive",
+      "path": "supabase/research-archive.sql",
+      "sha256": "a1d32c3c1c9cfc2d4e12bc32b15cf99996e6fdd5d6fe99bf48a13afea7a06711",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "012-research-runs",
+      "path": "supabase/research-runs.sql",
+      "sha256": "32668fdd7252713052fc768231e3212429167d000ecbc19f3334c3da056a58aa",
+      "dependsOn": ["011-research-archive"],
+      "kind": "additive"
+    },
+    {
+      "id": "013-navigation",
+      "path": "supabase/navigation.sql",
+      "sha256": "3320147d8a36cd90d6b9476fb86af81b16e83dfec1178aad07068f7911dde83f",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    },
+    {
+      "id": "014-actions",
+      "path": "supabase/actions.sql",
+      "sha256": "d68047bc08233ab8c9a55bdff1427f0e2ad5fab0f282819c3a95c083da8a2de7",
+      "dependsOn": ["004-access"],
+      "kind": "additive"
+    }
+  ]
+}
