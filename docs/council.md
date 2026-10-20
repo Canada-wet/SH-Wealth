@@ -1,4 +1,18 @@
-# 多模型研讨 · v0.9.0
+# 多模型研讨 · v0.12.0
+
+## 私人研讨库与决策复核（v0.12.0）
+
+增量脚本 `supabase/council-library.sql` 建立独立个人整理表，不重写既有研讨文档、步骤、配额或财富账本。置顶与页面导航的置顶是两件事；归档可恢复，只整理已结束/停止的研讨，不替用户停止执行，也不释放原100场容量。删除原研讨时对应整理记录由外键级联删除，仍沿用原来的删除确认和运行中保护。
+
+搜索由认证用户RPC在数据库内检查本人至多100场的原问题、追问、保存的发言、标题、标签和私人笔记；支持最多120字/8个空格分隔词的全部匹配，中英文均按不区分大小写的字面子串，不展开SQL通配符或正则。不搜索原附件/图片，不把全量正文或base64发到历史列表。返回有界最新完整结论摘要与命中摘录/轮次/步骤；未完成或截断裁判不冒充完整结论。无搜索时不聚合全文。搜索词通过同源POST传递，不放进URL、导航记录、用户偏好或模型请求。
+
+历史默认按最近实际讨论活动排序（含新追问时间），置顶优先；可组合状态/模型筛选与已归档/待复核分类。手机历史默认折叠，需要时展开，不让长列表挡住研讨台。读取失败仍保留旧问题入口并标明降级，不假装全文检索或本机持久化成功。刷新/窗口重新聚焦读云端，不是跨设备实时订阅。
+
+自定义标题、至多6个标签、2,400字私人笔记和复核日期显式保存；独立版本CAS，未知结果不自动重发，旧草稿拒绝覆盖。笔记用于记录用户自己的判断和实际反馈，不是AI结论，也不自动进入模型上下文。到期只显示待复核标记，不自动推送/生成。账号变化清空私密状态并拦截迟到请求；个人整理不因共同家庭权限而对伴侣可见。
+
+三个深挖入口只准备追问草稿，替换已有未发送草稿需确认，再次费用授权后才发送；不自动提升深度、工具权限或改变参与者。新旧轮次对照只是原文摘录，不推断意见改变或伪造共识。单场Markdown导出附本人已保存整理；跨模块包新增 `councilLibrary`，仍有条数/字节限制，不是全数据库备份。
+
+权限与协议单测见 `tests/council-library*.test.*`；隔离数据库事务为 `tests/council-library.sql`，不得在生产运行该合成夹具。未安装新SQL时显示明确降级，不影响原研讨继续/导出流程。
 
 ## 深入研讨与受控工具（v0.9.0）
 
@@ -32,16 +46,16 @@
 
 服务端变量：
 
-| 服务 | 变量 | 核对型号 |
-| --- | --- | --- |
-| OpenAI | `OPENAI_API_KEY` | GPT-6 Luna / GPT-6 Astra |
-| Anthropic | `ANTHROPIC_API_KEY` | Claude Haiku 5.5 / Opus 5.5（日常旗舰） / Fable 5.1（深度推理，现役） |
-| DeepSeek | `DEEPSEEK_API_KEY` | DeepSeek V4.1 Flash / V4 Pro |
-| Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL` | Qwen 3.8 Flash / Max |
-| GLM | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `ZAI_API_KEY` | 百炼旗舰 `ZHIPU/GLM-5.3`；Flash 暂仅原厂 |
-| Moonshot | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `MOONSHOT_API_KEY` | 百炼 `kimi-k3` / `kimi-k2.6`；K2.6 不是最新轻量型号 |
-| Gemini | `GEMINI_API_KEY` | Gemini 3.5 Flash-Lite / Gemini 4 Argon |
-| Meta | `MODEL_API_KEY` | Muse Spark 1.3；未核实独立 Lite 型号 |
+| 服务      | 变量                                                                 | 核对型号                                                              |
+| --------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| OpenAI    | `OPENAI_API_KEY`                                                     | GPT-6 Luna / GPT-6 Astra                                              |
+| Anthropic | `ANTHROPIC_API_KEY`                                                  | Claude Haiku 5.5 / Opus 5.5（日常旗舰） / Fable 5.1（深度推理，现役） |
+| DeepSeek  | `DEEPSEEK_API_KEY`                                                   | DeepSeek V4.1 Flash / V4 Pro                                          |
+| Qwen      | `QWEN_API_KEY`, `QWEN_BASE_URL`                                      | Qwen 3.8 Flash / Max                                                  |
+| GLM       | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `ZAI_API_KEY`      | 百炼旗舰 `ZHIPU/GLM-5.3`；Flash 暂仅原厂                              |
+| Moonshot  | 百炼共用 `QWEN_API_KEY` + `QWEN_BASE_URL`，或原厂 `MOONSHOT_API_KEY` | 百炼 `kimi-k3` / `kimi-k2.6`；K2.6 不是最新轻量型号                   |
+| Gemini    | `GEMINI_API_KEY`                                                     | Gemini 3.5 Flash-Lite / Gemini 4 Argon                                |
+| Meta      | `MODEL_API_KEY`                                                      | Muse Spark 1.3；未核实独立 Lite 型号                                  |
 
 不要使用 `NEXT_PUBLIC_` 前缀保存服务商密钥，不在浏览器存储密钥。百炼地址使用该 API key 同地域的官方业务空间地址，例如 `https://WORKSPACE.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1`；只接受固定官方域名格式，拒绝任意代理地址。仅有这两个变量时，启用 Qwen 两种、Kimi 两种和 GLM 旗舰共五种已核实映射；不等于账号对这五种均已开通权限或免费额度。
 

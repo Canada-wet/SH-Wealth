@@ -57,8 +57,9 @@ it("版本化包明确共享/个人范围、排除项和人工恢复边界，不
     "navigation",
     "learning",
     "council",
+    "councilLibrary",
   ]);
-  expect(Object.keys(result.sections)).toHaveLength(8);
+  expect(Object.keys(result.sections)).toHaveLength(9);
   expect(result.sections.household.count).toBe(1);
   expect(result.sections.learning.count).toBe(0);
   expect(result.restorePlan).toMatchObject({

@@ -101,6 +101,13 @@
       "sha256": "d68047bc08233ab8c9a55bdff1427f0e2ad5fab0f282819c3a95c083da8a2de7",
       "dependsOn": ["004-access"],
       "kind": "additive"
+    },
+    {
+      "id": "015-council-library",
+      "path": "supabase/council-library.sql",
+      "sha256": "e32221bec6f15b634376ad14a9024542cf249ea46204dcec7faa145680211432",
+      "dependsOn": ["010-council"],
+      "kind": "additive"
     }
   ]
 }

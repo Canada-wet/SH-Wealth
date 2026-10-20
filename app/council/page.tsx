@@ -37,12 +37,20 @@ import Followup from "./Followup";
 import Results from "./Results";
 import ResearchSettings from "./ResearchSettings";
 import ToolReceipts from "./ToolReceipts";
+import Library from "./Library";
+import DecisionMemo from "./DecisionMemo";
+import useCouncilLibrary from "@/lib/useCouncilLibrary";
+import {
+  COUNCIL_DEEPEN,
+  councilMemoExport,
+  type CouncilLibraryItem,
+} from "@/lib/council-library";
 import {
   DEEP_RESEARCH,
   validateCouncilResearch,
   type CouncilResearch,
 } from "@/lib/council-research";
-import { councilRound } from "@/lib/council-results";
+import { councilRound, councilExcerpt } from "@/lib/council-results";
 import { readCouncilResponse } from "@/lib/council-client";
 import type { CouncilProgress } from "@/lib/council-stream";
 import {
@@ -84,7 +92,27 @@ async function api(
   return readCouncilResponse(r, progress);
 }
 export default function CouncilPage() {
+  const library = useCouncilLibrary();
+  return <CouncilWorkspace key={library.sessionKey} library={library} />;
+}
+function CouncilWorkspace({
+  library,
+}: {
+  library: ReturnType<typeof useCouncilLibrary>;
+}) {
   const [showAllProviders, setShowAllProviders] = useState(false);
+  const [followupSeed, setFollowupSeed] = useState<{
+    id: string;
+    text: string;
+  }>();
+  const memoDirty = useRef(false),
+    openSequence = useRef(0);
+  const onMemoDirty = useRef((dirty: boolean) => {
+    memoDirty.current = dirty;
+  }).current;
+  const leaveMemo = () =>
+    !memoDirty.current ||
+    window.confirm("尚有未保存的私人笔记，放弃草稿并切换研讨？");
   const [research, setResearch] = useState<CouncilResearch>(DEEP_RESEARCH);
   let researchError = "";
   try {
@@ -121,8 +149,16 @@ export default function CouncilPage() {
     mounted = useRef(true),
     draft = useRef<{ signature: string; id: string } | null>(null);
   const accept = (r: CouncilRun) => {
+    const previous = current.current;
     current.current = r;
     setRun(r);
+    if (
+      !previous ||
+      previous.id !== r.id ||
+      previous.status !== r.status ||
+      previous.turns?.length !== r.turns?.length
+    )
+      void library.refresh();
     setHistory((items) =>
       [
         {
@@ -267,15 +303,18 @@ export default function CouncilPage() {
     }, 500);
     return () => clearTimeout(tick);
   }, [auto, run, compose, now]);
-  const openRun = async (id: string) => {
-    if (flight.current) return;
+  const openRun = async (id: string, match?: CouncilLibraryItem) => {
+    if (flight.current || (current.current?.id !== id && !leaveMemo())) return;
+    const sequence = ++openSequence.current;
     stopAuto();
     setError("");
     setNotice("");
     setBusy(true);
     try {
       const d = await api(undefined, id);
+      if (!mounted.current || sequence !== openSequence.current) return;
       accept(d.run);
+      void library.refresh();
       const lastRound = d.run.turns?.length || 0;
       setRound(lastRound);
       setTranscript(d.run.status !== "complete");
@@ -287,11 +326,32 @@ export default function CouncilPage() {
             : councilRound(d.run, lastRound).finalStage
           : councilRound(d.run, lastRound).firstStage,
       );
+      if (match?.matchRound !== null && match?.matchRound !== undefined) {
+        const target = d.run.steps.find(
+          (s: CouncilRun["steps"][number]) => s.seq === match.matchSeq,
+        );
+        if (target) {
+          setRound(match.matchRound);
+          setTranscript(true);
+          setStage(target.stage);
+          setNotice(
+            "已定位包含搜索关键词的原始发言；搜索不会发起新的模型调用。",
+          );
+          setTimeout(
+            () =>
+              document
+                .getElementById(`council-step-${target.seq}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            100,
+          );
+        }
+      }
       window.history.replaceState(null, "", `/council?run=${id}`);
     } catch (e) {
-      setError((e as Error).message);
+      if (mounted.current && sequence === openSequence.current)
+        setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (mounted.current && sequence === openSequence.current) setBusy(false);
     }
   };
   const start = async () => {
@@ -366,6 +426,7 @@ export default function CouncilPage() {
   const remove = async () => {
     if (
       !run ||
+      !leaveMemo() ||
       !window.confirm(
         "删除本人的这场研讨、全部追问、附件及发言？此操作不能撤销，建议先导出。",
       )
@@ -375,6 +436,7 @@ export default function CouncilPage() {
     try {
       await api({ action: "delete", id: run.id });
       setHistory((h) => h.filter((x) => x.id !== run.id));
+      void library.refresh();
       current.current = null;
       setRun(null);
       setCompose(true);
@@ -404,6 +466,8 @@ export default function CouncilPage() {
     ) ?? [];
   const failed = run?.steps.filter((s) => s.status === "failed").length ?? 0;
   const newQuestion = () => {
+    if (!leaveMemo()) return;
+    openSequence.current++;
     stopAuto();
     setCompose(true);
     setQuestion("");
@@ -418,6 +482,7 @@ export default function CouncilPage() {
     [...participants, ...(judge ? [judge] : [])].some(
       (key) => !councilCanSeeImages(COUNCIL_MODELS.find((m) => m.key === key)!),
     );
+  const savedMemo = library.items.find((x) => x.id === run?.id)?.memo;
   return (
     <main className="market-shell council-shell">
       <MarketNavigator active="council" />
@@ -432,7 +497,7 @@ export default function CouncilPage() {
             <h1>
               <MessagesSquare size={30} /> 多模型研讨
             </h1>
-            <p>把难题放到圆桌上。独立判断，认真质疑，保留不同意见。</p>
+            <p>从认真讨论，到自己的判断。让每一次思考，都能继续积累。</p>
           </div>
           <button
             className="primary-button"
@@ -464,35 +529,15 @@ export default function CouncilPage() {
           </p>
         )}
         <div className="council-layout">
-          <aside className="council-history" aria-label="我的研讨历史">
-            <div className="council-section-label">
-              <h2>我的研讨</h2>
-              <span>{history.length}/100</span>
-            </div>
-            <p>本账号可回看、导出和继续。</p>
-            {loading ? (
-              <p role="status">正在读取…</p>
-            ) : history.length === 0 ? (
-              <div className="council-history-empty">
-                从一个值得认真思考的问题开始。
-              </div>
-            ) : (
-              history.map((h) => (
-                <button
-                  className={run?.id === h.id && !compose ? "selected" : ""}
-                  disabled={busy || auto || processingFiles}
-                  key={h.id}
-                  onClick={() => void openRun(h.id)}
-                >
-                  <strong>{h.question}</strong>
-                  <small>
-                    {new Date(h.created_at).toLocaleDateString("zh-CN")} ·{" "}
-                    {STATUS[h.status]}
-                  </small>
-                </button>
-              ))
-            )}
-          </aside>
+          <Library
+            store={library}
+            legacy={history}
+            selected={!compose ? (run?.id ?? "") : ""}
+            disabled={busy || auto || processingFiles}
+            open={(item) =>
+              void openRun(item.id, library.query ? item : undefined)
+            }
+          />
           <div className="council-workspace">
             {compose ? (
               <section
@@ -501,6 +546,20 @@ export default function CouncilPage() {
               >
                 <p className="eyebrow">01 / A QUESTION WORTH EXPLORING</p>
                 <h2 id="compose-title">你想把什么想清楚？</h2>
+                <div
+                  className="council-workflow-guide"
+                  aria-label="研讨使用路径"
+                >
+                  <span>
+                    <b>01</b> 讲清问题与约束
+                  </span>
+                  <span>
+                    <b>02</b> 对照证据与分歧
+                  </span>
+                  <span>
+                    <b>03</b> 记录判断，定期复核
+                  </span>
+                </div>
                 <label className="council-question">
                   问题与已知条件
                   <textarea
@@ -846,7 +905,7 @@ export default function CouncilPage() {
                     ),
                   )}
                   <p>
-                    本页首版不联网检索；各模型可能共享偏差、编造引用，重要决策应核验原始来源。
+                    深入模式仅在单独授权后检索指定公开主题；各模型可能共享偏差、编造引用，重要决策应核验原始来源。
                   </p>
                 </details>
               </section>
@@ -860,7 +919,15 @@ export default function CouncilPage() {
                         {auto ? "研讨进行中" : STATUS[run.status]}
                       </span>
                     </div>
-                    <h2>{run.question}</h2>
+                    <h2>
+                      {savedMemo?.title || councilExcerpt(run.question, 180)}
+                    </h2>
+                    {(savedMemo?.title || run.question.length > 180) && (
+                      <details className="council-origin-question">
+                        <summary>原始问题与约束 · 原文保留</summary>
+                        <p>{run.question}</p>
+                      </details>
+                    )}
                     {!!run.turns?.length && (
                       <nav className="council-round-nav" aria-label="讨论轮次">
                         {[0, ...run.turns.map((_, i) => i + 1)].map((value) => (
@@ -966,9 +1033,15 @@ export default function CouncilPage() {
                       <button
                         onClick={() => {
                           const url = URL.createObjectURL(
-                            new Blob([councilExport(run)], {
-                              type: "text/markdown;charset=utf-8",
-                            }),
+                            new Blob(
+                              [
+                                councilExport(run) +
+                                  councilMemoExport(savedMemo),
+                              ],
+                              {
+                                type: "text/markdown;charset=utf-8",
+                              },
+                            ),
                           );
                           const a = document.createElement("a");
                           a.href = url;
@@ -1053,6 +1126,11 @@ export default function CouncilPage() {
                     run={run}
                     round={round}
                     activeSeq={busy ? progress?.seq : undefined}
+                    viewRound={(value) => {
+                      setRound(value);
+                      setTranscript(false);
+                      setStage(councilRound(run, value).finalStage);
+                    }}
                     inspect={(target, seq) => {
                       setTranscript(true);
                       setStage(target);
@@ -1066,6 +1144,64 @@ export default function CouncilPage() {
                         );
                     }}
                   />
+                  <DecisionMemo
+                    key={run.id}
+                    run={run}
+                    value={savedMemo}
+                    ready={
+                      library.ready &&
+                      library.items.some((x) => x.id === run.id)
+                    }
+                    disabled={busy || auto}
+                    save={(memo) => library.save(run.id, memo)}
+                    onDirtyChange={onMemoDirty}
+                  />
+                  {["complete", "cancelled"].includes(run.status) &&
+                    run.steps.some((s) => s.status === "succeeded") &&
+                    !running &&
+                    (run.turns?.length ?? 0) < 8 && (
+                      <section
+                        className="council-card council-deepen"
+                        aria-label="继续深挖的方向"
+                      >
+                        <div>
+                          <h3>下一步，不只是再问一次</h3>
+                          <p>
+                            接续最新一轮的完整上下文，只预填问题；由你核对参与者、工具与新增费用后发送。
+                          </p>
+                        </div>
+                        <div>
+                          {COUNCIL_DEEPEN.map((item) => (
+                            <button
+                              key={item.label}
+                              disabled={busy || auto}
+                              onClick={() => {
+                                const textarea = document.getElementById(
+                                  "council-followup-question",
+                                ) as HTMLTextAreaElement | null;
+                                if (
+                                  textarea?.value &&
+                                  !window.confirm("替换尚未发送的追问草稿？")
+                                )
+                                  return;
+                                setFollowupSeed({
+                                  id: crypto.randomUUID(),
+                                  text: item.text,
+                                });
+                                document
+                                  .getElementById("council-followup")
+                                  ?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "start",
+                                  });
+                              }}
+                            >
+                              {item.label} <ChevronRight size={14} />
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    )}
                   <button
                     className="council-transcript-toggle"
                     aria-expanded={transcript}
@@ -1197,6 +1333,7 @@ export default function CouncilPage() {
                   </div>
                   <Followup
                     run={run}
+                    seed={followupSeed}
                     disabled={busy || auto}
                     send={async (spec) => {
                       if (flight.current)

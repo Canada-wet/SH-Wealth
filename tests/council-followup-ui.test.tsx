@@ -130,7 +130,11 @@ it("追问结论速览比较修订而非开场，保留三阶段进度，旧直�
     })),
   );
   render(<Results run={run} round={1} inspect={vi.fn()} />);
-  expect(screen.getAllByText("修订后的结论")).toHaveLength(2);
+  expect(
+    [...document.querySelectorAll(".council-comparison-grid article p")].map(
+      (p) => p.textContent,
+    ),
+  ).toEqual(["修订后的结论", "修订后的结论"]);
   expect(screen.queryByText("开场或质询内容")).toBeNull();
   expect(
     screen.getByLabelText("模型参与进度").querySelectorAll(".council-dot"),

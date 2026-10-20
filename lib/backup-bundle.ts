@@ -9,6 +9,7 @@ export type BackupSectionId =
   | "navigation"
   | "learning"
   | "council"
+  | "councilLibrary"
   | "researchArchive"
   | "researchRuns"
   | "actions";
@@ -89,6 +90,28 @@ export const BACKUP_SECTIONS: readonly BackupDefinition[] = [
     maxRows: 30,
     maxBytes: 1_000_000,
     pageSize: 1,
+  },
+  {
+    id: "councilLibrary",
+    table: "wealth_council_library",
+    visibility: "personal",
+    columns: [
+      "run_id",
+      "user_id",
+      "title",
+      "tags",
+      "pinned",
+      "archived",
+      "note",
+      "review_on",
+      "version",
+      "updated_at",
+    ],
+    filter: "user",
+    order: [{ column: "run_id", ascending: true }],
+    maxRows: 100,
+    maxBytes: 160_000,
+    pageSize: 20,
   },
   {
     id: "researchArchive",
@@ -451,7 +474,7 @@ export async function buildBackupBundle(
         "researchArchive",
         "researchRuns",
       ],
-      personalSections: ["navigation", "learning", "council"],
+      personalSections: ["navigation", "learning", "council", "councilLibrary"],
       mixedSections: ["actions"],
     },
     sections,

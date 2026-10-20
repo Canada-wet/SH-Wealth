@@ -16,10 +16,12 @@ export default function Followup({
   run,
   disabled,
   send,
+  seed,
 }: {
   run: CouncilRun;
   disabled: boolean;
   send: (spec: Record<string, unknown>) => Promise<void>;
+  seed?: { id: string; text: string };
 }) {
   const [question, setQuestion] = useState(""),
     [models, setModels] = useState<string[]>(run.participants),
@@ -50,6 +52,14 @@ export default function Followup({
     !run.steps.some((s) => s.status === "running") &&
     run.steps.some((s) => s.status === "succeeded") &&
     count < COUNCIL_MAX_FOLLOWUPS;
+  useEffect(() => {
+    if (!seed || !canAsk || disabled || busy) return;
+    setQuestion(seed.text);
+    setConsent(false);
+    setError("");
+    draft.current = null;
+    document.getElementById("council-followup-question")?.focus();
+  }, [seed]);
   const calls = councilFollowupPlan(
     models,
     judge || null,
@@ -67,7 +77,11 @@ export default function Followup({
       researchError = (e as Error).message;
     }
   return (
-    <section className="council-card council-followup" aria-label="继续追问">
+    <section
+      id="council-followup"
+      className="council-card council-followup"
+      aria-label="继续追问"
+    >
       <div className="council-section-label">
         <h2>把讨论继续下去</h2>
         <span>
@@ -87,6 +101,7 @@ export default function Followup({
       <label className="council-question">
         继续追问
         <textarea
+          id="council-followup-question"
           value={question}
           disabled={disabled || busy || !canAsk}
           rows={3}

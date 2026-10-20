@@ -224,11 +224,11 @@ export const FEATURES: Feature[] = [
   {
     id: "council",
     title: "多模型研讨",
-    description: "深度研讨、证据核查、工具与可选裁判",
+    description: "深度研讨、历史搜索、私人判断与定期复核",
     href: "/council",
     group: "思考与成长",
     keywords:
-      "debate llm ai qwen glm claude gpt 深度研讨 讨论 辩论 证据 工具 追问 图片 附件",
+      "debate llm ai qwen glm claude gpt 深度研讨 讨论 辩论 证据 工具 追问 图片 附件 研讨历史 知识库 搜索 归档 决策 笔记 标签 复核",
     icon: "messages",
     primary: true,
     related: ["investment-desk", "learn", "framework"],

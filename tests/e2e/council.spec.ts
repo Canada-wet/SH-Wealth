@@ -8,14 +8,80 @@ import {
   councilFollowupPlan,
   type CouncilRun,
 } from "../../lib/council";
+import {
+  EMPTY_COUNCIL_MEMO,
+  type CouncilMemo,
+} from "../../lib/council-library";
 async function councilFixture(
   page: Page,
   { storage = true, interrupt = false, alibaba = false } = {},
 ) {
   let run: CouncilRun | null = null;
   let calls = 0;
+  let memo: CouncilMemo = structuredClone(EMPTY_COUNCIL_MEMO);
   await page.route("**/api/council**", async (route) => {
     const request = route.request();
+    if (new URL(request.url()).pathname === "/api/council/library") {
+      const body = request.postDataJSON();
+      const userId = "00000000-0000-4000-8000-000000000001";
+      if (body.action === "save") {
+        if (body.memo.version !== memo.version)
+          return route.fulfill({
+            status: 409,
+            json: { error: "另一设备已修改整理信息" },
+          });
+        memo = { ...body.memo, version: memo.version + 1 };
+        return route.fulfill({ json: { userId, id: body.id, memo } });
+      }
+      const text = run
+        ? [
+            run.question,
+            ...(run.turns ?? []).map((t) => t.question),
+            ...run.steps.map((s) => s.answer),
+            memo.title,
+            memo.note,
+            ...memo.tags,
+          ]
+            .join("\n")
+            .toLowerCase()
+        : "";
+      const terms = String(body.query || "")
+        .trim()
+        .toLowerCase()
+        .split(/\s+/);
+      const hit =
+        body.query &&
+        run?.steps.find((s) =>
+          terms.some((t) => s.answer.toLowerCase().includes(t)),
+        );
+      return route.fulfill({
+        json: {
+          userId,
+          items: run
+            ? [
+                {
+                  id: run.id,
+                  question: run.question,
+                  status: run.status,
+                  createdAt: run.created_at,
+                  activityAt: run.created_at,
+                  rounds: run.turns?.length ?? 0,
+                  models: run.models.map((m) => m.name),
+                  excerpt:
+                    run.steps
+                      .find((s) => s.stage === "revision")
+                      ?.answer.slice(0, 400) || "",
+                  matchExcerpt: hit ? hit.answer.slice(-300) : "",
+                  matchRound: hit ? (hit.round ?? 0) : null,
+                  matchSeq: hit ? hit.seq : null,
+                  matched: terms.every((t) => text.includes(t)),
+                  memo,
+                },
+              ]
+            : [],
+        },
+      });
+    }
     if (request.method() === "GET") {
       if (new URL(request.url()).searchParams.get("id"))
         return route.fulfill({ json: { run } });
@@ -192,9 +258,135 @@ async function councilFixture(
     }
     return route.fulfill({ json: { run } });
   });
-  return { calls: () => calls, run: () => run };
+  return {
+    calls: () => calls,
+    run: () => run,
+    seed: (value: CouncilRun) => {
+      run = value;
+    },
+    memo: () => memo,
+  };
 }
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("研讨库正文搜索、私密笔记、置顶、归档恢复、刷新与深挖草稿闭环", async ({
+  page,
+}, info) => {
+  test.skip(
+    process.env.E2E_USE_MOCK_AUTH !== "1",
+    "只使用隔离身份，不写真实研讨",
+  );
+  await authenticate(page);
+  const fixture = await councilFixture(page);
+  const keys = ["openai-light", "deepseek-light"],
+    id = "c3000000-0000-4000-8000-000000000001";
+  fixture.seed({
+    id,
+    question: "合成研讨：比较职业路径与机会成本",
+    status: "complete",
+    created_at: "2026-10-19T16:00:00Z",
+    participants: keys,
+    judge: null,
+    models: COUNCIL_MODELS.filter((m) => keys.includes(m.key)),
+    steps: councilPlan(keys, null).map((s, i) => ({
+      ...s,
+      status: "succeeded",
+      answer:
+        s.stage === "revision"
+          ? `${"这是合成证据背景。".repeat(70)}独特检索词：北极星访谈计划`
+          : `阶段观点 ${i}`,
+      error: "",
+      usage: { input: 1, output: 1 },
+      started_at: null,
+      finished_at: "2026-10-19T16:00:00Z",
+    })),
+  });
+  await page.goto("/council");
+  const rail = page.getByRole("complementary", { name: "我的研讨历史" });
+  const showLibrary = async () => {
+    const button = rail.getByRole("button", { name: "查看历史" });
+    if (await button.isVisible()) await button.click();
+  };
+  await showLibrary();
+  await rail.getByLabel("搜索研讨历史").fill("北极星 访谈");
+  const card = rail.getByRole("button", { name: /合成研讨：比较职业路径/ });
+  await expect(card).toBeEnabled();
+  await expect(card).toContainText("命中原始研讨正文");
+  await card.click();
+  await expect(page.locator("#council-step-4")).toBeVisible();
+  expect(fixture.calls()).toBe(0);
+  const memo = page.getByRole("region", { name: "私人决策笔记" });
+  await expect(memo.getByRole("button", { name: "整理与笔记" })).toBeEnabled();
+  await memo.getByRole("button", { name: "整理与笔记" }).click();
+  await memo.getByLabel("自定义标题").fill("职业选择的验证路线");
+  await memo.getByLabel("标签", { exact: true }).fill("职业，验证");
+  await memo
+    .getByLabel("我的判断与待验证假设", { exact: true })
+    .fill("我先做三次访谈，再评估假设。");
+  await memo.getByLabel("下次复核日期", { exact: true }).fill("2026-01-01");
+  await memo.getByRole("button", { name: "保存私人笔记" }).click();
+  await expect(memo.getByText(/已私密保存/)).toBeVisible();
+  await memo.getByRole("button", { name: "置顶这场研讨" }).click();
+  await expect(memo.getByRole("button", { name: "取消置顶" })).toBeEnabled();
+  await page.reload();
+  await expect(memo.getByText("我先做三次访谈，再评估假设。")).toBeVisible();
+  await showLibrary();
+  await rail
+    .getByRole("navigation", { name: "研讨库分类" })
+    .getByRole("button", { name: /待复核/ })
+    .click();
+  await expect(
+    rail.getByRole("button", { name: /职业选择的验证路线/ }),
+  ).toBeVisible();
+  await memo.getByRole("button", { name: "归档研讨", exact: true }).click();
+  await expect(
+    rail.getByRole("button", { name: /职业选择的验证路线/ }),
+  ).toHaveCount(0);
+  await rail
+    .getByRole("navigation", { name: "研讨库分类" })
+    .getByRole("button", { name: /已归档/ })
+    .click();
+  await expect(
+    rail.getByRole("button", { name: /职业选择的验证路线/ }),
+  ).toBeVisible();
+  await memo.getByRole("button", { name: "恢复到全部研讨" }).click();
+  await rail
+    .getByRole("navigation", { name: "研讨库分类" })
+    .getByRole("button", { name: /全部/ })
+    .click();
+  await expect(
+    rail.getByRole("button", { name: /职业选择的验证路线/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "检验关键假设", exact: true }).click();
+  const followup = page.getByRole("region", { name: "继续追问" });
+  await expect(followup.getByRole("textbox")).toHaveValue(/最关键的三个假设/);
+  await expect(
+    followup.getByRole("checkbox", { name: /确认将本场资料/ }),
+  ).not.toBeChecked();
+  expect(fixture.calls()).toBe(0);
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+  }
+  await page.setViewportSize({
+    width: info.project.name === "desktop" ? 1440 : 390,
+    height: 1000,
+  });
+  await page.screenshot({
+    path: `/tmp/together-council-library-${info.project.name}.png`,
+    fullPage: true,
+  });
+  const collapse=rail.getByRole("button",{name:"收起历史"});
+  if(await collapse.isVisible())await collapse.click();
+  await page.evaluate(()=>window.scrollTo({top:0,behavior:"instant"}));
+  await page.screenshot({path:`/tmp/together-council-library-viewport-${info.project.name}.png`,fullPage:false});
+  expect(fixture.memo().tags).toEqual(["职业", "验证"]);
+});
 test("深入研讨默认五阶段，公开检索需另确认，回执、答辩、追问与导出联动", async ({
   page,
 }, info) => {

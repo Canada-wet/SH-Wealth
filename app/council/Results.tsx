@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+import { Copy, Check } from "lucide-react";
 import { STAGES, type CouncilRun, type CouncilStage } from "@/lib/council";
 import {
   councilRound,
@@ -12,12 +14,16 @@ export default function Results({
   round,
   inspect,
   activeSeq,
+  viewRound,
 }: {
   run: CouncilRun;
   round: number;
   inspect: (stage: CouncilStage, seq?: number) => void;
   activeSeq?: number;
+  viewRound?: (round: number) => void;
 }) {
+  const [copied, setCopied] = useState(false),
+    [copyError, setCopyError] = useState("");
   const current = councilRound(run, round);
   const finals = current.steps.filter((s) => s.stage === current.finalStage);
   const judge = current.steps.find(
@@ -33,8 +39,34 @@ export default function Results({
     <section className="council-card council-results" aria-label="研讨结论速览">
       <div className="council-section-label">
         <h2>先看结论，再看依据</h2>
-        <span>{round ? `追问 ${round}` : "初始研讨"}</span>
+        <button
+          disabled={!successes.length && !judgeReliable}
+          onClick={async () => {
+            setCopyError("");
+            try {
+              const text = judgeReliable
+                ? judge.answer
+                : successes
+                    .map(
+                      (s) =>
+                        `${run.models.find((m) => m.key === s.model_key)?.name}\n${s.answer}`,
+                    )
+                    .join("\n\n---\n\n");
+              await navigator.clipboard.writeText(
+                `${current.question}\n\n${text}\n\nAI研讨原文，未经独立核验。`,
+              );
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch {
+              setCopyError("无法复制，请使用导出或手动选择原文。");
+            }
+          }}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />}{" "}
+          {copied ? "已复制" : "复制本轮结论"}
+        </button>
       </div>
+      {copyError && <p role="status">{copyError}</p>}
       <div className="council-result-metrics">
         <div>
           <strong>
@@ -97,9 +129,10 @@ export default function Results({
             裁判的归纳 ·{" "}
             {run.models.find((m) => m.key === judge.model_key)?.name}
           </h3>
-          {judge.usage?.interrupted && (
+          {(judge.usage?.interrupted || judge.usage?.truncated) && (
             <p className="council-alert">
-              连接中断，仅有部分内容，不作为完整汇总。
+              {judge.usage?.interrupted ? "连接中断" : "达到输出上限"}
+              ，仅有部分内容，不作为完整汇总。
             </p>
           )}
           <div className="council-synthesis-grid">
@@ -146,6 +179,54 @@ export default function Results({
           </article>
         ))}
       </div>
+      {round > 0 && (
+        <details className="council-round-comparison">
+          <summary>对照上一轮：哪些结论值得重新检查？</summary>
+          <p className="council-muted">
+            并列原文摘录，不自动判定观点是否改变；部分或失败回应不当作完整结论。
+          </p>
+          {current.participants.map((key) => {
+            const prior = councilRound(run, round - 1);
+            const previous = prior.steps.find(
+              (s) =>
+                s.model_key === key &&
+                s.stage === prior.finalStage &&
+                s.status === "succeeded" &&
+                !s.usage?.interrupted &&
+                !s.usage?.truncated,
+            );
+            const next = successes.find((s) => s.model_key === key);
+            return (
+              <article key={key}>
+                <h4>{run.models.find((m) => m.key === key)?.name}</h4>
+                <div>
+                  <section>
+                    <small>上一轮原文</small>
+                    <p>
+                      {previous
+                        ? councilExcerpt(previous.answer, 260)
+                        : "上一轮没有该模型的完整最终观点。"}
+                    </p>
+                  </section>
+                  <section>
+                    <small>本轮原文</small>
+                    <p>
+                      {next
+                        ? councilExcerpt(next.answer, 260)
+                        : "本轮尚无完整最终观点。"}
+                    </p>
+                  </section>
+                </div>
+              </article>
+            );
+          })}
+          {viewRound && (
+            <button onClick={() => viewRound(round - 1)}>
+              回看{round === 1 ? "原始研讨" : `追问 ${round - 1}`}结论
+            </button>
+          )}
+        </details>
+      )}
     </section>
   );
 }
