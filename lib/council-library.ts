@@ -44,6 +44,9 @@ const safeText = (v: unknown, max: number): v is string =>
   typeof v === "string" &&
   v.length <= max &&
   !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v);
+// PostgreSQL left(text,400) counts Unicode code points, not UTF-16 units.
+const safeExcerpt = (v: unknown) =>
+  safeText(v, 800) && Array.from(v).length <= 400;
 export function councilSearch(value: unknown) {
   if (!safeText(value, 120)) throw Error("搜索最多 120 字。");
   const query = value.trim().replace(/\s+/g, " ");
@@ -117,8 +120,8 @@ export function validCouncilLibraryItems(
           Array.isArray(x.models) &&
           x.models.length <= 7 &&
           x.models.every((m: unknown) => safeText(m, 120)) &&
-          safeText(x.excerpt, 400) &&
-          safeText(x.matchExcerpt, 400) &&
+          safeExcerpt(x.excerpt) &&
+          safeExcerpt(x.matchExcerpt) &&
           typeof x.matched === "boolean" &&
           (x.matchRound === null ||
             (Number.isInteger(x.matchRound) &&

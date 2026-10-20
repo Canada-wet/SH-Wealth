@@ -41,6 +41,17 @@ it("空白、零版本和闰日有效，深拷贝标签并用固定顺序核验A
 });
 it("列表格式拒绝坏类型、重复id、隐藏异常状态和过多记录", () => {
   expect(validCouncilLibraryItems([libraryItem()])).toBe(true);
+  expect(
+    validCouncilLibraryItems([
+      libraryItem({
+        excerpt: "😀".repeat(400),
+        matchExcerpt: "🎯".repeat(330),
+      }),
+    ]),
+  ).toBe(true);
+  expect(
+    validCouncilLibraryItems([libraryItem({ excerpt: "😀".repeat(401) })]),
+  ).toBe(false);
   for (const rows of [
     [libraryItem(), libraryItem()],
     [libraryItem({ status: "toString" as never })],
