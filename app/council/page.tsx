@@ -20,15 +20,14 @@ import {
   COUNCIL_MODELS,
   CATALOG_DATE,
   PROVIDER_NAMES,
-  STAGES,
   councilExport,
   councilConnectionNote,
   councilSpeaker,
   councilPlan,
+  councilStageTitle,
   COUNCIL_STALE_MS,
   type CouncilAvailability,
   type CouncilRun,
-  type CouncilStage,
   type CouncilProvider,
 } from "@/lib/council";
 import "./council.css";
@@ -36,6 +35,15 @@ import Attachments, { AttachmentList } from "./Attachments";
 import Followup from "./Followup";
 import Results from "./Results";
 import ResearchSettings from "./ResearchSettings";
+import WorkflowEditor from "./WorkflowEditor";
+import {
+  validateCouncilWorkflow,
+  syncCouncilWorkflow,
+  councilWorkflowFor,
+  councilPhaseKey,
+  councilWorkflowSearches,
+  type CouncilWorkflow,
+} from "@/lib/council-workflow";
 import ToolReceipts from "./ToolReceipts";
 import Library from "./Library";
 import DecisionMemo from "./DecisionMemo";
@@ -48,6 +56,7 @@ import {
 import {
   DEEP_RESEARCH,
   validateCouncilResearch,
+  councilResearchFor,
   type CouncilResearch,
 } from "@/lib/council-research";
 import { councilRound, councilExcerpt } from "@/lib/council-results";
@@ -114,12 +123,15 @@ function CouncilWorkspace({
     !memoDirty.current ||
     window.confirm("尚有未保存的私人笔记，放弃草稿并切换研讨？");
   const [research, setResearch] = useState<CouncilResearch>(DEEP_RESEARCH);
+  const [workflow, setWorkflow] = useState<CouncilWorkflow>();
   let researchError = "";
   try {
     validateCouncilResearch(research);
   } catch (e) {
     researchError = (e as Error).message;
   }
+  let workflowError = "";
+  // Validation runs again in the API and database; this is only immediate feedback.
   const [checking, setChecking] = useState(false);
   const [attachments, setAttachments] = useState<CouncilAttachment[]>([]);
   const [processingFiles, setProcessingFiles] = useState(false);
@@ -140,9 +152,14 @@ function CouncilWorkspace({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [stage, setStage] = useState<CouncilStage>("opening"),
+    [stage, setStage] = useState<string>("opening"),
     [auto, setAuto] = useState(false),
     [now, setNow] = useState(Date.now());
+  try {
+    validateCouncilWorkflow(workflow, participants, judge || null);
+  } catch (e) {
+    workflowError = (e as Error).message;
+  }
   const current = useRef<CouncilRun | null>(null),
     flight = useRef(false),
     enabled = useRef(false),
@@ -225,8 +242,8 @@ function CouncilWorkspace({
               x.run.status === "complete"
                 ? councilRound(x.run, x.run.turns?.length || 0).judge
                   ? "judge"
-                  : councilRound(x.run, x.run.turns?.length || 0).finalStage
-                : councilRound(x.run, x.run.turns?.length || 0).firstStage,
+                  : councilRound(x.run, x.run.turns?.length || 0).finalPhase
+                : councilRound(x.run, x.run.turns?.length || 0).firstPhase,
             );
           }
         } catch (e) {
@@ -286,7 +303,7 @@ function CouncilWorkspace({
             setStage(
               councilRound(d.run, lastRound).judge
                 ? "judge"
-                : councilRound(d.run, lastRound).finalStage,
+                : councilRound(d.run, lastRound).finalPhase,
             );
           }
         }
@@ -323,8 +340,8 @@ function CouncilWorkspace({
         d.run.status === "complete"
           ? councilRound(d.run, lastRound).judge
             ? "judge"
-            : councilRound(d.run, lastRound).finalStage
-          : councilRound(d.run, lastRound).firstStage,
+            : councilRound(d.run, lastRound).finalPhase
+          : councilRound(d.run, lastRound).firstPhase,
       );
       if (match?.matchRound !== null && match?.matchRound !== undefined) {
         const target = d.run.steps.find(
@@ -333,7 +350,7 @@ function CouncilWorkspace({
         if (target) {
           setRound(match.matchRound);
           setTranscript(true);
-          setStage(target.stage);
+          setStage(councilPhaseKey(target));
           setNotice(
             "已定位包含搜索关键词的原始发言；搜索不会发起新的模型调用。",
           );
@@ -369,6 +386,7 @@ function CouncilWorkspace({
     const signature = JSON.stringify({
       question,
       research,
+      workflow,
       participants,
       judge,
       attachments,
@@ -386,13 +404,14 @@ function CouncilWorkspace({
         consent,
         attachments,
         research,
+        ...(workflow ? { workflow } : {}),
         expectedConnections,
       });
       accept(d.run);
       setRound(0);
       setTranscript(true);
       setCompose(false);
-      setStage("opening");
+      setStage(councilRound(d.run, 0).firstPhase);
       enabled.current = true;
       setAuto(true);
       window.history.replaceState(null, "", `/council?run=${d.run.id}`);
@@ -456,6 +475,11 @@ function CouncilWorkspace({
   const running = run?.steps.find((s) => s.status === "running");
   const liveStep = run?.steps.find((s) => s.seq === progress?.seq);
   const currentRound = run ? councilRound(run, round) : null;
+  const phaseSteps =
+    currentRound?.steps.filter(
+      (s, i, all) =>
+        all.findIndex((p) => councilPhaseKey(p) === councilPhaseKey(s)) === i,
+    ) ?? [];
   const finals =
     currentRound?.steps.filter(
       (s) =>
@@ -466,7 +490,7 @@ function CouncilWorkspace({
     ) ?? [];
   const failed = run?.steps.filter((s) => s.status === "failed").length ?? 0;
   const newQuestion = () => {
-    if (!leaveMemo()) return;
+    if (!leaveMemo()) return false;
     openSequence.current++;
     stopAuto();
     setCompose(true);
@@ -476,6 +500,7 @@ function CouncilWorkspace({
     setConsent(false);
     setError("");
     window.history.replaceState(null, "", "/council");
+    return true;
   };
   const incompatibleImages =
     attachments.some((a) => a.kind === "image") &&
@@ -588,6 +613,7 @@ function CouncilWorkspace({
                 />
                 <ResearchSettings
                   value={research}
+                  customFlow={!!workflow}
                   disabled={busy || processingFiles}
                   change={(r) => {
                     setResearch(r);
@@ -654,11 +680,17 @@ function CouncilWorkspace({
                                   }
                                   onChange={() => {
                                     setConsent(false);
-                                    setParticipants((list) =>
-                                      list.includes(m.key)
-                                        ? list.filter((k) => k !== m.key)
-                                        : [...list, m.key],
+                                    const next = participants.includes(m.key)
+                                      ? participants.filter((k) => k !== m.key)
+                                      : [...participants, m.key];
+                                    setWorkflow(
+                                      syncCouncilWorkflow(
+                                        workflow,
+                                        participants,
+                                        next,
+                                      ),
                                     );
+                                    setParticipants(next);
                                   }}
                                 />
                                 <span>
@@ -736,37 +768,34 @@ function CouncilWorkspace({
                     </select>
                   </label>
                 </div>
-                <div className="council-plan">
-                  <span>1 独立观点</span>
-                  <ChevronRight size={15} />
-                  <span>2 交叉质询</span>
-                  <ChevronRight size={15} />
-                  {research.depth === "deep" && (
-                    <>
-                      <span>3 证据核查</span>
-                      <ChevronRight size={15} />
-                      <span>4 逐项答辩</span>
-                      <ChevronRight size={15} />
-                    </>
-                  )}
-                  <span>{research.depth === "deep" ? 5 : 3} 修订结论</span>
-                  {judge && (
-                    <>
-                      <ChevronRight size={15} />
-                      <span>{research.depth === "deep" ? 6 : 4} 裁判汇总</span>
-                    </>
-                  )}
-                </div>
+                <WorkflowEditor
+                  value={workflow}
+                  models={COUNCIL_MODELS}
+                  participants={participants}
+                  judge={judge || null}
+                  depth={research.depth}
+                  tools={research.tools}
+                  disabled={busy || processingFiles}
+                  change={(w) => {
+                    setWorkflow(w);
+                    setConsent(false);
+                  }}
+                />
                 <p className="council-muted">
                   本场最多{" "}
-                  {
-                    councilPlan(participants, judge || null, research.depth)
-                      .length
-                  }{" "}
+                  {workflow
+                    ? workflow.stages.reduce(
+                        (n, p) => n + p.participants.length,
+                        judge ? 1 : 0,
+                      )
+                    : councilPlan(participants, judge || null, research.depth)
+                        .length}{" "}
                   次付费调用；另最多{" "}
                   {research.tools && research.webConsent
-                    ? Math.min(
-                        participants.length,
+                    ? councilWorkflowSearches(
+                        workflow,
+                        participants,
+                        research.depth,
                         research.publicQueries.length,
                       )
                     : 0}{" "}
@@ -797,7 +826,8 @@ function CouncilWorkspace({
                     participants.length < 2 ||
                     question.trim().length < 5 ||
                     !consent ||
-                    !!researchError
+                    !!researchError ||
+                    !!workflowError
                   }
                   onClick={() => void start()}
                 >
@@ -938,7 +968,7 @@ function CouncilWorkspace({
                               setRound(value);
                               const target = councilRound(run, value);
                               setStage(
-                                target.judge ? "judge" : target.finalStage,
+                                target.judge ? "judge" : target.finalPhase,
                               );
                             }}
                           >
@@ -974,6 +1004,28 @@ function CouncilWorkspace({
                         <h3>本场材料 · 已随历史私密保存</h3>
                         <AttachmentList items={run.attachments} />
                       </div>
+                    )}
+                    {councilWorkflowFor(run, round) && (
+                      <details className="council-frozen-flow">
+                        <summary>本轮自定义流程 · 已冻结保存</summary>
+                        <ol>
+                          {councilWorkflowFor(run, round)!.stages.map((p) => (
+                            <li key={p.id}>
+                              <strong>{p.title}</strong>
+                              <small>
+                                {p.participants
+                                  .map(
+                                    (k) =>
+                                      run.models.find((m) => m.key === k)
+                                        ?.name ?? k,
+                                  )
+                                  .join("、")}
+                              </small>
+                              <p>{p.instructions || "沿用环节默认任务"}</p>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
                     )}
                     <progress
                       value={completed}
@@ -1030,6 +1082,43 @@ function CouncilWorkspace({
                       >
                         <RefreshCw size={16} /> 重新读取
                       </button>
+                      {councilWorkflowFor(run, round) &&
+                        ["complete", "cancelled"].includes(run.status) && (
+                          <button
+                            disabled={busy || auto}
+                            onClick={() => {
+                              const target = councilRound(run, round);
+                              if (
+                                [
+                                  ...target.participants,
+                                  ...(target.judge ? [target.judge] : []),
+                                ].some((k) => !available(k))
+                              ) {
+                                setNotice(
+                                  "该流程有目前未配置的型号，请在新问题中重新选择；未启动任何调用。",
+                                );
+                                return;
+                              }
+                              if (!newQuestion()) return;
+                              setParticipants([...target.participants]);
+                              setJudge(target.judge || "");
+                              setWorkflow(
+                                structuredClone(
+                                  councilWorkflowFor(run, round)!,
+                                ),
+                              );
+                              setResearch({
+                                ...councilResearchFor(run, round),
+                                webConsent: false,
+                              });
+                              setNotice(
+                                "已复制本轮流程和模型设置，不复制旧问题、发言或附件；检索与调用费用需重新确认。",
+                              );
+                            }}
+                          >
+                            复用本轮流程
+                          </button>
+                        )}
                       <button
                         onClick={() => {
                           const url = URL.createObjectURL(
@@ -1062,7 +1151,7 @@ function CouncilWorkspace({
                       <p role="status" className="council-live">
                         <LoaderCircle size={16} className="council-spin" />{" "}
                         {progress?.seq !== undefined
-                          ? `${run.models.find((m) => m.key === liveStep?.model_key)?.name || "模型"} · ${liveStep ? STAGES[liveStep.stage] : "准备中"} · `
+                          ? `${run.models.find((m) => m.key === liveStep?.model_key)?.name || "模型"} · ${liveStep ? councilStageTitle(run, liveStep) : "准备中"} · `
                           : ""}
                         {progress?.phase === "thinking"
                           ? "模型正在推理"
@@ -1112,9 +1201,11 @@ function CouncilWorkspace({
                     {run.status === "complete" && (
                       <p className="council-notice">
                         {finals.length <
-                        (currentRound?.mode === "debate" ? 2 : 1)
+                        (currentRound?.mode === "debate"
+                          ? Math.min(2, currentRound.finalParticipants.length)
+                          : 1)
                           ? currentRound?.mode === "debate"
-                            ? "有效的最终观点不足两份，本轮不是完整研讨。请查看失败步骤。"
+                            ? "本轮预设的最终观点未完整返回，请查看失败步骤；不将缺席当作共识。"
                             : "本轮没有完整回应，请查看失败或中断步骤。"
                           : failed
                             ? "研讨已结束，但有缺席或失败步骤；结论仅基于成功返回的内容。"
@@ -1129,11 +1220,17 @@ function CouncilWorkspace({
                     viewRound={(value) => {
                       setRound(value);
                       setTranscript(false);
-                      setStage(councilRound(run, value).finalStage);
+                      setStage(councilRound(run, value).finalPhase);
                     }}
                     inspect={(target, seq) => {
                       setTranscript(true);
-                      setStage(target);
+                      setStage(
+                        seq === undefined
+                          ? target
+                          : councilPhaseKey(
+                              run.steps.find((s) => s.seq === seq)!,
+                            ),
+                      );
                       if (seq !== undefined)
                         setTimeout(
                           () =>
@@ -1211,41 +1308,43 @@ function CouncilWorkspace({
                   </button>
                   <div hidden={!transcript}>
                     <nav className="council-stage-nav" aria-label="研讨阶段">
-                      {(Object.keys(STAGES) as CouncilStage[])
-                        .filter((s) =>
-                          currentRound?.steps.some((x) => x.stage === s),
-                        )
-                        .map((s) => (
+                      {phaseSteps.map((phase) => {
+                        const s = councilPhaseKey(phase);
+                        return (
                           <button
                             key={s}
                             aria-current={stage === s ? "step" : undefined}
                             onClick={() => setStage(s)}
                           >
-                            <span>{STAGES[s]}</span>
+                            <span>{councilStageTitle(run, phase)}</span>
                             <small>
                               {
                                 currentRound!.steps.filter(
                                   (x) =>
-                                    x.stage === s && x.status === "succeeded",
+                                    councilPhaseKey(x) === s &&
+                                    x.status === "succeeded",
                                 ).length
                               }
                               /
                               {
-                                currentRound!.steps.filter((x) => x.stage === s)
-                                  .length
+                                currentRound!.steps.filter(
+                                  (x) => councilPhaseKey(x) === s,
+                                ).length
                               }
                             </small>
                           </button>
-                        ))}
+                        );
+                      })}
                     </nav>
-                    {stage === "revision" && !currentRound?.judge && (
-                      <div className="council-no-judge">
-                        未设置裁判：以下并列展示各模型最终结论，不生成虚假的“统一答案”。
-                      </div>
-                    )}
+                    {stage === currentRound?.finalPhase &&
+                      !currentRound?.judge && (
+                        <div className="council-no-judge">
+                          未设置裁判：以下并列展示各模型最终结论，不生成虚假的“统一答案”。
+                        </div>
+                      )}
                     <div className="council-responses">
                       {currentRound!.steps
-                        .filter((s) => s.stage === stage)
+                        .filter((s) => councilPhaseKey(s) === stage)
                         .map((s) => (
                           <article
                             className="council-card council-answer"
@@ -1258,7 +1357,7 @@ function CouncilWorkspace({
                                   {s.stage === "judge"
                                     ? "独立裁判"
                                     : councilSpeaker(run, s.model_key)}{" "}
-                                  · {STAGES[s.stage]}
+                                  · {councilStageTitle(run, s)}
                                 </small>
                                 <h3>
                                   {
@@ -1347,7 +1446,7 @@ function CouncilWorkspace({
                         accept(d.run);
                         const lastRound = d.run.turns?.length || 0;
                         setRound(lastRound);
-                        setStage(councilRound(d.run, lastRound).firstStage);
+                        setStage(councilRound(d.run, lastRound).firstPhase);
                         setTranscript(true);
                         enabled.current = true;
                         setAuto(true);

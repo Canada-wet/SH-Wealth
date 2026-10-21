@@ -37,6 +37,7 @@ import {
 } from "../lib/council";
 import { councilModelSnapshot } from "../lib/council-provider";
 import { CouncilProviderError } from "../lib/council-provider";
+import { defaultCouncilWorkflow } from "../lib/council-workflow";
 const id = "00000000-0000-4000-8000-000000000003";
 let doc: CouncilRun;
 beforeEach(() => {
@@ -84,6 +85,8 @@ beforeEach(() => {
     ],
   });
   mock.rpc.mockImplementation(async (_name, args) => {
+    if (_name === "wealth_council_workflow_version")
+      return { data: 1, error: null };
     if (args.action === "tool-start" && doc.status === "active") {
       const step = doc.steps[args.payload.seq];
       const existing = doc.steps
@@ -131,6 +134,62 @@ beforeEach(() => {
     }
     return { data: structuredClone(doc), error: null };
   });
+});
+it("自定义创建先核对数据库能力，保存规范化执行计划；旧数据库不启动付费调用", async () => {
+  const workflow = defaultCouncilWorkflow(doc.participants, "standard");
+  await createCouncil("owner", {
+    id,
+    question: doc.question,
+    participants: doc.participants,
+    judge: doc.judge,
+    workflow,
+  });
+  expect(mock.rpc.mock.calls[0][0]).toBe("wealth_council_workflow_version");
+  expect(mock.rpc.mock.calls[1][1].payload.steps).toHaveLength(7);
+  expect(mock.rpc.mock.calls[1][1].payload.steps[2].phase_id).toBe("critique");
+  expect(mock.call).not.toHaveBeenCalled();
+  mock.rpc.mockResolvedValueOnce({
+    data: null,
+    error: { message: "missing function" },
+  });
+  await expect(
+    createCouncil("owner", {
+      id,
+      question: doc.question,
+      participants: doc.participants,
+      judge: null,
+      workflow,
+    }),
+  ).rejects.toThrow("council-workflows.sql");
+  expect(mock.rpc).toHaveBeenCalledTimes(3);
+});
+it("自定义流程可没有质询；足够开场后允许继续，计划不匹配则阻止付费", async () => {
+  const w = defaultCouncilWorkflow(doc.participants, "standard");
+  w.stages.splice(1, 1);
+  doc.workflow = w;
+  doc.research = {
+    depth: "deep",
+    tools: false,
+    publicQueries: [],
+    webConsent: false,
+  };
+  doc.judge = null;
+  doc.steps = councilPlan(doc.participants, null, "deep", w).map((s) => ({
+    ...s,
+    status: s.stage === "opening" ? "succeeded" : "pending",
+    answer: s.stage === "opening" ? "Visible opening" : "",
+    error: "",
+    usage: { input: null, output: null },
+    started_at: null,
+    finished_at: null,
+  }));
+  await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(1);
+  expect(doc.steps[2].status).toBe("succeeded");
+  doc.steps[3].phase_id = "injected";
+  await advanceCouncil("owner", id);
+  expect(mock.call).toHaveBeenCalledTimes(1);
+  expect(doc.steps[3].error).toContain("不一致");
 });
 function researchFixture() {
   doc.research = {

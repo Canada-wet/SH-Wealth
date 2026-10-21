@@ -146,6 +146,7 @@ async function councilFixture(
         question: body.question,
         attachments: body.attachments,
         research: body.research,
+        workflow: body.workflow,
         participants: body.participants,
         judge: body.judge,
         status: "active",
@@ -167,6 +168,7 @@ async function councilFixture(
           body.participants,
           body.judge,
           body.research?.depth,
+          body.workflow,
         ).map((s) => ({
           ...s,
           status: "pending",
@@ -187,6 +189,7 @@ async function councilFixture(
           judge: body.judge,
           mode: body.mode || "direct",
           research: body.research,
+          workflow: body.workflow,
           created_at: new Date().toISOString(),
         },
       ];
@@ -198,6 +201,7 @@ async function councilFixture(
         round,
         run.steps.length,
         body.research?.depth,
+        body.workflow,
       ))
         run.steps.push({
           ...step,
@@ -268,6 +272,129 @@ async function councilFixture(
   };
 }
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
+test("自定义环节增删排序、专职模型、重复质询、历史重读与自定义追问闭环", async ({
+  page,
+}, info) => {
+  test.setTimeout(60000);
+  await authenticate(page);
+  const fixture = await councilFixture(page);
+  await page.goto("/council");
+  const composer = page.locator(".council-composer");
+  await composer
+    .getByLabel("问题与已知条件")
+    .fill("合成问题：如何用小规模试验比较方案与停止条件？");
+  await composer
+    .getByLabel("研讨深度", { exact: true })
+    .selectOption("standard");
+  await composer.getByLabel("流程方式", { exact: true }).selectOption("custom");
+  await composer.getByRole("button", { name: /添加环节/ }).click();
+  const cards = composer.locator(".council-flow-stage");
+  await cards
+    .nth(2)
+    .getByLabel("环节名称", { exact: true })
+    .fill("极端情景测试");
+  await cards
+    .nth(2)
+    .getByRole("textbox", { name: /环节任务/ })
+    .fill("比较三种情景的成本、可逆性与停止条件，用表格呈现。");
+  await cards
+    .nth(2)
+    .getByRole("checkbox", { name: /GPT-6 Luna/ })
+    .uncheck();
+  await composer.getByRole("button", { name: "上移环节 3" }).click();
+  await expect(
+    cards.nth(1).getByLabel("环节名称", { exact: true }),
+  ).toHaveValue("极端情景测试");
+  await composer.getByRole("button", { name: /添加环节/ }).click();
+  await cards
+    .nth(3)
+    .getByRole("combobox", { name: "环节 4 类型" })
+    .selectOption("critique");
+  await cards.nth(3).getByLabel("环节名称", { exact: true }).fill("第二轮质询");
+  await composer.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await cards
+    .nth(3)
+    .getByRole("textbox", { name: /环节任务/ })
+    .fill("只质询前一环节仍未解决的关键假设");
+  await expect(
+    composer.getByRole("checkbox", { name: /我同意把问题/ }),
+  ).not.toBeChecked();
+  await expect(composer).toContainText("9 次付费调用");
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+  }
+  await page.setViewportSize({
+    width: info.project.name === "desktop" ? 1440 : 390,
+    height: 1000,
+  });
+  await composer
+    .locator(".council-flow-editor")
+    .screenshot({ path: `/tmp/together-custom-flow-${info.project.name}.png` });
+  await composer.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await composer.getByRole("button", { name: "开始研讨", exact: true }).click();
+  await expect(page.locator(".council-session")).toContainText("9/9 步已归档", {
+    timeout: 18000,
+  });
+  expect(fixture.calls()).toBe(9);
+  expect(fixture.run()?.workflow?.stages.map((p) => p.title)).toEqual([
+    "独立观点",
+    "极端情景测试",
+    "交叉质询",
+    "第二轮质询",
+    "最终结论",
+  ]);
+  await page.reload();
+  await expect(page.locator(".council-session")).toContainText(
+    "自定义流程 · 已冻结保存",
+  );
+  expect(fixture.calls()).toBe(9);
+  await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "研讨阶段" })
+    .getByRole("button", { name: /第二轮质询/ })
+    .click();
+  await expect(page.locator(".council-answer")).toHaveCount(2);
+  await expect(page.locator(".council-answer").first()).toContainText(
+    "第二轮质询",
+  );
+  const form = page.getByRole("region", { name: "继续追问", exact: true });
+  await expect(form.getByLabel("流程方式", { exact: true })).toHaveValue(
+    "custom",
+  );
+  await form.getByRole("button", { name: "删除环节 4" }).click();
+  await form
+    .getByRole("textbox", { name: "继续追问", exact: true })
+    .fill("请按新条件重新检验情景，但不要重跑旧轮。");
+  await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();
+  await form.getByRole("button", { name: "发送追问", exact: true }).click();
+  await expect(page.locator(".council-session")).toContainText(
+    "16/16 步已归档",
+    { timeout: 15000 },
+  );
+  expect(fixture.calls()).toBe(16);
+  expect(fixture.run()?.turns?.[0].workflow?.stages).toHaveLength(4);
+  expect(fixture.run()?.workflow?.stages).toHaveLength(5);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出", exact: true }).click();
+  expect(await readFile((await (await download).path())!, "utf8")).toContain(
+    "比较三种情景的成本、可逆性与停止条件",
+  );
+  await page.getByRole("button", { name: "复用本轮流程", exact: true }).click();
+  await expect(composer.getByLabel("问题与已知条件")).toHaveValue("");
+  await expect(composer.getByLabel("流程方式", { exact: true })).toHaveValue(
+    "custom",
+  );
+  await expect(composer.locator(".council-flow-stage")).toHaveCount(4);
+  await expect(
+    composer.getByRole("checkbox", { name: /我同意把问题/ }),
+  ).not.toBeChecked();
+  expect(fixture.calls()).toBe(16);
+});
 test("研讨库正文搜索、私密笔记、置顶、归档恢复、刷新与深挖草稿闭环", async ({
   page,
 }, info) => {
@@ -381,10 +508,13 @@ test("研讨库正文搜索、私密笔记、置顶、归档恢复、刷新与�
     path: `/tmp/together-council-library-${info.project.name}.png`,
     fullPage: true,
   });
-  const collapse=rail.getByRole("button",{name:"收起历史"});
-  if(await collapse.isVisible())await collapse.click();
-  await page.evaluate(()=>window.scrollTo({top:0,behavior:"instant"}));
-  await page.screenshot({path:`/tmp/together-council-library-viewport-${info.project.name}.png`,fullPage:false});
+  const collapse = rail.getByRole("button", { name: "收起历史" });
+  if (await collapse.isVisible()) await collapse.click();
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.screenshot({
+    path: `/tmp/together-council-library-viewport-${info.project.name}.png`,
+    fullPage: false,
+  });
   expect(fixture.memo().tags).toEqual(["职业", "验证"]);
 });
 test("深入研讨默认五阶段，公开检索需另确认，回执、答辩、追问与导出联动", async ({
@@ -706,7 +836,7 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   expect(
     (await form.getByLabel("追问裁判").boundingBox())!.height,
   ).toBeGreaterThanOrEqual(44);
-  await expect(form.getByLabel("本轮研讨流程")).toContainText("交叉质询");
+  await expect(form.getByLabel("默认研讨流程")).toContainText("交叉质询");
   await form.screenshot({
     path: `/private/tmp/council-followup-debate-${info.project.name}.png`,
   });
@@ -753,6 +883,9 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   ).toHaveCount(2);
   expect(fixture.calls()).toBe(13);
   await form.getByRole("radio", { name: /直接回应/ }).check();
+  // Followup settings now inherit the latest round, including its explicitly selected judge.
+  await expect(form.getByLabel("追问裁判")).toHaveValue("openai-light");
+  await form.getByLabel("追问裁判").selectOption("");
   await form.getByRole("checkbox", { name: /DeepSeek/ }).uncheck();
   await form.getByRole("textbox").fill("最后只请一位概括执行步骤。");
   await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();

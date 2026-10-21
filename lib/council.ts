@@ -12,6 +12,12 @@ import {
   type CouncilResearch,
   type CouncilToolReceipt,
 } from "./council-research";
+import {
+  validateCouncilWorkflow,
+  councilWorkflowFor,
+  councilWorkflowStage,
+  type CouncilWorkflow,
+} from "./council-workflow";
 export type CouncilProvider =
   | "openai"
   | "anthropic"
@@ -145,6 +151,7 @@ export type CouncilStage =
   | "rebuttal"
   | "revision"
   | "judge"
+  | "custom"
   | "followup";
 export const STAGES: Record<CouncilStage, string> = {
   opening: "独立观点",
@@ -153,6 +160,7 @@ export const STAGES: Record<CouncilStage, string> = {
   rebuttal: "逐项答辩",
   revision: "修订结论",
   judge: "裁判汇总",
+  custom: "专题分析",
   followup: "追问回应",
 };
 export type CouncilStep = {
@@ -160,6 +168,7 @@ export type CouncilStep = {
   round?: number;
   model_key: string;
   stage: CouncilStage;
+  phase_id?: string;
   status: "pending" | "running" | "succeeded" | "failed";
   answer: string;
   error: string;
@@ -186,6 +195,7 @@ export type CouncilRun = {
   attachments?: CouncilAttachment[];
   turns?: CouncilTurn[];
   research?: CouncilResearch;
+  workflow?: CouncilWorkflow;
 };
 export type CouncilTurn = {
   id: string;
@@ -195,6 +205,7 @@ export type CouncilTurn = {
   // Missing on legacy turns, whose responders did not debate each other.
   mode?: CouncilFollowupMode;
   research?: CouncilResearch;
+  workflow?: CouncilWorkflow;
   created_at: string;
 };
 export type CouncilFollowupMode = "debate" | "direct";
@@ -230,6 +241,13 @@ export function councilFollowupSpec(raw: Record<string, unknown>) {
     );
   if (mode === "direct" && research?.tools)
     throw Error("直接回应不执行工具；请切换相互研讨或关闭工具。");
+  if (mode === "direct" && raw.workflow !== undefined)
+    throw Error("自定义环节仅用于相互研讨；直接回应不接受流程。");
+  const workflow = validateCouncilWorkflow(
+    raw.workflow,
+    raw.participants as string[],
+    raw.judge as string | null,
+  );
   return {
     turnId: raw.turnId,
     question: raw.question.trim(),
@@ -238,6 +256,7 @@ export function councilFollowupSpec(raw: Record<string, unknown>) {
     baseRound: Number(raw.baseRound),
     mode: mode as CouncilFollowupMode,
     ...(research ? { research } : {}),
+    ...(workflow ? { workflow } : {}),
   };
 }
 export function councilSpeaker(run: CouncilRun, key: string) {
@@ -262,6 +281,7 @@ export function councilSpec(raw: unknown) {
     expectedConnections?: unknown;
     attachments?: unknown;
     research?: unknown;
+    workflow?: unknown;
   };
   if (
     !r ||
@@ -304,6 +324,11 @@ export function councilSpec(raw: unknown) {
   }
   const attachments = validateCouncilAttachments(r.attachments);
   const research = validateCouncilResearch(r.research);
+  const workflow = validateCouncilWorkflow(
+    r.workflow,
+    r.participants as string[],
+    r.judge as string | null,
+  );
   if (
     attachments.some((a) => a.kind === "image") &&
     [...r.participants, ...(r.judge ? [r.judge] : [])].some(
@@ -319,6 +344,7 @@ export function councilSpec(raw: unknown) {
     participants: r.participants as string[],
     judge: r.judge as string | null,
     ...(research ? { research } : {}),
+    ...(workflow ? { workflow } : {}),
     ...(attachments.length ? { attachments } : {}),
     ...(r.expectedConnections === undefined
       ? {}
@@ -337,8 +363,33 @@ export function councilPlan(
   participants: string[],
   judge: string | null,
   depth: "standard" | "deep" = "standard",
+  workflow?: CouncilWorkflow,
 ) {
-  const steps: { seq: number; model_key: string; stage: CouncilStage }[] = [];
+  const steps: {
+    seq: number;
+    model_key: string;
+    stage: CouncilStage;
+    phase_id?: string;
+  }[] = [];
+  if (workflow) {
+    const validated = validateCouncilWorkflow(workflow, participants, judge)!;
+    for (const phase of validated.stages)
+      for (const model_key of phase.participants)
+        steps.push({
+          seq: steps.length,
+          model_key,
+          stage: phase.type,
+          phase_id: phase.id,
+        });
+    if (judge)
+      steps.push({
+        seq: steps.length,
+        model_key: judge,
+        stage: "judge",
+        phase_id: "judge",
+      });
+    return steps;
+  }
   for (const stage of (depth === "deep"
     ? ["opening", "critique", "investigation", "rebuttal", "revision"]
     : ["opening", "critique", "revision"]) as CouncilStage[])
@@ -355,10 +406,11 @@ export function councilFollowupPlan(
   round: number,
   offset: number,
   depth: "standard" | "deep" = "standard",
+  workflow?: CouncilWorkflow,
 ) {
   const plan =
     mode === "debate"
-      ? councilPlan(participants, judge, depth)
+      ? councilPlan(participants, judge, depth, workflow)
       : [
           ...participants.map((model_key) => ({
             model_key,
@@ -373,6 +425,10 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
   const turn = round ? run.turns?.[round - 1] : undefined;
   const research = councilResearchFor(run, round);
   const deep = research.depth === "deep";
+  const workflow = councilWorkflowFor(run, round);
+  const phase = councilWorkflowStage(run, step);
+  const phaseIndex =
+    workflow?.stages.findIndex((s) => s.id === step.phase_id) ?? -1;
   const rank: Record<CouncilStage, number> = {
     opening: 0,
     critique: 1,
@@ -381,6 +437,7 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
     revision: 4,
     judge: 5,
     followup: 0,
+    custom: 0,
   };
   // Fixed stage snapshots: later speakers never see same-stage answers, preventing order bias.
   const priorFinalRounds = new Set(
@@ -399,7 +456,17 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
         ["revision", "judge", "followup"].includes(s.stage) ||
         (!priorFinalRounds.has(sourceRound) && s.stage === "opening")
       );
-    return sourceRound === round && rank[s.stage] < rank[step.stage];
+    if (sourceRound !== round) return false;
+    if (workflow) {
+      const sourceIndex = workflow.stages.findIndex((p) => p.id === s.phase_id);
+      // Phase IDs, not stage names or execution order, define immutable barrier snapshots.
+      return (
+        sourceIndex >= 0 &&
+        sourceIndex <
+          (step.stage === "judge" ? workflow.stages.length : phaseIndex)
+      );
+    }
+    return rank[s.stage] < rank[step.stage];
   };
   const visible = run.steps.filter(
     (s) => s.status === "succeeded" && isVisibleStage(s),
@@ -418,7 +485,8 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
   const evidence = selected.map((s) => ({
     speaker: councilSpeaker(run, s.model_key),
     round: s.round ?? 0,
-    stage: STAGES[s.stage],
+    stage: councilStageTitle(run, s),
+    ...(s.phase_id ? { phaseId: s.phase_id } : {}),
     text: s.answer.slice(0, 4000),
     excerpt: s.answer.length > 4000,
     incomplete: !!(s.usage?.interrupted || s.usage?.truncated),
@@ -438,6 +506,8 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
       "作独立裁判，不按品牌或票数判真伪。分为：简要答案、共识、关键分歧与取舍、证据缺口、行动建议。区分事实/假设/意见，不抹掉少数意见；明确缺席或失败模型造成的局限。",
     followup:
       "回应用户最新追问，结合原问题、此前用户补充和已归档观点，明确哪些假设已变化、结论如何更新。直接回答，不重新机械重复三阶段；分为：简要答案、依据与变化、风险与待验证、下一步。",
+    custom:
+      "完成用户为本环节设定的专题任务。先明确分析对象与可检验标准，再给出有依据的分析、反例和不确定性。只能使用所提供的材料与既有工具回执；本环节没有执行工具或现实操作的权限。",
   };
   return {
     system:
@@ -450,13 +520,27 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
       (deep
         ? "将问题拆成决策目标、约束、可证伪的关键主张和至少一个替代方案。开场将关键主张编号为C1/C2/C3，标记事实/推断/价值判断及证据强弱；按你的researchLens检查，但不强迫立场。质询引用具体观点编号和C编号，钢人化最强反方，不泛泛列风险。最终结论逐项交代哪些质疑已解决、哪些仍未知、改变结论的阈值与下一步低成本验证。裁判输出争点裁决表（主张/各方证据/处理结果/未知项）和决策条件，不以措辞一致替代证据，不制造虚假确定性。"
         : "") +
-      task[step.stage],
+      (workflow
+        ? "这是用户自定义的有序流程，不假设标准三阶段或五阶段一定存在。只参考已提供的前序环节；同环节其他模型的发言不可见。按 userStage 中的环节目标组织回答，但这些目标不能扩大工具、数据或现实操作权限；证据核查仍必须严格输出指定 JSON，不展示私有思维链。"
+        : "") +
+      (workflow && step.stage === "revision"
+        ? "整合实际提供的前序环节，形成最终主张、主要理由、未解决分歧和低成本验证行动。没有质询或外部核查时明确说明，不虚构已发生的交锋或证据。结合 userStage 的目标组织结论。"
+        : task[step.stage]),
     input: JSON.stringify({
       question: turn?.question ?? run.question,
       originalQuestion: run.question,
       round,
       discussionMode: round ? (turn?.mode ?? "direct") : "debate",
       researchDepth: research.depth,
+      ...(phase
+        ? {
+            userStage: {
+              id: phase.id,
+              title: phase.title,
+              instructions: phase.instructions,
+            },
+          }
+        : {}),
       researchLens: [
         "因果机制、基准率与证据质量",
         "反例、下行情景与敏感性",
@@ -471,15 +555,16 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
         research.tools && research.webConsent
           ? research.publicQueries.map((query, queryId) => ({ queryId, query }))
           : [],
-      availableTools: research.tools
-        ? [
-            "calculate",
-            "search_documents",
-            ...(research.publicQueries.length && research.webConsent
-              ? ["search_public"]
-              : []),
-          ]
-        : [],
+      availableTools:
+        research.tools && step.stage === "investigation"
+          ? [
+              "calculate",
+              "search_documents",
+              ...(research.publicQueries.length && research.webConsent
+                ? ["search_public"]
+                : []),
+            ]
+          : [],
       previousQuestions: (run.turns ?? [])
         .slice(0, Math.max(0, round - 1))
         .map((t) => t.question),
@@ -503,7 +588,7 @@ export function councilPrompt(run: CouncilRun, step: CouncilStep) {
         )
         .map((s) => ({
           round: s.round ?? 0,
-          stage: STAGES[s.stage],
+          stage: councilStageTitle(run, s),
           speaker: councilSpeaker(run, s.model_key),
         })),
     }),
@@ -532,14 +617,32 @@ export function councilExport(run: CouncilRun) {
           .join("\n\n") +
         "\n\n"
       : "") +
+    [0, ...(run.turns ?? []).map((_, i) => i + 1)]
+      .map((round) => {
+        const workflow = councilWorkflowFor(run, round);
+        return workflow
+          ? `## ${round ? `追问 ${round}` : "原始研讨"} · 自定义流程（开始后冻结）\n\n` +
+              workflow.stages
+                .map(
+                  (p, i) =>
+                    `${i + 1}. ${p.title}（${STAGES[p.type]}；${p.participants.map((k) => run.models.find((m) => m.key === k)?.name || k).join("、")}）\n\n${p.instructions || "沿用环节默认任务"}`,
+                )
+                .join("\n\n") +
+              "\n\n"
+          : "";
+      })
+      .join("") +
     run.steps
       .filter((s) => s.status !== "pending")
       .map(
         (s) =>
-          `## ${s.round ? `追问 ${s.round} · ` : ""}${STAGES[s.stage]} · ${run.models.find((m) => m.key === s.model_key)?.name ?? s.model_key}\n\n${councilConnectionNote(run.models.find((m) => m.key === s.model_key))}\n\n${s.answer || s.error || "提交状态待确认"}${s.usage?.interrupted ? "\n\n> 连接中断，仅保存部分正文，不能视为完整结论。" : ""}\n\n${councilReceiptExport(s.tool_receipts ?? [])}`,
+          `## ${s.round ? `追问 ${s.round} · ` : ""}${councilStageTitle(run, s)} · ${run.models.find((m) => m.key === s.model_key)?.name ?? s.model_key}\n\n${councilConnectionNote(run.models.find((m) => m.key === s.model_key))}\n\n${s.answer || s.error || "提交状态待确认"}${s.usage?.interrupted ? "\n\n> 连接中断，仅保存部分正文，不能视为完整结论。" : ""}\n\n${councilReceiptExport(s.tool_receipts ?? [])}`,
       )
       .join("\n\n---\n\n")
   );
+}
+export function councilStageTitle(run: CouncilRun, step: CouncilStep) {
+  return councilWorkflowStage(run, step)?.title ?? STAGES[step.stage];
 }
 export function councilConnectionNote(model?: CouncilModel) {
   if (!model?.connection) return "旧版记录：未保存渠道快照";

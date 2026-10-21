@@ -2,6 +2,7 @@ import { it, expect } from "vitest";
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { validCouncilLibraryItems } from "../lib/council-library";
+import { APP_VERSION } from "../lib/releases";
 it.skipIf(process.env.RUN_COUNCIL_LIBRARY_READ_INTEGRATION !== "1")(
   "生产双账号研讨整理只读隔离、版本与匿名拒绝；不写研讨/笔记/配额/财富，不调用模型",
   async () => {
@@ -70,7 +71,7 @@ it.skipIf(process.env.RUN_COUNCIL_LIBRARY_READ_INTEGRATION !== "1")(
       });
       expect(version.status).toBe(200);
       const release = await version.json();
-      expect(release.version).toBe("0.12.0");
+      expect(release.version).toBe(APP_VERSION);
       expect(release.role).toBe("admin");
     }
     const anon = await createClient(url, key, options).rpc(

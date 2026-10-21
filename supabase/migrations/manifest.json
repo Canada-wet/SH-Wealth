@@ -108,6 +108,13 @@
       "sha256": "e32221bec6f15b634376ad14a9024542cf249ea46204dcec7faa145680211432",
       "dependsOn": ["010-council"],
       "kind": "additive"
+    },
+    {
+      "id": "016-council-workflows",
+      "path": "supabase/council-workflows.sql",
+      "sha256": "0e068a541ed8780f19937cb8fdf9345108c6e39364f7bdbbc52a5a96b61b0ec6",
+      "dependsOn": ["010-council"],
+      "kind": "additive"
     }
   ]
 }

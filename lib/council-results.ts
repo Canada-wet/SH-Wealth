@@ -1,13 +1,31 @@
 import type { CouncilRun } from "./council";
+import { councilPhaseKey } from "./council-workflow";
 export function councilRound(run: CouncilRun, round: number) {
   const mode =
     !round || run.turns?.[round - 1]?.mode === "debate" ? "debate" : "direct";
+  const steps = run.steps.filter((s) => (s.round ?? 0) === round);
+  const final = steps.find(
+    (s) => s.stage === (mode === "debate" ? "revision" : "followup"),
+  );
   return {
     mode,
     firstStage:
       mode === "debate" ? ("opening" as const) : ("followup" as const),
     finalStage:
       mode === "debate" ? ("revision" as const) : ("followup" as const),
+    firstPhase: steps[0]
+      ? councilPhaseKey(steps[0])
+      : mode === "debate"
+        ? "opening"
+        : "followup",
+    finalPhase: final
+      ? councilPhaseKey(final)
+      : mode === "debate"
+        ? "revision"
+        : "followup",
+    finalParticipants: steps
+      .filter((s) => s.stage === (mode === "debate" ? "revision" : "followup"))
+      .map((s) => s.model_key),
     question: round
       ? (run.turns?.[round - 1]?.question ?? "追问")
       : run.question,
@@ -15,7 +33,7 @@ export function councilRound(run: CouncilRun, round: number) {
       ? (run.turns?.[round - 1]?.participants ?? [])
       : run.participants,
     judge: round ? (run.turns?.[round - 1]?.judge ?? null) : run.judge,
-    steps: run.steps.filter((s) => (s.round ?? 0) === round),
+    steps,
   };
 }
 export function councilExcerpt(text: string, limit = 220) {

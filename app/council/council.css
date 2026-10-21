@@ -3,8 +3,302 @@
 }
 .council-page button,
 .council-page select,
-.council-page textarea {
+.council-page textarea,
+.council-page input {
   font: inherit;
+}
+.council-flow-editor {
+  min-width: 0;
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid #d7e1d8;
+  border-radius: 16px;
+  background: #f7f9f4;
+}
+.council-flow-editor > legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #315d50;
+}
+.council-flow-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.council-flow-heading h3 {
+  margin: 0 0 7px;
+  font-size: 17px;
+}
+.council-flow-heading p,
+.council-flow-boundary {
+  color: #617366;
+  line-height: 1.7;
+  font-size: 12px;
+  margin: 0 0 16px;
+}
+.council-flow-heading > label {
+  flex: 0 0 150px;
+}
+.council-flow-editor label {
+  display: block;
+  font-size: 12px;
+  color: #405c4d;
+}
+.council-flow-editor :is(input:not([type="checkbox"]), textarea, select) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin-top: 7px;
+  background: #fff;
+  color: #243e33;
+  border: 1px solid #d7e1d6;
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.council-flow-editor textarea {
+  resize: vertical;
+  min-height: 84px;
+  max-height: 320px;
+}
+.council-flow-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.council-flow-preview li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  flex: 1 1 100px;
+  background: #fff;
+  padding: 12px;
+  border: 1px solid #e1e7dd;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.council-flow-preview b {
+  color: #718873;
+}
+.council-flow-preview small {
+  display: block;
+  color: #7b887c;
+  margin-top: 5px;
+  font-size: 10px;
+}
+.council-flow-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.council-flow-stage {
+  min-width: 0;
+  border: 1px solid #dce5da;
+  border-radius: 12px;
+  padding: 16px;
+  background: white;
+}
+.council-flow-stage-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5c725f;
+  font-size: 12px;
+  margin-bottom: 15px;
+}
+.council-flow-stage-top > span {
+  flex: 1;
+  min-width: 90px;
+}
+.council-flow-stage-top strong {
+  display: block;
+  font-size: 13px;
+  color: #315346;
+}
+.council-flow-stage-top small {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: #7b8a77;
+}
+.council-page .council-flow-edit {
+  font-size: 11px;
+  padding: 8px 10px;
+}
+.council-flow-summary {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #778473;
+  margin: 0;
+}
+.council-flow-stage:has(> div[hidden]) .council-flow-stage-top {
+  margin-bottom: 0;
+}
+.council-flow-stage:has(.council-flow-summary) .council-flow-stage-top {
+  margin-bottom: 10px;
+}
+.council-flow-number {
+  display: grid;
+  place-items: center;
+  background: #edf3e9;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #315d50;
+  flex-shrink: 0;
+}
+.council-flow-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 5px;
+}
+.council-page .council-flow-controls button {
+  padding: 8px;
+  min-width: 34px;
+  min-height: 34px;
+}
+.council-flow-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.7fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.council-flow-fields > :only-child {
+  grid-column: 1/-1;
+}
+.council-flow-models {
+  border: 0;
+  padding: 0;
+  margin: 14px 0 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.council-flow-models legend {
+  padding: 0;
+  margin-bottom: 9px;
+  font-size: 11px;
+  color: #728473;
+}
+.council-flow-editor .council-flow-models label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e1e7dc;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.council-flow-models input {
+  accent-color: #315d50;
+  margin: 0;
+}
+.council-flow-models:disabled label {
+  opacity: 0.65;
+  cursor: default;
+}
+.council-flow-tool-note {
+  display: block;
+  margin-top: 12px;
+  color: #697c69;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.council-page .council-flow-add {
+  width: 100%;
+  border-style: dashed;
+  background: transparent;
+  font-size: 12px;
+}
+.council-flow-judge {
+  font-size: 12px;
+  color: #536e58;
+  padding: 12px 0;
+}
+.council-flow-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid #dfe7db;
+  font-size: 12px;
+}
+.council-flow-total span {
+  color: #748573;
+  font-size: 11px;
+}
+.council-frozen-flow {
+  border: 1px solid #e2e8dc;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.council-frozen-flow summary {
+  cursor: pointer;
+  color: #47664f;
+}
+.council-frozen-flow li {
+  margin: 14px 0;
+  padding-left: 6px;
+}
+.council-frozen-flow small {
+  display: block;
+  color: #71816f;
+  margin-top: 5px;
+}
+.council-frozen-flow p {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.7;
+}
+@media (max-width: 600px) {
+  .council-flow-editor {
+    padding: 14px;
+  }
+  .council-flow-heading {
+    display: block;
+  }
+  .council-flow-heading > label {
+    margin-bottom: 16px;
+  }
+  .council-flow-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .council-flow-stage {
+    padding: 12px;
+  }
+  .council-page .council-flow-controls button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .council-flow-editor .council-flow-models label {
+    min-height: 44px;
+  }
+  .council-page .council-flow-edit {
+    min-height: 44px;
+  }
+  .council-flow-editor :is(input:not([type="checkbox"]), textarea, select) {
+    font-size: 16px;
+  }
+  .council-flow-stage-top {
+    flex-wrap: wrap;
+  }
 }
 .council-page button {
   display: inline-flex;

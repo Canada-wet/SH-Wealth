@@ -6,6 +6,7 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  within,
 } from "@testing-library/react";
 import Followup from "../app/council/Followup";
 import Results from "../app/council/Results";
@@ -66,7 +67,7 @@ it("默认三阶段研讨准确报价，至少两人；切换方式和裁判撤�
   });
   expect(consent().checked).toBe(false);
   expect(screen.getByText(/本次 7 次新调用/)).toBeTruthy();
-  expect(screen.getByLabelText("本轮研讨流程").textContent).toContain(
+  expect(screen.getByLabelText("默认研讨流程").textContent).toContain(
     "裁判汇总",
   );
   fireEvent.click(screen.getByRole("checkbox", { name: /DeepSeek/ }));
@@ -139,4 +140,49 @@ it("追问结论速览比较修订而非开场，保留三阶段进度，旧直�
   expect(
     screen.getByLabelText("模型参与进度").querySelectorAll(".council-dot"),
   ).toHaveLength(6);
+});
+it("用户能新增、排序、删减环节并提交自定义追问；任何修改都撤销费用同意", async () => {
+  const send = vi.fn(async (_: Record<string, unknown>) => {});
+  render(<Followup run={fixture()} disabled={false} send={send} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "继续追问" }), {
+    target: { value: "请深入核对风险" },
+  });
+  const consent = () =>
+    screen.getByRole("checkbox", {
+      name: /确认将本场资料/,
+    }) as HTMLInputElement;
+  fireEvent.click(consent());
+  fireEvent.change(screen.getByLabelText("流程方式"), {
+    target: { value: "custom" },
+  });
+  expect(consent().checked).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: /添加环节/ }));
+  let cards = () =>
+    Array.from(document.querySelectorAll<HTMLElement>(".council-flow-stage"));
+  const added = within(cards()[2]);
+  fireEvent.change(added.getByLabelText("环节名称"), {
+    target: { value: "情景压力测试" },
+  });
+  fireEvent.change(added.getByRole("textbox", { name: /环节任务/ }), {
+    target: { value: "列举三种情景和各自的停止条件" },
+  });
+  fireEvent.click(added.getByRole("checkbox", { name: /DeepSeek/ }));
+  expect(screen.getByText(/本次 7 次新调用/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "上移环节 3" }));
+  expect(
+    (within(cards()[1]).getByLabelText("环节名称") as HTMLInputElement).value,
+  ).toBe("情景压力测试");
+  fireEvent.click(screen.getByRole("button", { name: "删除环节 3" }));
+  expect(screen.getByText(/本次 5 次新调用/)).toBeTruthy();
+  fireEvent.click(consent());
+  fireEvent.click(screen.getByRole("button", { name: "发送追问" }));
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  expect(send.mock.calls[0][0].workflow).toMatchObject({
+    version: 1,
+    stages: [
+      { type: "opening" },
+      { type: "custom", title: "情景压力测试", participants: ["openai-light"] },
+      { type: "revision" },
+    ],
+  });
 });

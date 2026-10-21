@@ -4,10 +4,12 @@ export default function ResearchSettings({
   value,
   change,
   disabled = false,
+  customFlow = false,
 }: {
   value: CouncilResearch;
   change: (r: CouncilResearch) => void;
   disabled?: boolean;
+  customFlow?: boolean;
 }) {
   return (
     <fieldset className="council-research-settings" disabled={disabled}>
@@ -35,13 +37,21 @@ export default function ResearchSettings({
             )
           }
         >
-          <option value="deep">深入研讨 · 五阶段，追证与答辩</option>
-          <option value="standard">标准研讨 · 三阶段，较省用量</option>
+          <option value="deep">
+            {customFlow
+              ? "深入思考 · 较高推理预算"
+              : "深入研讨 · 五阶段，追证与答辩"}
+          </option>
+          <option value="standard">
+            {customFlow ? "标准思考 · 较省用量" : "标准研讨 · 三阶段，较省用量"}
+          </option>
         </select>
       </label>
       <p>
-        深入模式：独立建模 → 交叉质询 → 证据核查 → 逐项答辩 →
-        修订结论。提高已适配型号的推理预算，输出可审阅依据，不展示私有思维链。不是“越长越正确”。
+        {customFlow
+          ? "自定义时，深度只影响推理与输出预算，不改变你安排的环节。"
+          : "深入模式：独立建模 → 交叉质询 → 证据核查 → 逐项答辩 → 修订结论。"}
+        提高已适配型号的推理预算，输出可审阅依据，不展示私有思维链。不是“越长越正确”。
       </p>
       {value.depth === "deep" && (
         <>

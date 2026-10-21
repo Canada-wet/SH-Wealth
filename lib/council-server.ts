@@ -10,6 +10,11 @@ import {
 import { councilPublicSearch, councilLocalTool } from "./council-tools";
 import type { CouncilProgress } from "./council-stream";
 import {
+  validateCouncilWorkflow,
+  councilWorkflowFor,
+  type CouncilWorkflow,
+} from "./council-workflow";
+import {
   COUNCIL_MODELS,
   CATALOG_DATE,
   councilPlan,
@@ -51,7 +56,19 @@ export async function councilCommand(
   id: string,
   payload: unknown = {},
 ) {
-  const { data, error } = await councilAdmin().rpc("wealth_council_command", {
+  const client = councilAdmin();
+  if (
+    ["create", "followup"].includes(action) &&
+    (payload as { workflow?: unknown })?.workflow !== undefined
+  ) {
+    const version = await client.rpc("wealth_council_workflow_version");
+    if (version.error || version.data !== 1)
+      throw new CouncilError(
+        "自定义流程数据库尚未升级：请先安装 supabase/council-workflows.sql。尚未启动模型调用。",
+        503,
+      );
+  }
+  const { data, error } = await client.rpc("wealth_council_command", {
     action,
     target_user: user,
     run_id: id,
@@ -119,6 +136,7 @@ export async function createCouncil(
     judge: string | null;
     attachments?: CouncilAttachment[];
     research?: CouncilResearch;
+    workflow?: CouncilWorkflow;
     expectedConnections?: Record<
       string,
       NonNullable<CouncilModel["connection"]>
@@ -133,6 +151,11 @@ export async function createCouncil(
   );
   const attachments = validateCouncilAttachments(spec.attachments);
   const research = validateCouncilResearch(spec.research);
+  const workflow = validateCouncilWorkflow(
+    spec.workflow,
+    spec.participants,
+    spec.judge,
+  );
   if (research?.publicQueries.length && !process.env.OPENAI_API_KEY)
     throw new CouncilError(
       "联网搜索尚未配置；请清空公开检索词后开始，尚未调用模型。",
@@ -164,17 +187,21 @@ export async function createCouncil(
     ...specification,
     catalogDate: CATALOG_DATE,
     models,
-    steps: councilPlan(spec.participants, spec.judge, research?.depth).map(
-      (s) => ({
-        ...s,
-        status: "pending",
-        answer: "",
-        error: "",
-        usage: { input: null, output: null },
-        started_at: null,
-        finished_at: null,
-      }),
-    ),
+    ...(workflow ? { workflow } : {}),
+    steps: councilPlan(
+      spec.participants,
+      spec.judge,
+      research?.depth,
+      workflow,
+    ).map((s) => ({
+      ...s,
+      status: "pending",
+      answer: "",
+      error: "",
+      usage: { input: null, output: null },
+      started_at: null,
+      finished_at: null,
+    })),
   });
 }
 export async function advanceCouncil(
@@ -208,8 +235,34 @@ export async function advanceCouncil(
   );
   const model = run.models.find((m) => m.key === step.model_key);
   const research = councilResearchFor(run, step.round ?? 0);
+  const workflow = councilWorkflowFor(run, step.round ?? 0);
   let receipts: CouncilToolReceipt[] = [];
   try {
+    if (workflow) {
+      const round = step.round ?? 0;
+      const turn = round ? run.turns?.[round - 1] : undefined;
+      const expected = councilPlan(
+        turn?.participants ?? run.participants,
+        turn ? turn.judge : run.judge,
+        research.depth,
+        workflow,
+      );
+      const actual = run.steps.filter((s) => (s.round ?? 0) === round);
+      const offset = run.steps.findIndex((s) => (s.round ?? 0) === round);
+      if (
+        expected.length !== actual.length ||
+        expected.some(
+          (p, i) =>
+            p.stage !== actual[i].stage ||
+            p.seq + offset !== actual[i].seq ||
+            p.phase_id !== actual[i].phase_id ||
+            p.model_key !== actual[i].model_key,
+        )
+      )
+        throw new CouncilProviderError(
+          "已保存的自定义流程与执行计划不一致，此步骤未调用模型。请保留记录并检查数据库升级。",
+        );
+    }
     if (!model) throw new CouncilProviderError("模型快照缺失，未发起调用。");
     if (
       run.steps.some(
@@ -231,6 +284,7 @@ export async function advanceCouncil(
         "成功的独立观点不足两份，无法进行有效交叉研讨；此步骤未调用模型。",
       );
     if (
+      !workflow &&
       research.depth === "deep" &&
       ["investigation", "rebuttal", "revision"].includes(step.stage) &&
       !run.steps.some(

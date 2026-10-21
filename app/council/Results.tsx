@@ -1,7 +1,11 @@
 "use client";
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
-import { STAGES, type CouncilRun, type CouncilStage } from "@/lib/council";
+import {
+  councilStageTitle,
+  type CouncilRun,
+  type CouncilStage,
+} from "@/lib/council";
 import {
   councilRound,
   councilExcerpt,
@@ -70,7 +74,7 @@ export default function Results({
       <div className="council-result-metrics">
         <div>
           <strong>
-            {successes.length}/{current.participants.length}
+            {successes.length}/{current.finalParticipants.length}
           </strong>
           <span>完整最终观点</span>
         </div>
@@ -100,9 +104,9 @@ export default function Results({
                 .map((s) => (
                   <span
                     key={s.seq}
-                    title={`${STAGES[s.stage]}：${activeSeq === s.seq ? "生成中" : s.status}`}
+                    title={`${councilStageTitle(run, s)}：${activeSeq === s.seq ? "生成中" : s.status}`}
                     className={`council-dot ${activeSeq === s.seq ? "running" : s.status}`}
-                    aria-label={`${STAGES[s.stage]} ${activeSeq === s.seq ? "生成中" : s.status}`}
+                    aria-label={`${councilStageTitle(run, s)} ${activeSeq === s.seq ? "生成中" : s.status}`}
                   />
                 ))}
             </span>

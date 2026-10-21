@@ -7,6 +7,14 @@ import {
   councilFollowupPlan,
 } from "@/lib/council";
 import ResearchSettings from "./ResearchSettings";
+import WorkflowEditor from "./WorkflowEditor";
+import {
+  councilWorkflowFor,
+  validateCouncilWorkflow,
+  syncCouncilWorkflow,
+  councilWorkflowSearches,
+  type CouncilWorkflow,
+} from "@/lib/council-workflow";
 import {
   STANDARD_RESEARCH,
   validateCouncilResearch,
@@ -24,8 +32,12 @@ export default function Followup({
   seed?: { id: string; text: string };
 }) {
   const [question, setQuestion] = useState(""),
-    [models, setModels] = useState<string[]>(run.participants),
-    [judge, setJudge] = useState(run.judge || ""),
+    [models, setModels] = useState<string[]>(
+      run.turns?.at(-1)?.participants ?? run.participants,
+    ),
+    [judge, setJudge] = useState(
+      (run.turns?.at(-1) ? run.turns.at(-1)!.judge : run.judge) || "",
+    ),
     [mode, setMode] = useState<CouncilFollowupMode>("debate"),
     [research, setResearch] = useState<CouncilResearch>(
       run.turns?.at(-1)?.research ?? run.research ?? STANDARD_RESEARCH,
@@ -33,12 +45,16 @@ export default function Followup({
     [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [workflow, setWorkflow] = useState<CouncilWorkflow | undefined>(
+    councilWorkflowFor(run, run.turns?.length ?? 0),
+  );
   const draft = useRef<{ signature: string; id: string } | null>(null);
   const count = run.turns?.length || 0;
   useEffect(() => {
     setQuestion("");
-    setModels(run.participants);
-    setJudge(run.judge || "");
+    setModels(run.turns?.at(-1)?.participants ?? run.participants);
+    setJudge((run.turns?.at(-1) ? run.turns.at(-1)!.judge : run.judge) || "");
+    setWorkflow(councilWorkflowFor(run, run.turns?.length ?? 0));
     setMode("debate");
     setResearch(
       run.turns?.at(-1)?.research ?? run.research ?? STANDARD_RESEARCH,
@@ -60,21 +76,34 @@ export default function Followup({
     draft.current = null;
     document.getElementById("council-followup-question")?.focus();
   }, [seed]);
-  const calls = councilFollowupPlan(
-    models,
-    judge || null,
-    mode,
-    count + 1,
-    run.steps.length,
-    mode === "debate" ? research.depth : "standard",
-  ).length;
+  const calls =
+    workflow && mode === "debate"
+      ? workflow.stages.reduce(
+          (n, p) => n + p.participants.length,
+          judge ? 1 : 0,
+        )
+      : councilFollowupPlan(
+          models,
+          judge || null,
+          mode,
+          count + 1,
+          run.steps.length,
+          mode === "debate" ? research.depth : "standard",
+        ).length;
   const tooFew = models.length < (mode === "debate" ? 2 : 1);
   let researchError = "";
+  let workflowError = "";
   if (mode === "debate")
     try {
       validateCouncilResearch(research);
     } catch (e) {
       researchError = (e as Error).message;
+    }
+  if (mode === "debate")
+    try {
+      validateCouncilWorkflow(workflow, models, judge || null);
+    } catch (e) {
+      workflowError = (e as Error).message;
     }
   return (
     <section
@@ -132,8 +161,10 @@ export default function Followup({
           <span>
             相互研讨
             <small>
-              每个模型 {research.depth === "deep" ? 5 : 3} 次调用 · 至少 2
-              个模型
+              {workflow
+                ? "使用自定义环节"
+                : `每个模型 ${research.depth === "deep" ? 5 : 3} 次调用`}{" "}
+              · 至少 2 个模型
             </small>
           </span>
         </label>
@@ -156,6 +187,7 @@ export default function Followup({
       {mode === "debate" && (
         <ResearchSettings
           value={research}
+          customFlow={!!workflow}
           disabled={disabled || busy || !canAsk}
           change={(r) => {
             setResearch(r);
@@ -167,40 +199,6 @@ export default function Followup({
         <p role="alert" className="council-alert">
           {researchError}
         </p>
-      )}
-      {mode === "debate" && (
-        <ol className="council-followup-flow" aria-label="本轮研讨流程">
-          <li>
-            <strong>1 · 独立回应</strong>
-            <span>基于新问题更新各自判断</span>
-          </li>
-          <li>
-            <strong>2 · 交叉质询</strong>
-            <span>阅读彼此观点，指出分歧与证据缺口</span>
-          </li>
-          {research.depth === "deep" && (
-            <>
-              <li>
-                <strong>3 · 证据核查</strong>
-                <span>请求已授权工具，记录来源与不确定性</span>
-              </li>
-              <li>
-                <strong>4 · 逐项答辩</strong>
-                <span>用实际证据回应最强质疑</span>
-              </li>
-            </>
-          )}
-          <li>
-            <strong>{research.depth === "deep" ? 5 : 3} · 修订结论</strong>
-            <span>回应质疑，说明采纳与保留的意见</span>
-          </li>
-          {judge && (
-            <li>
-              <strong>{research.depth === "deep" ? 6 : 4} · 裁判汇总</strong>
-              <span>汇总本轮共识、分歧和下一步</span>
-            </li>
-          )}
-        </ol>
       )}
       <div className="council-followup-models">
         {run.models.map((m) => (
@@ -215,11 +213,11 @@ export default function Followup({
                 (!models.includes(m.key) && models.length >= 6)
               }
               onChange={() => {
-                setModels((list) =>
-                  list.includes(m.key)
-                    ? list.filter((k) => k !== m.key)
-                    : [...list, m.key],
-                );
+                const next = models.includes(m.key)
+                  ? models.filter((k) => k !== m.key)
+                  : [...models, m.key];
+                setWorkflow(syncCouncilWorkflow(workflow, models, next));
+                setModels(next);
                 setConsent(false);
               }}
             />
@@ -249,6 +247,21 @@ export default function Followup({
           ))}
         </select>
       </label>
+      {mode === "debate" && (
+        <WorkflowEditor
+          value={workflow}
+          models={run.models}
+          participants={models}
+          judge={judge || null}
+          depth={research.depth}
+          tools={research.tools}
+          disabled={disabled || busy || !canAsk}
+          change={(w) => {
+            setWorkflow(w);
+            setConsent(false);
+          }}
+        />
+      )}
       {tooFew && (
         <p className="council-alert" role="status">
           {mode === "debate"
@@ -257,11 +270,13 @@ export default function Followup({
         </p>
       )}
       <p className="council-muted">
-        本次 {calls} 次新调用（{models.length} 个模型 ×{" "}
-        {mode === "debate" ? (research.depth === "deep" ? 5 : 3) : 1}
-        {judge ? " + 裁判 1 次" : ""}）；每人每天最多 10 次追问。
+        本次 {calls} 次新调用（
+        {workflow && mode === "debate"
+          ? "按自定义环节和参与者合计"
+          : `${models.length} 个模型 × ${mode === "debate" ? (research.depth === "deep" ? 5 : 3) : 1}${judge ? " + 裁判 1 次" : ""}`}
+        ）；每人每天最多 10 次追问。
         {mode === "debate" && research.tools && research.webConsent
-          ? `另最多 ${Math.min(models.length, research.publicQueries.length)} 次联网搜索。`
+          ? `另最多 ${councilWorkflowSearches(workflow, models, research.depth, research.publicQueries.length)} 次联网搜索。`
           : ""}
         失败步骤不会自动重发，未执行步骤不调用；补问同一模型仍可能再次计费。
       </p>
@@ -290,7 +305,8 @@ export default function Followup({
           !consent ||
           question.trim().length < 2 ||
           tooFew ||
-          !!researchError
+          !!researchError ||
+          !!workflowError
         }
         onClick={async () => {
           const signature = JSON.stringify({
@@ -299,6 +315,7 @@ export default function Followup({
             judge,
             mode,
             research,
+            workflow,
             count,
             run: run.id,
           });
@@ -316,6 +333,7 @@ export default function Followup({
               judge: judge || null,
               mode,
               ...(mode === "debate" ? { research } : {}),
+              ...(mode === "debate" && workflow ? { workflow } : {}),
               baseRound: count,
               consent,
             });

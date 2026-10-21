@@ -110,7 +110,8 @@ export async function POST(request: Request) {
       !raw ||
       typeof raw !== "object" ||
       Array.isArray(raw) ||
-      (raw.action !== "create" && text.length > 16000)
+      (raw.action !== "create" &&
+        text.length > (raw.action === "followup" ? 24000 : 16000))
     )
       throw Error();
   } catch {
