@@ -114,12 +114,9 @@ test("共同分摊、目标节奏与负债成本都联动，选择刷新保留",
   await page.locator(".household-next > summary").click();
   await expect(page.locator(".household-next")).toContainText("$500.00/年");
   await page.getByLabel("共同开支分摊方式").selectOption("income");
-  await expect(page.locator(".planning-metrics").nth(1)).toContainText(
-    "$800.00",
-  );
-  await expect(page.locator(".planning-metrics").nth(1)).toContainText(
-    "$1,200.00",
-  );
+  const sharing = page.locator(".household-next .planning-metrics").nth(1);
+  await expect(sharing).toContainText("$800.00");
+  await expect(sharing).toContainText("$1,200.00");
   await page.getByRole("button", { name: "核对测试贷款利率与还款" }).click();
   await page.getByLabel("年利率（%）").fill("0");
   await page.getByRole("button", { name: "保存负债" }).click();

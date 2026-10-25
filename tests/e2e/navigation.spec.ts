@@ -82,7 +82,7 @@ test("置顶子功能刷新与跨页面保留，置顶排在最近使用之前�
     page.getByRole("region", { name: "家庭状态摘要" }),
   ).toBeVisible();
   await page.screenshot({
-    path: `/private/tmp/together-home-${test.info().project.name}.png`,
+    path: test.info().outputPath("together-home.png"),
   });
   await launch(page);
   let dialog = page.getByRole("dialog");
@@ -121,7 +121,7 @@ test("置顶子功能刷新与跨页面保留，置顶排在最近使用之前�
     names.findIndex((n) => n.includes("版本更新")),
   );
   await page.screenshot({
-    path: `/private/tmp/together-navigation-${test.info().project.name}.png`,
+    path: test.info().outputPath("together-navigation.png"),
   });
 });
 test("功能深链接可打开设置与顾问、收藏视图；同一顾问入口可反复打开", async ({

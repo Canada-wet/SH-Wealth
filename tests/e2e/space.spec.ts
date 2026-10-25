@@ -343,7 +343,7 @@ test("六个空间与真实子功能互通，最近使用继续具体入口，�
   await readySpace(page);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({
-    path: `/private/tmp/together-space-${test.info().project.name}.png`,
+    path: test.info().outputPath("together-space.png"),
   });
   expect(paid).toEqual([]);
 });

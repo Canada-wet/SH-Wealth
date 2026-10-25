@@ -601,7 +601,7 @@ test("深入研讨默认五阶段，公开检索需另确认，回执、答辩�
   if (info.project.name !== "desktop")
     await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
-    path: `/private/tmp/council-deep-${info.project.name}.png`,
+    path: info.outputPath("council-deep.png"),
     fullPage: true,
   });
 });
@@ -722,7 +722,7 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   if (info.project.name !== "desktop")
     await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
-    path: `/private/tmp/council-${info.project.name}.png`,
+    path: info.outputPath("council.png"),
     fullPage: true,
   });
   await page.getByRole("checkbox", { name: /我同意把问题/ }).check();
@@ -736,11 +736,22 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   ).toContainText("裁判汇总");
   await expect(page.locator(".council-answer")).toContainText("合成测试结论");
   await expect(page.getByLabel("研讨结论速览")).toContainText("关键分歧");
+  const costs = page.getByRole("region", { name: "研讨成本分析" });
+  await expect(
+    costs.getByRole("heading", { name: "这次研讨，花在哪里" }),
+  ).toBeVisible();
+  await expect(costs).toContainText("已知部分小计 · 不是总账单");
+  await costs.getByText("展开费用分布与优化提示", { exact: true }).click();
+  await costs.getByRole("button", { name: "按环节", exact: true }).click();
+  await expect(costs.locator(".council-cost-bars")).toContainText("裁判汇总");
+  await costs.getByLabel("成本统计范围").selectOption("round");
+  await expect(costs.getByLabel("成本统计范围")).toHaveValue("round");
   await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
   await page.getByRole("button", { name: "交叉质询" }).click();
   await expect(page.locator(".council-answer")).toHaveCount(2);
   await page.reload();
   await expect(page.locator(".council-session")).toContainText("7/7 步已归档");
+  await expect(costs).toBeVisible();
   await page.waitForTimeout(1500);
   expect(fixture.calls()).toBe(7);
   const downloaded = page.waitForEvent("download");
@@ -748,7 +759,9 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   const download = await downloaded;
   expect(download.suggestedFilename()).toMatch(/Together-研讨-.*\.md/);
   const path = await download.path();
-  expect(await readFile(path!, "utf8")).toContain("裁判汇总");
+  const exportedText = await readFile(path!, "utf8");
+  expect(exportedText).toContain("裁判汇总");
+  expect(exportedText).toContain("研讨成本（USD · 估算，非账单）");
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "删除历史" }).click();
   await expect(page.getByLabel("问题与已知条件")).toBeVisible();
@@ -795,7 +808,7 @@ test("研讨结束后只问一位模型并可选裁判，轮次与材料刷新�
     ).toBe(true);
   }
   await page.screenshot({
-    path: "/private/tmp/council-results-" + page.viewportSize()?.width + ".png",
+    path: test.info().outputPath("council-results.png"),
     fullPage: true,
   });
   await page.reload();
@@ -838,7 +851,7 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   ).toBeGreaterThanOrEqual(44);
   await expect(form.getByLabel("默认研讨流程")).toContainText("交叉质询");
   await form.screenshot({
-    path: `/private/tmp/council-followup-debate-${info.project.name}.png`,
+    path: info.outputPath("council-followup-debate.png"),
   });
   await form.getByRole("checkbox", { name: /确认将本场资料/ }).check();
   await form.getByRole("button", { name: "发送追问" }).click();
@@ -913,7 +926,7 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   expect(text).toContain("追问 1 · 相互研讨");
   expect(text).toContain("追问 2 · 直接回应");
   await page.screenshot({
-    path: `/private/tmp/council-debate-results-${info.project.name}.png`,
+    path: info.outputPath("council-debate-results.png"),
     fullPage: true,
   });
   for (const width of [320, 390, 768, 1440]) {
