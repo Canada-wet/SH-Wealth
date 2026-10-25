@@ -740,7 +740,13 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   await expect(
     costs.getByRole("heading", { name: "这次研讨，花在哪里" }),
   ).toBeVisible();
-  await expect(costs).toContainText("已知部分小计 · 不是总账单");
+  await expect(costs).toContainText("模型与搜索估算合计");
+  await expect(
+    costs.locator(".council-result-metrics > div").nth(1).locator("strong"),
+  ).toHaveText("7");
+  await expect(
+    costs.locator(".council-result-metrics > div").nth(2).locator("strong"),
+  ).toHaveText("0");
   await costs.getByText("展开费用分布与优化提示", { exact: true }).click();
   await costs.getByRole("button", { name: "按环节", exact: true }).click();
   await expect(costs.locator(".council-cost-bars")).toContainText("裁判汇总");
@@ -749,9 +755,17 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   await page.getByRole("button", { name: "展开完整发言", exact: true }).click();
   await page.getByRole("button", { name: "交叉质询" }).click();
   await expect(page.locator(".council-answer")).toHaveCount(2);
+  // Simulate a saved provider response that omitted usage, without rerunning it.
+  const savedRun = fixture.run()!;
+  savedRun.steps[0].usage = { input: null, output: null, requested: true };
+  fixture.seed(savedRun);
   await page.reload();
   await expect(page.locator(".council-session")).toContainText("7/7 步已归档");
   await expect(costs).toBeVisible();
+  await expect(costs).toContainText("已知部分小计 · 不是总账单");
+  await expect(
+    costs.locator(".council-result-metrics > div").nth(2).locator("strong"),
+  ).toHaveText("1");
   await page.waitForTimeout(1500);
   expect(fixture.calls()).toBe(7);
   const downloaded = page.waitForEvent("download");
