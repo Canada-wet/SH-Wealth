@@ -109,6 +109,16 @@ test("每日心理学收藏、回看、失败重试与订阅明确保存；版�
   await expect(page.getByText("没有匹配收藏。")).toBeVisible();
   await page.getByLabel("搜索收藏").fill("");
   await page
+    .getByRole("button", { name: "重新开启每日更新", exact: true })
+    .click();
+  await expect(
+    page.getByText("当前设置已同步云端。", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /我的收藏/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page
     .getByRole("button", { name: "订阅我的每日提醒", exact: true })
     .click();
   await expect(

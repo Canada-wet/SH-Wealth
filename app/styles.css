@@ -5523,6 +5523,53 @@ tbody tr:hover {
   font-size: 13px;
   margin: 10px 0;
 }
+.learning-schedule {
+  scroll-margin-top: 110px;
+}
+.learning-schedule-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+.learning-schedule-heading h2 {
+  margin: 6px 0 12px;
+  font-size: 21px;
+}
+.learning-schedule-heading button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.learning-schedule p {
+  line-height: 1.8;
+  max-width: 85ch;
+}
+.learning-schedule small {
+  color: var(--muted);
+  line-height: 1.8;
+  display: block;
+}
+.learning-paused-note {
+  background: #f2f5ed;
+  color: #365b4d;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+@media (max-width: 600px) {
+  .learning-schedule-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .learning-schedule-heading button {
+    width: 100%;
+    font-size: 16px;
+  }
+}
 .lesson-card details {
   margin: 20px 0;
 }
@@ -5659,4 +5706,253 @@ tbody tr:hover {
 .research-archive .advisor-markdown {
   max-width: 80ch;
   margin-top: 1rem;
+}
+.freedom-planner {
+  min-width: 0;
+  margin-top: 20px;
+}
+.freedom-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  justify-content: space-between;
+}
+.freedom-heading h3 {
+  font-size: 23px;
+  line-height: 1.45;
+  margin: 5px 0 10px;
+}
+.freedom-heading p {
+  max-width: 70ch;
+}
+.freedom-save-state {
+  flex-shrink: 0;
+  border-radius: 20px;
+  padding: 8px 12px;
+  background: #edf3ee;
+  color: #365b4d;
+  font-size: 12px;
+}
+.freedom-explainer {
+  background: #f5f4ef;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 20px 0;
+  line-height: 1.8;
+}
+.freedom-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.freedom-jump button {
+  min-height: 44px;
+}
+.freedom-layout > form,
+.freedom-results {
+  scroll-margin-top: 120px;
+}
+.freedom-planner summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+  font-weight: 600;
+}
+.freedom-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: start;
+}
+.freedom-layout > *,
+.freedom-results {
+  min-width: 0;
+}
+.freedom-planner fieldset {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  margin: 0 0 18px;
+  min-width: 0;
+}
+.freedom-planner legend {
+  padding: 0 8px;
+  font-weight: 700;
+  color: #365b4d;
+}
+.freedom-planner form label {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+.freedom-planner input:not([type="checkbox"]),
+.freedom-planner select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8e1d9;
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px 12px;
+  min-height: 44px;
+  font: inherit;
+  color: inherit;
+}
+.freedom-planner small,
+.freedom-help {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+.freedom-planner .freedom-assets label {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.freedom-assets span small {
+  display: block;
+}
+.freedom-assets b {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.freedom-assets input {
+  width: 18px;
+  height: 18px;
+  accent-color: #365b4d;
+}
+.freedom-goal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.freedom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.freedom-actions button {
+  min-height: 44px;
+}
+.freedom-target {
+  padding: 25px;
+  background: #365b4d;
+  color: #fff;
+  border-radius: 16px;
+}
+.freedom-target strong {
+  overflow-wrap: anywhere;
+  display: block;
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -1px;
+  margin: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+.freedom-target p,
+.freedom-target small {
+  color: #e5efe7;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.freedom-results .planning-metrics {
+  margin: 18px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.freedom-results .planning-metrics b {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+.freedom-projection {
+  background: #f1f4ef;
+  padding: 18px;
+  border-radius: 12px;
+  margin: 18px 0;
+}
+.freedom-projection strong {
+  font-size: 28px;
+}
+.freedom-projection p,
+.freedom-levers p {
+  line-height: 1.8;
+  font-size: 14px;
+}
+.freedom-chart {
+  width: 100%;
+  min-width: 0;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.freedom-levers {
+  border-left: 3px solid #b0915a;
+  padding: 2px 0 2px 18px;
+  margin: 22px 0;
+}
+.freedom-sensitivity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.freedom-sensitivity > div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+.freedom-sensitivity span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.freedom-sensitivity b {
+  overflow-wrap: anywhere;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1050px) {
+  .freedom-layout {
+    grid-template-columns: 1fr;
+  }
+  .freedom-results {
+    grid-row: 1;
+  }
+}
+@media (max-width: 600px) {
+  .freedom-heading {
+    display: block;
+  }
+  .freedom-heading h3 {
+    font-size: 20px;
+  }
+  .freedom-save-state {
+    display: inline-block;
+  }
+  .freedom-planner input:not([type="checkbox"]),
+  .freedom-planner select {
+    font-size: 16px;
+  }
+  .freedom-goal-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .freedom-goal-row > button {
+    grid-column: 1/-1;
+    justify-self: end;
+  }
+  .freedom-target {
+    padding: 18px;
+  }
+  .freedom-planner fieldset {
+    padding: 12px;
+  }
+  .freedom-assets b {
+    font-size: 11px;
+  }
 }

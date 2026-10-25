@@ -6,6 +6,7 @@ import {
   councilAvailability,
   councilModelSnapshot,
   checkAlibabaConnection,
+  CouncilProviderError,
 } from "../lib/council-provider";
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -34,6 +35,57 @@ const onlyAlibaba = () => {
   enable();
   keys.filter((k) => k !== "QWEN_API_KEY").forEach((k) => vi.stubEnv(k, ""));
 };
+it("已计量但无正文的失败仍返回价格快照与用量，流式推理也不丢账且不自动重试", async () => {
+  enable();
+  const m = COUNCIL_MODELS[0];
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({
+        output: [],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 300,
+          input_tokens_details: { cached_tokens: 0 },
+        },
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  let error: unknown;
+  try {
+    await callCouncilModel(m, "system", "synthetic");
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeInstanceOf(CouncilProviderError);
+  expect((error as CouncilProviderError).usage).toMatchObject({
+    input: 100,
+    output: 300,
+    requested: true,
+    price: { model: m.model },
+  });
+  const qwen = councilModelSnapshot(
+    COUNCIL_MODELS.find((m) => m.key === "qwen-light")!,
+  );
+  fetcher.mockResolvedValueOnce(
+    new Response(
+      'data: {"choices":[{"delta":{"reasoning_content":"PRIVATE"},"finish_reason":"length"}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":900}}\n\ndata: [DONE]\n\n',
+      { headers: { "Content-Type": "text/event-stream" } },
+    ),
+  );
+  try {
+    await callCouncilModel(qwen, "system", "synthetic");
+  } catch (e) {
+    error = e;
+  }
+  expect((error as CouncilProviderError).usage).toMatchObject({
+    input: 100,
+    output: 900,
+    price: { channel: "alibaba", region: "ap-southeast-1" },
+  });
+  expect(JSON.stringify(error)).not.toContain("PRIVATE");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 it.each([
   "openai-light",
   "anthropic-light",
@@ -440,7 +492,7 @@ it.each(COUNCIL_MODELS.map((m) => [m.key, m] as const))(
     });
     vi.stubGlobal("fetch", fetcher);
     const result = await callCouncilModel(m, "system", "question");
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       answer: "visible",
       usage: { input: 12, output: 34, truncated: false },
     });
@@ -483,7 +535,12 @@ it("达到输出预算或展示长度时标注截断，用量未知不伪造为�
   );
   const result = await callCouncilModel(COUNCIL_MODELS[0], "s", "q");
   expect(result.answer.length).toBe(16000);
-  expect(result.usage).toEqual({ input: null, output: null, truncated: true });
+  expect(result.usage).toMatchObject({
+    input: null,
+    output: null,
+    truncated: true,
+    requested: true,
+  });
 });
 it("Qwen 旗舰通过 SSE 接收，限制思考长度且保留部分正文，隐藏推理不进入结果", async () => {
   onlyAlibaba();

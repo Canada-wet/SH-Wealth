@@ -30,6 +30,7 @@ const GROUPS = {
       "proactive",
       "webSearch",
       "searchTopic",
+      "learningSchedule",
     ],
   },
 } as const;

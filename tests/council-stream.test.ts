@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { readCouncilStream } from "../lib/council-stream";
+import { readCouncilStream, CouncilStreamError } from "../lib/council-stream";
 import { readCouncilResponse } from "../lib/council-client";
 const sse = (events: unknown[], done = true) =>
   events.map((e) => `data: ${JSON.stringify(e)}\r\n\r\n`).join("") +
@@ -80,4 +80,35 @@ it("客户端只以归档结果作为完成，不把临时正文当已保存；�
   );
   missing.headers.set("Content-Type", "application/x-ndjson");
   await expect(readCouncilResponse(missing)).rejects.toThrow("归档尚未确认");
+});
+it("只有隐藏推理没有正文仍保留计费用量，不保存私有推理内容", async () => {
+  let error: unknown;
+  try {
+    await readCouncilStream(
+      streamed(
+        sse([
+          {
+            choices: [
+              {
+                delta: { reasoning_content: "PRIVATE_CHAIN" },
+                finish_reason: "length",
+              },
+            ],
+          },
+          {
+            choices: [],
+            usage: { prompt_tokens: 100, completion_tokens: 900 },
+          },
+        ]),
+      ),
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeInstanceOf(CouncilStreamError);
+  expect((error as CouncilStreamError).usage).toEqual({
+    prompt_tokens: 100,
+    completion_tokens: 900,
+  });
+  expect(JSON.stringify(error)).not.toContain("PRIVATE_CHAIN");
 });

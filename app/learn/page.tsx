@@ -5,6 +5,11 @@ import useWealth from "@/lib/useWealth";
 import MarketNavigator from "@/app/components/MarketNavigator";
 import { ModuleBridge } from "@/app/components/AppNavigation";
 import PushSettings from "@/app/components/PushSettings";
+import LearningScheduleControl from "@/app/components/LearningScheduleControl";
+import {
+  learningDisplayDay,
+  learningUpdatesEnabled,
+} from "@/lib/learning-schedule";
 import {
   EMPTY_LEARNING,
   LESSONS,
@@ -121,7 +126,19 @@ export default function Learn() {
   const archive = today
     ? lessonArchive(new Date(`${today}T16:00:00Z`), 120)
     : [];
-  const selected = day || today;
+  const currentDay = today
+    ? learningDisplayDay(store.state.preferences.learningSchedule, today)
+    : "";
+  if (
+    currentDay &&
+    lessonForDay(currentDay) &&
+    !archive.some((r) => r.day === currentDay)
+  )
+    archive.push({ day: currentDay, lesson: lessonForDay(currentDay)! });
+  const automatic = learningUpdatesEnabled(
+    store.state.preferences.learningSchedule,
+  );
+  const selected = day || currentDay;
   const lesson = archive.some((r) => r.day === selected)
     ? lessonForDay(selected)
     : null;
@@ -223,6 +240,27 @@ export default function Learn() {
           <span>{today} · Toronto</span>
         </header>
         <ModuleBridge featureId="learn" />
+        <LearningScheduleControl
+          state={store.state}
+          ready={
+            store.ready &&
+            !store.cloudLoading &&
+            !store.cloudChoice &&
+            !!store.cloudHousehold
+          }
+          syncStatus={store.cloudStatus}
+          error={store.error}
+          onChange={(fn, reason) => store.commit(fn, reason, false)}
+          onChanged={() => {
+            setDay("");
+            // Clear a stale day deep link without taking the user out of favorites.
+            history.replaceState(
+              null,
+              "",
+              view === "favorites" ? "/learn#favorites" : "/learn",
+            );
+          }}
+        />
         <div className="learning-toolbar">
           <div role="group" aria-label="心理学视图">
             <button
@@ -291,8 +329,8 @@ export default function Learn() {
                 这一天不在可回看范围内（最近 120
                 天、不早于上线日）；不提前显示未来内容。
               </p>
-              <button className="secondary" onClick={() => setDay(today)}>
-                回到今日
+              <button className="secondary" onClick={() => setDay("")}>
+                回到当前卡片
               </button>
             </section>
           )
@@ -311,6 +349,11 @@ export default function Learn() {
         )}
         <section className="card learning-subscription">
           <h2>每天提醒我</h2>
+          {!automatic && (
+            <p className="learning-paused-note">
+              家庭自动更新已暂停，定时任务不会发送这组提醒。重新开启更新后，也仅向仍有个人订阅的成员发送；你可以在下面关闭个人订阅。
+            </p>
+          )}
           <p>
             本人单独订阅。每天 15:00 UTC（多伦多夏令时 11:00 / 冬令时
             10:00，Vercel
@@ -318,7 +361,7 @@ export default function Learn() {
           </p>
           <button
             className="secondary"
-            disabled={!loaded || busy}
+            disabled={!loaded || busy || (!automatic && !prefs.daily)}
             aria-pressed={prefs.daily}
             onClick={() => void save({ ...prefs, daily: !prefs.daily })}
           >
@@ -359,6 +402,7 @@ export default function Learn() {
           个模型按多伦多日期循环复习，不是每日新发表论文。历史日期与卡片映射固定；回看提供最近
           120 天（不早于上线日）。收藏和提醒按本人账号与家庭隔离存于
           Supabase，不包含在共同账本 JSON 备份中。
+          家庭自动更新开关独立保存在共同设置中，并包含在家庭备份内。
         </p>
       </div>
     </main>

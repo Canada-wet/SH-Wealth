@@ -6,6 +6,11 @@ import {
 } from "./council";
 import { createHash } from "node:crypto";
 import {
+  normalizeCouncilUsage,
+  councilPrice,
+  type CouncilUsage,
+} from "./council-cost";
+import {
   readCouncilStream,
   CouncilStreamError,
   type CouncilProgress,
@@ -116,6 +121,7 @@ export class CouncilProviderError extends Error {
   constructor(
     message: string,
     readonly kind?: "access",
+    public usage?: CouncilUsage,
   ) {
     super(message);
   }
@@ -198,8 +204,6 @@ export async function checkAlibabaConnection() {
     };
   }
 }
-const tokenCount = (v: unknown): number | null =>
-  typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 export async function callCouncilModel(
   model: CouncilModel,
   system: string,
@@ -426,7 +430,13 @@ export async function callCouncilModel(
         : {}),
     };
   }
+  let requestUsage: CouncilUsage = {
+    input: null,
+    output: null,
+    requested: false,
+  };
   try {
+    requestUsage.requested = true;
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
@@ -482,6 +492,15 @@ export async function callCouncilModel(
     const data = isStream
       ? await readCouncilStream(response, onProgress)
       : await boundedJson(response);
+    requestUsage = normalizeCouncilUsage(
+      viaAlibaba ? "compatible" : p,
+      data ?? {},
+    );
+    requestUsage.price = councilPrice(
+      { ...model, connection },
+      requestUsage.input ?? 0,
+      viaAlibaba ? base?.match(/\.([a-z]+-[a-z]+-\d)\.maas\./)?.[1] : undefined,
+    );
     const collection =
       viaAlibaba || !["openai", "meta", "anthropic", "gemini"].includes(p)
         ? data?.choices
@@ -495,8 +514,6 @@ export async function callCouncilModel(
         "服务商响应结构无效，未返回可读取的模型答案；未自动重发。",
       );
     let text: string,
-      incoming: unknown,
-      outgoing: unknown,
       truncated = false;
     if (["openai", "meta"].includes(p)) {
       text = (data.output ?? [])
@@ -508,16 +525,12 @@ export async function callCouncilModel(
         .filter((c: { type: string }) => c.type === "output_text")
         .map((c: { text: string }) => c.text)
         .join("\n");
-      incoming = data.usage?.input_tokens;
-      outgoing = data.usage?.output_tokens;
       truncated = data.status === "incomplete";
     } else if (p === "anthropic") {
       text = (data.content ?? [])
         .filter((c: { type: string }) => c.type === "text")
         .map((c: { text: string }) => c.text)
         .join("\n");
-      incoming = data.usage?.input_tokens;
-      outgoing = data.usage?.output_tokens;
       truncated = data.stop_reason === "max_tokens";
     } else if (p === "gemini") {
       text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -527,16 +540,9 @@ export async function callCouncilModel(
         )
         .map((c: { text: string }) => c.text)
         .join("\n");
-      incoming = data.usageMetadata?.promptTokenCount;
-      outgoing =
-        data.usageMetadata?.totalTokenCount == null
-          ? null
-          : data.usageMetadata.totalTokenCount - (tokenCount(incoming) ?? 0);
       truncated = data.candidates?.[0]?.finishReason === "MAX_TOKENS";
     } else {
       text = data.choices?.[0]?.message?.content;
-      incoming = data.usage?.prompt_tokens;
-      outgoing = data.usage?.completion_tokens;
       truncated = data.choices?.[0]?.finish_reason === "length";
     }
     if (typeof text !== "string" || !text.trim())
@@ -552,29 +558,48 @@ export async function callCouncilModel(
     return {
       answer,
       usage: {
-        input: tokenCount(incoming),
-        output: tokenCount(outgoing),
+        ...requestUsage,
         truncated: truncated || normalized.length > answer.length,
         ...(data.interrupted ? { interrupted: true } : {}),
       },
     };
   } catch (e) {
-    if (e instanceof CouncilProviderError) throw e;
-    if (e instanceof CouncilStreamError)
-      throw new CouncilProviderError(e.message);
+    if (e instanceof CouncilProviderError) {
+      e.usage ??= requestUsage;
+      throw e;
+    }
+    if (e instanceof CouncilStreamError) {
+      if (e.usage) {
+        requestUsage = normalizeCouncilUsage("compatible", { usage: e.usage });
+        requestUsage.price = councilPrice(
+          { ...model, connection },
+          requestUsage.input ?? 0,
+          viaAlibaba
+            ? base?.match(/\.([a-z]+-[a-z]+-\d)\.maas\./)?.[1]
+            : undefined,
+        );
+      }
+      throw new CouncilProviderError(e.message, undefined, requestUsage);
+    }
     if (
       e instanceof Error &&
       (e.name === "TimeoutError" || e.name === "AbortError")
     )
       throw new CouncilProviderError(
         "已等待 4 分钟仍未完成，已停止接收；服务商可能已计费，未自动重发。可稍后明确选择补问该模型。",
+        undefined,
+        requestUsage,
       );
     if (e instanceof SyntaxError)
       throw new CouncilProviderError(
         "服务商返回了无法解析的响应，而不是有效答案；未自动重发。",
+        undefined,
+        requestUsage,
       );
     throw new CouncilProviderError(
       "连接在生成途中中断；服务商可能已计费，未自动重发。请先重新读取归档，确认后可补问该模型。",
+      undefined,
+      requestUsage,
     );
   }
 }

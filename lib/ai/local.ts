@@ -1,6 +1,7 @@
 import { mutationRequested, type AssistantAction } from "../advisor-actions";
 import { growthAnalysis, growthTasks } from "../growth";
 import { portfolioInsights } from "../portfolio-links";
+import { freedomSummary, parseFreedomPlan, FREEDOM_KEY } from "../freedom";
 import {
   contributionSummary,
   money,
@@ -76,6 +77,15 @@ export function localAdvice(message: string, state: WealthState) {
       answer:
         "本地助手可执行明确的账户修改，例如「把共同储蓄的价值改为 50000」「把共同储蓄本年回报改为 -2.5%」「记录 Lin 向共同储蓄投入 1000」。请使用已有账户的准确名称，或通过表格录入。复杂规划请在模型选项连接外部 AI。",
       actions,
+    };
+  }
+  if (/财务自由|提取率|FIRE|退休生活费/i.test(message)) {
+    const p = parseFreedomPlan(state.plan.values[FREEDOM_KEY]);
+    return {
+      answer: p
+        ? `**已保存的财务自由情景**\n\n${freedomSummary(state, p)}\n\n**下一步**：核对未记支出和资金可支用条件，比较2.5%–4%提取率而非寻找保证值。养老金未起领前须另做桥接计划，季度复盘时复核收入、税费和支出变化。\n\n只读规则计算，未修改资产或执行交易。`
+        : "还没有保存财务自由计划。请到「增长行动 → 财务自由」确认生活费、可支用账户及时间假设；不把全部净资产或自住房直接当退休本金。",
+      actions: [],
     };
   }
   if (/持仓|市场关联|外币敞口|portfolio/i.test(message))

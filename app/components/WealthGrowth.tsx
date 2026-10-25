@@ -24,6 +24,7 @@ import {
 } from "@/lib/growth";
 import { financialFingerprint } from "@/lib/advisor-preview";
 import { GROWTH_TASKS } from "@/lib/growth-schema";
+import FinancialFreedom from "./FinancialFreedom";
 type Draft = {
   monthlySaving: string;
   longTermMonthly: string;
@@ -71,6 +72,14 @@ export default function WealthGrowth({
         ?.scrollIntoView({ block: "start", behavior: "instant" }),
     );
   };
+  useEffect(() => {
+    const open = () => {
+      if (window.location.hash === "#financial-freedom") changeView("freedom");
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => window.removeEventListener("hashchange", open);
+  }, []);
   const [draft, setDraft] = useState<Draft>(() =>
     draftOf(state.preferences.growthPlan ?? defaultGrowthPlan(state)),
   );
@@ -248,6 +257,7 @@ export default function WealthGrowth({
         {[
           ["actions", "本轮行动"],
           ["scenario", "增长情景"],
+          ["freedom", "财务自由"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -259,8 +269,21 @@ export default function WealthGrowth({
           </button>
         ))}
         <span>
-          {saved ? "共享计划 · " + syncStatus : "规则洞察 · 尚未保存计划"}
+          {view === "freedom"
+            ? "独立情景 · 不改变账本"
+            : saved
+              ? "共享计划 · " + syncStatus
+              : "规则洞察 · 尚未保存计划"}
         </span>
+      </div>
+      <div id="financial-freedom" hidden={view !== "freedom"}>
+        <FinancialFreedom
+          state={state}
+          ready={ready}
+          syncStatus={syncStatus}
+          onChange={onChange}
+          onDiscuss={onDiscuss}
+        />
       </div>
       {error && (
         <p className="error-banner" role="alert">

@@ -30,7 +30,11 @@ function db() {
     status: string[] = [];
   let subscribed = true,
     allowed = true,
-    failClaim = false;
+    failClaim = false,
+    enabled = true,
+    scheduleError = false,
+    noSchedule = false,
+    pauseAfterScan = false;
   const rpc = vi.fn(async (_name: string, row: unknown) => {
     const key = JSON.stringify(row);
     if (failClaim) return { error: { message: "offline" }, data: null };
@@ -41,18 +45,38 @@ function db() {
   const admin = {
     auth: {
       admin: {
-        getUserById: async () => ({
-          data: {
-            user: {
-              email: allowed ? "henrywhy233@gmail.com" : "outsider@example.com",
-              email_confirmed_at: "2026-01-01",
+        getUserById: async () => {
+          if (pauseAfterScan) enabled = false;
+          return {
+            data: {
+              user: {
+                email: allowed
+                  ? "henrywhy233@gmail.com"
+                  : "outsider@example.com",
+                email_confirmed_at: "2026-01-01",
+              },
             },
-          },
-        }),
+          };
+        },
       },
     },
     rpc,
     from: (table: string) => {
+      if (table === "household_documents") {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({
+            error: scheduleError ? {} : null,
+            data: {
+              schedule: noSchedule
+                ? undefined
+                : { version: 1, enabled, pausedDay: "2026-10-25" },
+            },
+          }),
+        };
+        return chain;
+      }
       if (table === "wealth_learning_deliveries")
         return {
           update: ({ status: s }: { status: string }) => ({
@@ -96,9 +120,34 @@ function db() {
     unsubscribe: () => (subscribed = false),
     deny: () => (allowed = false),
     failClaim: () => (failClaim = true),
+    pause: () => (enabled = false),
+    pauseAfterScan: () => (pauseAfterScan = true),
+    missingSchedule: () => (noSchedule = true),
+    failSchedule: () => (scheduleError = true),
   };
 }
 const day = new Date("2026-10-15T16:00:00Z");
+it("默认缺少开关或明确暂停都不投递、不认领，读取失败也不冒充开启", async () => {
+  for (const mode of ["pause", "missingSchedule", "failSchedule"] as const) {
+    const d = db();
+    d[mode]();
+    const result = await deliverDailyLearning(d.admin, day);
+    expect(result.accepted).toBe(0);
+    expect(result.failures).toBe(mode === "failSchedule" ? 1 : 0);
+    expect(d.rpc).not.toHaveBeenCalled();
+  }
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(mocks.channel).not.toHaveBeenCalled();
+});
+it("扫描候选后暂停，发送前再次读取家庭开关，不用旧扫描发通知", async () => {
+  const d = db();
+  d.pauseAfterScan();
+  const result = await deliverDailyLearning(d.admin, day);
+  expect(result).toEqual({ accepted: 0, skipped: 2, failures: 0 });
+  expect(d.rpc).not.toHaveBeenCalled();
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(mocks.channel).not.toHaveBeenCalled();
+});
 it("每天每收件通道先原子认领，重复执行不重复投递，不影响周报 last_alert", async () => {
   const d = db();
   expect(await deliverDailyLearning(d.admin, day)).toEqual({

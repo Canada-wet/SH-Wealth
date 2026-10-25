@@ -4,7 +4,14 @@ export type CouncilProgress = {
   preview?: string;
   seq?: number;
 };
-export class CouncilStreamError extends Error {}
+export class CouncilStreamError extends Error {
+  constructor(
+    message: string,
+    public usage?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
 export async function readCouncilStream(
   response: Response,
   onProgress?: (p: CouncilProgress) => void,
@@ -80,7 +87,16 @@ export async function readCouncilStream(
     if (pending.trim()) event(pending);
     interrupted = !terminal && !ended;
   } catch (e) {
-    if (!text.trim()) throw e;
+    if (!text.trim()) {
+      if (e instanceof CouncilStreamError) {
+        e.usage ??= usage;
+        throw e;
+      }
+      throw new CouncilStreamError(
+        "连接在生成途中中断；可能已计费，未自动重发。",
+        usage,
+      );
+    }
     interrupted = true;
   } finally {
     await reader.cancel().catch(() => {});
@@ -88,6 +104,7 @@ export async function readCouncilStream(
   if (!text.trim())
     throw new CouncilStreamError(
       "推理已结束但没有返回正文，可能耗尽推理预算或被内容策略拦截；未自动重发。",
+      usage,
     );
   return {
     choices: [{ message: { content: text }, finish_reason: finish }],

@@ -194,6 +194,11 @@ it("公开搜索仅发确认词，不附对话；必须实际联网并提供真�
     expect(body.max_tool_calls).toBe(1);
     return Response.json({
       status: "completed",
+      usage: {
+        input_tokens: 200,
+        output_tokens: 100,
+        input_tokens_details: { cached_tokens: 20 },
+      },
       output: [
         { type: "web_search_call", status: "completed" },
         {
@@ -216,9 +221,14 @@ it("公开搜索仅发确认词，不附对话；必须实际联网并提供真�
     });
   });
   vi.stubGlobal("fetch", fetcher);
-  expect(
-    (await councilPublicSearch("approved public study")).sources[0].url,
-  ).toContain("nature.com");
+  const result = await councilPublicSearch("approved public study");
+  expect(result.sources[0].url).toContain("nature.com");
+  expect(result.billing).toMatchObject({
+    version: 1,
+    searchCalls: 1,
+    perSearchUSD: 0.01,
+    usage: { input: 200, output: 100, cachedInput: 20, requested: true },
+  });
   fetcher.mockResolvedValueOnce(
     Response.json({ status: "completed", output: [] }),
   );

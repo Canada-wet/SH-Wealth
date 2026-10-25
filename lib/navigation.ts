@@ -79,10 +79,11 @@ export const FEATURES: Feature[] = [
   {
     id: "growth",
     title: "增长行动",
-    description: "让现金流、目标和行动形成闭环",
+    description: "增长情景、财务自由与可跟进的家庭行动",
     href: "/#growth",
     group: "家庭财富",
-    keywords: "目标 goal wealth growth 财务自由 储蓄",
+    keywords:
+      "目标 goal wealth growth 财务自由 FIRE 退休 480 提取率 教育 医疗 储蓄",
     icon: "target",
     primary: true,
     related: ["cashflow", "market-wealth", "quarterly-review"],
@@ -239,7 +240,8 @@ export const FEATURES: Feature[] = [
     description: "把一个研究模型用于投资与生活",
     href: "/learn",
     group: "思考与成长",
-    keywords: "psychology learning 心理 决策 工作 生活 收藏 认知",
+    keywords:
+      "psychology learning 心理 决策 工作 生活 收藏 认知 每日更新 重新开启 暂停",
     icon: "book",
     primary: true,
     related: ["council", "quarterly-review", "lifestyle"],

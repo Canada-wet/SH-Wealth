@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { lessonForDay } from "./learning";
+import { learningUpdatesEnabled } from "./learning-schedule";
 import { torontoDay } from "./market-briefing";
 import { allowedEmail } from "./access";
 import { pushReady, sendPush } from "./push";
@@ -24,7 +25,25 @@ export async function deliverDailyLearning(
     .eq("daily", true);
   if (prefs.error) throw Error("Learning preferences unavailable");
   const result = { accepted: 0, skipped: 0, failures: 0 };
+  const active = async (household: string) => {
+    const row = await admin
+      .from("household_documents")
+      .select("schedule:document->preferences->learningSchedule")
+      .eq("household_id", household)
+      .maybeSingle();
+    if (row.error) throw Error("Learning schedule unavailable");
+    return learningUpdatesEnabled(row.data?.schedule);
+  };
   for (const pref of prefs.data ?? []) {
+    try {
+      if (!(await active(pref.household_id))) {
+        result.skipped++;
+        continue;
+      }
+    } catch {
+      result.failures++;
+      continue;
+    }
     const user = await admin.auth.admin.getUserById(pref.user_id);
     if (
       user.error ||
@@ -39,6 +58,16 @@ export async function deliverDailyLearning(
       destination: string,
       send: () => Promise<unknown>,
     ) => {
+      // Recheck immediately before claiming; don't rely on the candidate scan's old setting.
+      try {
+        if (!(await active(pref.household_id))) {
+          result.skipped++;
+          return;
+        }
+      } catch {
+        result.failures++;
+        return;
+      }
       const destination_hash = createHash("sha256")
         .update(destination)
         .digest("hex");

@@ -19,6 +19,7 @@ import {
   type GrowthTaskId,
 } from "./growth-schema";
 import { financialFingerprint } from "./advisor-preview";
+import { freedomContext } from "./freedom";
 export type { GrowthPlan, GrowthTaskId } from "./growth-schema";
 
 export function defaultGrowthPlan(
@@ -356,6 +357,7 @@ export function growthContext(state: WealthState, now = new Date()) {
   const plan = state.preferences.growthPlan;
   return {
     savedScenario: plan ? { ...plan, tasks: undefined } : null,
+    financialFreedom: freedomContext(state),
     analysis: plan ? growthAnalysis(state, plan, now) : null,
     priorities: growthTasks(state, now).map(
       ({ title, body, next, status }) => ({ title, body, next, status }),

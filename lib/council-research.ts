@@ -1,4 +1,5 @@
 import type { CouncilRun } from "./council";
+import type { CouncilUsage } from "./council-cost";
 export type CouncilResearch = {
   depth: "standard" | "deep";
   tools: boolean;
@@ -71,7 +72,17 @@ export type CouncilToolReceipt = {
   checkedAt: string;
   queryId?: number;
   reusedFrom?: string;
+  requested?: boolean;
   sources?: { title: string; url: string }[];
+  billing?: {
+    version: 1;
+    model: string;
+    usage: CouncilUsage;
+    searchCalls: number | null;
+    perSearchUSD: number;
+    source: string;
+    checkedAt: string;
+  };
 };
 export const INVESTIGATION_PROTOCOL = `本阶段只输出一个 JSON 对象，不输出 Markdown 或私有思维链：
 {"focus":"针对哪些具体观点编号的哪项可证伪主张核查，为什么会改变决策（最多800字）","requests":[...]}。

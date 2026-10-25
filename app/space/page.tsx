@@ -21,6 +21,10 @@ import { money } from "@/lib/wealth";
 import { homeSnapshot } from "@/lib/home-space";
 import { todayToronto } from "@/lib/household-workspace";
 import { lessonForDay } from "@/lib/learning";
+import {
+  learningDisplayDay,
+  learningUpdatesEnabled,
+} from "@/lib/learning-schedule";
 import { continueFeatures } from "@/lib/navigation";
 import { useNavigation } from "../components/NavigationProvider";
 import MarketNavigator from "../components/MarketNavigator";
@@ -121,7 +125,10 @@ export default function FamilySpace() {
         }).format(new Date(snapshot.financialAt))
       : null;
   const recent = continueFeatures(nav.entries, 3);
-  const lesson = now ? lessonForDay(todayToronto(now)) : null;
+  const lessonDay = now
+    ? learningDisplayDay(state.preferences.learningSchedule, todayToronto(now))
+    : "";
+  const lesson = loaded && lessonDay ? lessonForDay(lessonDay) : null;
   return (
     <main>
       <MarketNavigator active="space" />
@@ -412,7 +419,10 @@ export default function FamilySpace() {
             </span>
             <div>
               <p className="space-kicker">
-                每天一点新视角 · 研究精选，不是今日新发表论文
+                {learningUpdatesEnabled(state.preferences.learningSchedule)
+                  ? "每天一点新视角"
+                  : `自动更新已暂停 · 保留 ${lessonDay} 卡片`}{" "}
+                · 研究精选，不是今日新发表论文
               </p>
               <h2>{lesson.title}</h2>
               <p>{lesson.finding}</p>

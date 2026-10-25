@@ -3,6 +3,8 @@ import { validGrowthPlan } from "./growth-schema";
 import { validPortfolioLinks } from "./portfolio-links";
 import { validQuarterly } from "./quarterly-schema";
 import { validLifestyle } from "./lifestyle-schema";
+import { parseFreedomPlan, FREEDOM_KEY } from "./freedom-schema";
+import { validLearningSchedule } from "./learning-schedule";
 export type Owner = "joint" | "first" | "second" | string;
 export type Asset = {
   id: string;
@@ -90,6 +92,7 @@ export type WealthState = {
     portfolioLinks?: import("./portfolio-links").PortfolioLink[];
     quarterlyReviews?: import("./quarterly-schema").QuarterlyReviews;
     lifestyle?: import("./lifestyle-schema").Lifestyle;
+    learningSchedule?: import("./learning-schedule").LearningSchedule;
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -467,6 +470,11 @@ export function alertsFor(state: WealthState) {
 }
 export function validateState(raw: unknown): asserts raw is WealthState {
   if (
+    (raw as WealthState)?.preferences?.learningSchedule !== undefined &&
+    !validLearningSchedule((raw as WealthState).preferences.learningSchedule)
+  )
+    throw new Error("每日卡片更新设置无效。");
+  if (
     (raw as WealthState)?.preferences?.lifestyle !== undefined &&
     !validLifestyle((raw as WealthState).preferences.lifestyle)
   )
@@ -611,6 +619,7 @@ export function validateState(raw: unknown): asserts raw is WealthState {
     Object.values(state.plan.checks).some((value) => typeof value !== "boolean")
   )
     throw new Error("规划数据无效。");
+  parseFreedomPlan(state.plan.values[FREEDOM_KEY]);
   if (
     !Array.isArray(state.history) ||
     state.history.some(

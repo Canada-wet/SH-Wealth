@@ -1,6 +1,106 @@
 .council-page {
   max-width: 1560px;
 }
+.council-costs {
+  min-width: 0;
+}
+.council-costs .council-section-label {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.council-costs .council-section-label label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.council-costs select {
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px;
+}
+.council-costs .council-result-metrics {
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+}
+.council-costs .council-result-metrics strong {
+  font-size: clamp(15px, 1.6vw, 22px);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.council-cost-switch {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+.council-cost-switch button[aria-pressed="true"] {
+  background: #eaf1eb;
+  border-color: #365b4d;
+}
+.council-cost-bars {
+  display: grid;
+  gap: 18px;
+  margin: 20px 0;
+}
+.council-cost-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.council-cost-track {
+  height: 7px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #edf0e9;
+  margin: 8px 0 3px;
+}
+.council-cost-track i {
+  display: block;
+  height: 100%;
+  background: #365b4d;
+  border-radius: inherit;
+}
+.council-cost-row small {
+  color: #748276;
+  font-size: 12px;
+}
+.council-costs summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.council-cost-table {
+  overflow-x: auto;
+}
+.council-cost-table table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.council-cost-table :is(th, td) {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 10px;
+  border-bottom: 1px solid #e0e7de;
+  line-height: 1.8;
+}
+.council-cost-table caption {
+  text-align: left;
+  color: #748276;
+  padding: 10px;
+}
+@media (max-width: 600px) {
+  .council-costs .council-result-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .council-costs .council-result-metrics > div:first-child {
+    grid-column: 1/-1;
+  }
+  .council-costs select {
+    font-size: 16px;
+  }
+}
 .council-page button,
 .council-page select,
 .council-page textarea,

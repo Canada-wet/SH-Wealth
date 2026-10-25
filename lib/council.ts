@@ -18,6 +18,7 @@ import {
   councilWorkflowStage,
   type CouncilWorkflow,
 } from "./council-workflow";
+import { councilCostExport, type CouncilUsage } from "./council-cost";
 export type CouncilProvider =
   | "openai"
   | "anthropic"
@@ -174,12 +175,7 @@ export type CouncilStep = {
   error: string;
   error_kind?: "access" | null;
   tool_receipts?: CouncilToolReceipt[];
-  usage: {
-    input: number | null;
-    output: number | null;
-    truncated?: boolean;
-    interrupted?: boolean;
-  };
+  usage: CouncilUsage;
   started_at: string | null;
   finished_at: string | null;
 };
@@ -632,6 +628,7 @@ export function councilExport(run: CouncilRun) {
           : "";
       })
       .join("") +
+    councilCostExport(run) +
     run.steps
       .filter((s) => s.status !== "pending")
       .map(

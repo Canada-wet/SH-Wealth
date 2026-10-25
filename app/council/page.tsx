@@ -34,6 +34,7 @@ import "./council.css";
 import Attachments, { AttachmentList } from "./Attachments";
 import Followup from "./Followup";
 import Results from "./Results";
+import Costs from "./Costs";
 import ResearchSettings from "./ResearchSettings";
 import WorkflowEditor from "./WorkflowEditor";
 import {
@@ -1241,6 +1242,7 @@ function CouncilWorkspace({
                         );
                     }}
                   />
+                  <Costs run={run} round={round} />
                   <DecisionMemo
                     key={run.id}
                     run={run}

@@ -7,7 +7,11 @@ import {
   type CouncilResearch,
   type CouncilToolReceipt,
 } from "./council-research";
-import { councilPublicSearch, councilLocalTool } from "./council-tools";
+import {
+  councilPublicSearch,
+  councilLocalTool,
+  CouncilSearchError,
+} from "./council-tools";
 import type { CouncilProgress } from "./council-stream";
 import {
   validateCouncilWorkflow,
@@ -219,12 +223,11 @@ export async function advanceCouncil(
   let answer = "",
     error = "",
     errorKind: "access" | undefined,
-    usage: {
-      input: number | null;
-      output: number | null;
-      truncated?: boolean;
-      interrupted?: boolean;
-    } = { input: null, output: null };
+    usage: import("./council-cost").CouncilUsage = {
+      input: null,
+      output: null,
+      requested: false,
+    };
   const openings = run.steps.filter(
     (s) =>
       (s.round ?? 0) === (step.round ?? 0) &&
@@ -378,6 +381,7 @@ export async function advanceCouncil(
                   status: "failed",
                   input: research.publicQueries[request.queryId],
                   output: "用户已暂停或停止，本次未发起联网请求。",
+                  requested: false,
                   checkedAt: new Date().toISOString(),
                   queryId: request.queryId,
                 });
@@ -406,7 +410,9 @@ export async function advanceCouncil(
                       checkedAt: new Date().toISOString(),
                     },
                   );
-                } catch {
+                } catch (e) {
+                  if (e instanceof CouncilSearchError)
+                    receipt.billing = e.billing;
                   receipt.status = "failed";
                   receipt.output =
                     "联网未完成或来源无效；可能已计费，未自动重发，不能视为事实核验。";
@@ -420,6 +426,7 @@ export async function advanceCouncil(
     }
   } catch (e) {
     if (e instanceof CouncilError) throw e; // Failed durable intent: leave claim uncertain, never silently continue.
+    if (e instanceof CouncilProviderError && e.usage) usage = e.usage;
     errorKind = e instanceof CouncilProviderError ? e.kind : undefined;
     error =
       e instanceof CouncilProviderError
