@@ -12,6 +12,16 @@ import {
   EMPTY_COUNCIL_MEMO,
   type CouncilMemo,
 } from "../../lib/council-library";
+async function openCouncil(page: Page) {
+  await page.goto("/council");
+  // The SSR form is visible before hydration. Default participants are only
+  // selected after the initial API response and mount effect have completed.
+  const selected = page.locator(
+    ".council-model-grid input[type=checkbox]:checked",
+  );
+  await expect(selected).toHaveCount(2);
+  await expect(selected.first()).toBeEnabled();
+}
 async function councilFixture(
   page: Page,
   { storage = true, interrupt = false, alibaba = false } = {},
@@ -278,7 +288,7 @@ test("自定义环节增删排序、专职模型、重复质询、历史重读�
   test.setTimeout(60000);
   await authenticate(page);
   const fixture = await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   const composer = page.locator(".council-composer");
   // SSR controls can be visible before hydration. Selected defaults prove the
   // initial API response and mount effect have completed before we type.
@@ -439,7 +449,7 @@ test("研讨库正文搜索、私密笔记、置顶、归档恢复、刷新与�
       finished_at: "2026-10-19T16:00:00Z",
     })),
   });
-  await page.goto("/council");
+  await openCouncil(page);
   const rail = page.getByRole("complementary", { name: "我的研讨历史" });
   const showLibrary = async () => {
     const button = rail.getByRole("button", { name: "查看历史" });
@@ -535,7 +545,7 @@ test("深入研讨默认五阶段，公开检索需另确认，回执、答辩�
   test.setTimeout(55000);
   await authenticate(page);
   const fixture = await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   await expect(page.getByLabel("研讨深度", { exact: true })).toHaveValue(
     "deep",
   );
@@ -674,7 +684,7 @@ test("浏览器真实 ReadableStream 逐段显示临时正文，只有 result �
       );
     };
   });
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -701,7 +711,7 @@ test("圆桌完整流程、可选裁判、刷新回看与导出，桌面和手�
   test.setTimeout(45000);
   await authenticate(page);
   const fixture = await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await expect(
     page.getByRole("heading", { name: "多模型研讨", exact: true }),
@@ -798,7 +808,7 @@ test("研讨结束后只问一位模型并可选裁判，轮次与材料刷新�
 }) => {
   await authenticate(page);
   const fixture = await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -857,7 +867,7 @@ test("追问默认相互辩论，三阶段及裁判可回看，直接回应混�
   test.setTimeout(45000);
   await authenticate(page);
   const fixture = await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -970,7 +980,7 @@ test("图片、PDF、DOCX 和文字本机预览，检查看图兼容，归档后
 }) => {
   await authenticate(page);
   await councilFixture(page);
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -1098,7 +1108,7 @@ test("图片、PDF、DOCX 和文字本机预览，检查看图兼容，归档后
 test("中断后刷新不会重扣请求；明确跳过与无裁判结论", async ({ page }) => {
   await authenticate(page);
   const fixture = await councilFixture(page, { interrupt: true });
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -1131,7 +1141,7 @@ test("中断后刷新不会重扣请求；明确跳过与无裁判结论", async
 test("云端未安装时不允许启动，配置与型号解释仍可查看", async ({ page }) => {
   await authenticate(page);
   const fixture = await councilFixture(page, { storage: false });
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await page
     .getByLabel("问题与已知条件")
@@ -1151,7 +1161,7 @@ test("同一百炼渠道可选 Qwen / Kimi / GLM；映射、连接检查及历�
 }) => {
   await authenticate(page);
   const f = await councilFixture(page, { alibaba: true });
-  await page.goto("/council");
+  await openCouncil(page);
   await page.getByLabel("研讨深度", { exact: true }).selectOption("standard");
   await expect(
     page.getByRole("checkbox", { name: /Qwen 3.8 Flash/ }),
