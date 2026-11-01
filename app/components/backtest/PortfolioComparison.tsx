@@ -334,6 +334,7 @@ export default function PortfolioComparison({
             <label>
               统一策略
               <select
+                aria-label="统一策略"
                 value={shelf.strategy}
                 onChange={(e) =>
                   update({
@@ -352,6 +353,7 @@ export default function PortfolioComparison({
             <label>
               资金与费用基准
               <select
+                aria-label="资金与费用基准"
                 value={shelf.baseline}
                 disabled={!selected.length}
                 onChange={(e) => update({ ...shelf, baseline: e.target.value })}

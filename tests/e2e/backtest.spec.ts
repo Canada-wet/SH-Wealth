@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { emptyState } from "../../lib/wealth";
 import { authenticate, cleanupAuthenticated } from "./auth-helper";
-import { defaultBacktest } from "../../lib/backtest-schema";
+import { defaultBacktest, backtestToday } from "../../lib/backtest-schema";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ page }) => {
@@ -268,6 +268,7 @@ test("不同组合完整对照：复制改权重、同策略与基准、三种�
       .selectOption(chart);
     await expect(results.locator(".recharts-line-curve")).toHaveCount(2);
   }
+  await results.locator(".bt-chart").hover();
   const options = page
     .getByLabel("资金与费用基准", { exact: true })
     .locator("option");
@@ -345,7 +346,7 @@ test("Collection配置云端往返、搜索与复制复用，官方参考仅手�
           {
             id: "FXUSDCAD",
             value: 1 / 1.38,
-            date: new Date().toISOString().slice(0, 10),
+            date: backtestToday(),
             unit: " / CAD",
             source:
               "https://www.bankofcanada.ca/rates/exchange/daily-exchange-rates/",

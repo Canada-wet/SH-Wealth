@@ -32,6 +32,7 @@ vi.mock("../lib/backtest-cache", () => ({
 }));
 import { backtestCache, portfolioShelfCache } from "../lib/backtest-cache";
 import { syntheticBacktest } from "../lib/backtest-import";
+import { backtestToday } from "../lib/backtest-schema";
 import { changeBacktestLab, EMPTY_BACKTEST_LAB } from "../lib/backtest-context";
 import { stableJSON } from "../lib/cloud-plan";
 import BacktestWorkspace from "../app/components/backtest/BacktestWorkspace";
@@ -513,7 +514,7 @@ it("官方汇率仅显式读取并在采用后改规划参数，不改资金或�
       fx: [
         {
           id: "FXUSDCAD",
-          date: new Date().toISOString().slice(0, 10),
+          date: backtestToday(),
           value: 1 / 1.38,
           unit: " / CAD",
           source:

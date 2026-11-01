@@ -37,6 +37,10 @@
 .bt-page [hidden] {
   display: none !important;
 }
+.bt-page .bt-chart {
+  overflow: hidden;
+  min-width: 0;
+}
 .bt-collection-filter {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -60,6 +64,10 @@
 .bt-collection-filter small {
   grid-column: 1/-1;
   color: #7b8a71;
+}
+.bt-collection-filter input,
+.bt-collection-filter select {
+  min-height: 44px;
 }
 .bt-collection-card {
   padding: 22px;
@@ -275,6 +283,8 @@
   content: "▾";
 }
 .bt-page .bt-focused-layout .bt-data {
+  width: 100%;
+  min-width: 0;
   max-width: 1000px;
   margin: 0 auto;
   padding: 28px;
@@ -716,6 +726,7 @@
 }
 .bt-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   min-width: 0;
 }
@@ -750,7 +761,7 @@
   background: #fbfcf8;
   color: #264637;
   border-radius: 9px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 10px 11px;
   font: inherit;
   width: 100%;

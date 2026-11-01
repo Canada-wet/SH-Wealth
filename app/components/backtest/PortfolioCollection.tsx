@@ -78,6 +78,7 @@ export default function PortfolioCollection({
         <label>
           组合计价币种
           <select
+            aria-label="组合计价币种"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
           >
@@ -90,9 +91,12 @@ export default function PortfolioCollection({
           {plans.length} / {lab.saved.length} 个 · 最近保存优先
         </small>
       </div>
-      <p className="bt-help">
-        配置沿用原家庭云端同步，是否保存成功以页顶状态为准。Collection不重复存真实资产或聊天；行情仍在本设备，跨设备请用研究包／对照包。对照快照与可编辑配置分开管理。
-      </p>
+      <details className="bt-details">
+        <summary>配置云端同步 · 行情仅本机</summary>
+        <p className="bt-help">
+          是否保存成功以页顶状态为准。Collection不重复存真实资产或聊天；行情跨设备请用研究包／对照包。对照快照与可编辑配置分开管理。
+        </p>
+      </details>
       {!plans.length && (
         <div className="card bt-collection-empty">
           <FolderHeart size={28} />
@@ -104,7 +108,7 @@ export default function PortfolioCollection({
           </p>
         </div>
       )}
-      <div className="bt-shelf-grid">
+      <div className="bt-portfolio-cards">
         {plans.map((p) => (
           <article className="card bt-collection-card" key={p.id}>
             <div className="bt-row">
