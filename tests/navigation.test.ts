@@ -36,7 +36,7 @@ const entries: NavEntry[] = [
 it("唯一固定目录覆盖所有主页面与功能；SQL 许可列表与前端完全对齐", () => {
   expect(new Set(FEATURES.map((f) => f.id)).size).toBe(FEATURES.length);
   expect(new Set(FEATURES.map((f) => f.href)).size).toBe(FEATURES.length);
-  const sql = readFileSync("supabase/navigation.sql", "utf8");
+  const sql = readFileSync("supabase/backtest-navigation.sql", "utf8");
   const ids = sql
     .match(/check\(feature_id in \(([^)]+)\)\)/)![1]
     .replaceAll("'", "")
@@ -44,7 +44,7 @@ it("唯一固定目录覆盖所有主页面与功能；SQL 许可列表与前端
   expect(ids.sort()).toEqual(FEATURES.map((f) => f.id).sort());
   for (const f of FEATURES) {
     expect(f.href).toMatch(
-      /^\/(?:#|space|markets|council|learn|lifestyle|updates)/,
+      /^\/(?:#|space|markets|backtest|council|learn|lifestyle|updates)/,
     );
     expect(f.href).not.toContain("?");
     for (const link of relatedFeatures(f.id)) expect(FEATURES).toContain(link);
@@ -79,6 +79,7 @@ it("按中英文关键词、多个词与分类查找，精准标题优先；空�
   for (const [query, id] of [
     ["汇率", "fx-research"],
     ["CPI", "macro-research"],
+    ["回测", "backtest"],
     ["备份", "settings"],
     ["语音", "advisor"],
     ["DJ 编排", "sets"],
@@ -108,11 +109,12 @@ it("深链接只接受目录项，不把私密 run/day 参数存为搜索记录"
   );
   expect(featureForLocation("/login", "")).toBeUndefined();
 });
-it("空间目录包含六个根空间，财富深链归入财富总览，不改动既有入口", () => {
+it("空间目录包含独立回测空间，财富深链归入财富总览，不改动既有入口", () => {
   expect(SPACE_ROOT_IDS).toEqual([
     "space",
     "overview",
     "markets",
+    "backtest",
     "council",
     "learn",
     "lifestyle",
@@ -147,6 +149,7 @@ it("家庭首页始终排首位，空间按最近使用和自身置顶排序，�
     "markets",
     "council",
     "overview",
+    "backtest",
     "learn",
     "lifestyle",
   ]);
@@ -178,6 +181,7 @@ it("家庭首页始终排首位，空间按最近使用和自身置顶排序，�
     "overview",
     "markets",
     "council",
+    "backtest",
   ]);
 });
 it("继续使用只展示真实访问过的具体入口，忽略置顶、不合并父级、不包含首页", () => {

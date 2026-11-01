@@ -177,7 +177,8 @@ describe("行动的独立数据与来源边界", () => {
   });
   it("SQL只允许目录固定来源；版本、私有源引用与权限边界存在", () => {
     const sql = readFileSync("supabase/actions.sql", "utf8");
-    for (const feature of FEATURES) expect(sql).toContain(`'${feature.id}'`);
+    const allowlists=sql+readFileSync("supabase/backtest-navigation.sql","utf8");
+    for (const feature of FEATURES) expect(allowlists).toContain(`'${feature.id}'`);
     expect(sql).toContain("expected_version");
     expect(sql).toContain("item.created_by=auth.uid()");
     expect(sql).toContain("not(feature='council' and scope='household')");

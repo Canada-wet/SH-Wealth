@@ -115,6 +115,13 @@
       "sha256": "0e068a541ed8780f19937cb8fdf9345108c6e39364f7bdbbc52a5a96b61b0ec6",
       "dependsOn": ["010-council"],
       "kind": "additive"
+    },
+    {
+      "id": "017-backtest-navigation",
+      "path": "supabase/backtest-navigation.sql",
+      "sha256": "75e56293d69b6e45c1ad764b4d9c0fd2dab46a6af02fa462999a0cabb9c92dcc",
+      "dependsOn": ["013-navigation", "014-actions"],
+      "kind": "additive"
     }
   ]
 }

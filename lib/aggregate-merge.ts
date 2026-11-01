@@ -20,7 +20,10 @@ const GROUPS = {
   },
   chat: { root: ["messages", "chatCurrent", "chatArchives"], preferences: [] },
   lifestyle: { root: [], preferences: ["lifestyle"] },
-  market: { root: [], preferences: ["marketWatchlist", "marketResearch"] },
+  market: {
+    root: [],
+    preferences: ["marketWatchlist", "marketResearch", "backtestLab"],
+  },
   settings: {
     root: ["readAlerts"],
     preferences: [

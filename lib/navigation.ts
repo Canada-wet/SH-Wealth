@@ -130,7 +130,19 @@ export const FEATURES: Feature[] = [
     keywords: "market 股票 etf 汇率 投资 dashboard",
     icon: "globe",
     primary: true,
-    related: ["market-wealth", "growth", "council"],
+    related: ["backtest", "market-wealth", "growth", "council"],
+  },
+  {
+    id: "backtest",
+    title: "投资回测",
+    description: "构建股票ETF组合，比较定投、持有与再平衡的历史风险收益",
+    href: "/backtest",
+    group: "市场投资",
+    keywords:
+      "backtest 回测 DCA buy hold Sharpe CAGR XIRR 最大回撤 策略 比较 分红",
+    icon: "chart",
+    primary: true,
+    related: ["markets", "growth", "cashflow", "council"],
   },
   {
     id: "watchlist-pulse",
@@ -374,6 +386,7 @@ export const SPACE_ROOT_IDS = [
   "space",
   "overview",
   "markets",
+  "backtest",
   "council",
   "learn",
   "lifestyle",

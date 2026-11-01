@@ -243,7 +243,7 @@ test("首页与财富工作台沿用同一会话隐私偏好，隐藏成员、�
   expect(paid).toEqual([]);
 });
 
-test("六个空间与真实子功能互通，最近使用继续具体入口，窄屏锚点不被顶栏遮挡", async ({
+test("主空间与真实子功能互通，最近使用继续具体入口，窄屏锚点不被顶栏遮挡", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -253,11 +253,12 @@ test("六个空间与真实子功能互通，最近使用继续具体入口，�
   await page.goto("/space");
   await readySpace(page);
   const navigation = page.locator(".app-space-navigation");
-  await expect(navigation.getByRole("link")).toHaveCount(6);
+  await expect(navigation.getByRole("link")).toHaveCount(7);
   for (const [title, href] of [
     ["家庭首页", "/space"],
     ["财富总览", "/#overview"],
     ["市场看板", "/markets"],
+    ["投资回测", "/backtest"],
     ["多模型研讨", "/council"],
     ["每日心理学", "/learn"],
     ["兴趣与生活", "/lifestyle"],

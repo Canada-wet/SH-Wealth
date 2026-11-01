@@ -141,7 +141,7 @@ const syntheticNavigation = (entries: NavEntry[] = []) => {
     vi.fn(async () => Response.json({ userId: "own-id", entries })),
   );
 };
-it("侧栏用六个空间建立层级，品牌回到家庭首页，非财富空间不堆叠账本入口", async () => {
+it("侧栏以根空间建立层级，品牌回到家庭首页，非财富空间不堆叠账本入口", async () => {
   syntheticNavigation();
   const { container } = render(
     <NavigationProvider>
@@ -150,7 +150,7 @@ it("侧栏用六个空间建立层级，品牌回到家庭首页，非财富空�
   );
   const sidebar = screen.getByRole("complementary", { name: "家庭空间导航" });
   const spaces = sidebar.querySelector(".app-space-navigation")!;
-  expect(within(spaces as HTMLElement).getAllByRole("link")).toHaveLength(6);
+  expect(within(spaces as HTMLElement).getAllByRole("link")).toHaveLength(7);
   expect(spaces.querySelector("a")?.getAttribute("href")).toBe("/space");
   expect(
     within(sidebar).getByRole("heading", { name: /我的空间/ }),

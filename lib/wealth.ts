@@ -5,6 +5,7 @@ import { validQuarterly } from "./quarterly-schema";
 import { validLifestyle } from "./lifestyle-schema";
 import { parseFreedomPlan, FREEDOM_KEY } from "./freedom-schema";
 import { validLearningSchedule } from "./learning-schedule";
+import { validBacktestLab, type BacktestLab } from "./backtest-schema";
 export type Owner = "joint" | "first" | "second" | string;
 export type Asset = {
   id: string;
@@ -93,6 +94,7 @@ export type WealthState = {
     quarterlyReviews?: import("./quarterly-schema").QuarterlyReviews;
     lifestyle?: import("./lifestyle-schema").Lifestyle;
     learningSchedule?: import("./learning-schedule").LearningSchedule;
+    backtestLab?: BacktestLab;
   };
   readAlerts: string[];
   legacyHistory?: { month: string; value: number }[];
@@ -469,6 +471,11 @@ export function alertsFor(state: WealthState) {
   return alerts;
 }
 export function validateState(raw: unknown): asserts raw is WealthState {
+  if (
+    (raw as WealthState)?.preferences?.backtestLab !== undefined &&
+    !validBacktestLab((raw as WealthState).preferences.backtestLab)
+  )
+    throw Error("回测计划无效。");
   if (
     (raw as WealthState)?.preferences?.learningSchedule !== undefined &&
     !validLearningSchedule((raw as WealthState).preferences.learningSchedule)
