@@ -30,6 +30,7 @@ import {
   backtestToday,
   STRATEGIES,
   validateBacktestConfig,
+  validateBacktestData,
   type BacktestConfig,
   type BacktestData,
   type BacktestLab,
@@ -49,6 +50,7 @@ import {
   EMPTY_BACKTEST_LAB,
 } from "@/lib/backtest-context";
 import { stableJSON } from "@/lib/cloud-plan";
+import { yahooRequest, type YahooBatch } from "@/lib/backtest-yahoo";
 import type { WealthState } from "@/lib/wealth";
 
 type Chat = { role: "user" | "assistant"; text: string };
@@ -101,6 +103,17 @@ export default function BacktestWorkspace({
     [cacheReady, setCacheReady] = useState(false),
     [cacheStatus, setCacheStatus] = useState(""),
     [reading, setReading] = useState(false);
+  const [yahoo, setYahoo] = useState<YahooBatch | null>(null),
+    [yahooBusy, setYahooBusy] = useState(false),
+    [yahooError, setYahooError] = useState("");
+  const yahooController = useRef<AbortController | null>(null);
+  const yahooSelection = {
+    symbols: config.holdings.map((h) => h.symbol),
+    start: config.start,
+    end: config.end,
+  };
+  const yahooStale =
+    !!yahoo && stableJSON(yahoo.requested) !== stableJSON(yahooSelection);
   const [messages, setMessages] = useState<Chat[]>([]),
     [question, setQuestion] = useState(""),
     [household, setHousehold] = useState(false),
@@ -124,6 +137,9 @@ export default function BacktestWorkspace({
     (stableJSON(config) !== stableJSON(report.config) || data !== runData);
   useEffect(() => {
     mounted.current = true;
+    setYahoo(null);
+    setYahooError("");
+    setYahooBusy(false);
     let alive = true;
     if (!scope) {
       setCacheReady(true);
@@ -132,6 +148,7 @@ export default function BacktestWorkspace({
         alive = false;
         mounted.current = false;
         request.current?.abort();
+        yahooController.current?.abort();
       };
     }
     void backtestCache(scope)
@@ -166,6 +183,7 @@ export default function BacktestWorkspace({
       alive = false;
       mounted.current = false;
       request.current?.abort();
+      yahooController.current?.abort();
     };
   }, [scope]);
   useEffect(() => {
@@ -223,7 +241,8 @@ export default function BacktestWorkspace({
     setConfig((c) => ({ ...c, ...p }));
   const run = (c = config, d = data) => {
     try {
-      if (!d) throw Error("先导入日线数据，或使用明确标注的合成演示。");
+      if (!d)
+        throw Error("先获取Yahoo日线、导入CSV，或使用明确标注的合成演示。");
       const cutoff = today();
       if (
         c.end > cutoff ||
@@ -270,6 +289,66 @@ export default function BacktestWorkspace({
       if (mounted.current) setError((e as Error).message);
     } finally {
       if (mounted.current) setReading(false);
+    }
+  };
+  const fetchYahoo = async () => {
+    setYahooError("");
+    let query;
+    try {
+      query = yahooRequest(yahooSelection);
+    } catch (e) {
+      setYahooError((e as Error).message);
+      return;
+    }
+    const controller = new AbortController();
+    yahooController.current?.abort();
+    yahooController.current = controller;
+    setYahooBusy(true);
+    setYahoo(null);
+    const timeout = setTimeout(() => controller.abort(), 95000);
+    try {
+      const response = await fetch("/api/backtest/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify(query),
+      });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || "Yahoo历史暂不可用。");
+      if (
+        !result ||
+        stableJSON(result.requested) !== stableJSON(query) ||
+        !Array.isArray(result.results) ||
+        result.results.length !== query.symbols.length
+      )
+        throw Error("行情响应无效；未替换已有数据。");
+      if (result.data) {
+        validateBacktestData(result.data);
+        if (
+          result.data.synthetic ||
+          result.data.assets.some(
+            (a: HistoricalAsset) =>
+              !query.symbols.includes(a.symbol) ||
+              a.basis !== "total-return" ||
+              a.points.some(
+                (p) => p.date < query.start || p.date > result.effectiveEnd,
+              ),
+          )
+        )
+          throw Error("行情范围或口径无效；未替换已有数据。");
+      }
+      if (mounted.current && !controller.signal.aborted) setYahoo(result);
+    } catch (e) {
+      if (mounted.current && yahooController.current === controller)
+        setYahooError(
+          controller.signal.aborted
+            ? "获取已停止或超时，未自动重试；已有行情不变。"
+            : (e as Error).message,
+        );
+    } finally {
+      clearTimeout(timeout);
+      if (mounted.current && yahooController.current === controller)
+        setYahooBusy(false);
     }
   };
   const save = () => {
@@ -796,12 +875,121 @@ export default function BacktestWorkspace({
                 <span className="bt-kicker">02 / EVIDENCE</span>
                 <h2>给策略接上历史</h2>
               </div>
-              <span className="bt-pill">CSV 优先 · 无须订阅</span>
+              <span className="bt-pill">Yahoo 日线 / CSV</span>
             </div>
             <p>
-              TradingView
-              图表不能直接用于回测。先使用你有权使用的日线；数据服务尚未开通，不会自动向供应商发送请求。
+              按组合代码获取Yahoo可用历史，或导入你有权使用的CSV。只有点击才请求；不会把家庭资产、金额、权重或聊天发给Yahoo。
             </p>
+            <div className="bt-yahoo">
+              <div className="bt-row bt-wrap">
+                <button
+                  className="secondary"
+                  disabled={!cacheReady || yahooBusy || reading || busy}
+                  onClick={() => void fetchYahoo()}
+                >
+                  <Download size={16} />{" "}
+                  {yahooBusy ? "正在获取Yahoo日线…" : "从Yahoo获取组合历史"}
+                </button>
+                {yahooBusy && (
+                  <button
+                    className="bt-text-button"
+                    onClick={() => yahooController.current?.abort()}
+                  >
+                    停止等待
+                  </button>
+                )}
+              </div>
+              <small className="bt-help">
+                无需新增key · 非官方日线，可能缺失 · 先预览再采用
+              </small>
+              <details className="bt-details">
+                <summary>数据口径与访问说明</summary>
+                <p>
+                  最多8只股票/ETF；美股用.US，多伦多用.TO，份额类别如CGL.C.TO会明确映射为CGL-C.TO。仅取多伦多日期之前的完整日线，公开历史缓存1小时。遇到拒绝或限流就停止；沿用现有研究请求频率限制，不产生模型调用。
+                </p>
+              </details>
+              {yahooError && (
+                <p role="alert" className="bt-yahoo-error">
+                  {yahooError}
+                </p>
+              )}
+              {yahoo && (
+                <div aria-live="polite">
+                  <h3>
+                    已获取 {yahoo.data?.assets.length ?? 0}/
+                    {yahoo.requested.symbols.length} 项
+                  </h3>
+                  <p>
+                    已含拆股与分红，仅支持再投资，分红金额不单列。失败不改持仓或权重。
+                  </p>
+                  <ul className="bt-yahoo-list">
+                    {yahoo.results.map((r) => {
+                      const a = yahoo.data?.assets.find(
+                        (a) => a.symbol === r.symbol,
+                      );
+                      return (
+                        <li key={r.symbol}>
+                          <strong>
+                            {r.symbol} → {r.yahooSymbol}
+                          </strong>
+                          <span>
+                            {r.error ||
+                              (a
+                                ? `${a.points.length.toLocaleString()}日线 · ${a.points[0].date} → ${a.points.at(-1)!.date}`
+                                : "无可用历史")}
+                          </span>
+                          {!r.error && (
+                            <small>
+                              来源读取于{" "}
+                              {new Date(r.fetchedAt).toLocaleString()}
+                              <details>
+                                <summary>来源说明</summary>
+                                {r.warnings.join(" ")}
+                              </details>
+                            </small>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {yahooStale && (
+                    <p role="alert">
+                      标的或日期已改变，这批预览已过期；请重新获取。
+                    </p>
+                  )}
+                  <button
+                    className="secondary"
+                    disabled={
+                      !yahoo.data || yahooStale || yahooBusy || reading || busy
+                    }
+                    onClick={() => {
+                      if (!yahoo.data || yahooStale) return;
+                      if (config.dividends !== "reinvest") {
+                        setYahooError(
+                          "请先把分红处理改为再投资；复权总回报不能模拟现金分红。",
+                        );
+                        return;
+                      }
+                      if (
+                        data &&
+                        !confirm(
+                          "用已获取的Yahoo历史替换当前研究行情？建议先导出旧研究包。组合和权重不会改变。",
+                        )
+                      )
+                        return;
+                      setData(yahoo.data);
+                      setError("");
+                      setYahooError("");
+                      setNotice(
+                        `已采用${yahoo.data.assets.length}项Yahoo复权历史；请核对覆盖区间并重新运行。缺失标的需修改组合或另行补齐，权重未改动。`,
+                      );
+                    }}
+                  >
+                    使用这批行情
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="bt-data-controls">
               <label>
                 导入口径
@@ -946,7 +1134,11 @@ export default function BacktestWorkspace({
                 >
                   {data.synthetic
                     ? "合成演示 · 非真实证券／市场，不可据此作投资结论"
-                    : "用户导入历史 · 未经第三方独立核验"}
+                    : data.assets.every((a) =>
+                          a.source.startsWith("Yahoo Finance"),
+                        )
+                      ? "Yahoo Finance历史 · 非官方接入／可能延迟，未经独立核验"
+                      : "用户导入历史 · 未经第三方独立核验"}
                   <small>
                     读取于 {new Date(data.capturedAt).toLocaleString()}
                   </small>
@@ -999,7 +1191,7 @@ export default function BacktestWorkspace({
               <FlaskIcon />
               <h2>收益只是问题的一半。</h2>
               <p>
-                从上方导入数据，或先运行合成演示。
+                从Yahoo获取历史、导入数据，或先运行合成演示。
                 <br />
                 你会看到相同投入下的净值、回撤、年度回报与事件韧性。
               </p>

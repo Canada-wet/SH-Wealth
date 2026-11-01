@@ -1,5 +1,5 @@
 export async function boundedJSON(
-  request: Request,
+  request: Pick<Request, "headers" | "body">,
   limit: number,
 ): Promise<unknown> {
   if (Number(request.headers.get("content-length")) > limit)

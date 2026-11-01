@@ -1,6 +1,37 @@
 .bt-page {
   max-width: 1600px;
 }
+.bt-yahoo {
+  border: 1px solid #dfe7d7;
+  border-radius: 14px;
+  padding: 18px;
+  margin: 16px 0 22px;
+  background: #f7f9f3;
+  overflow-wrap: anywhere;
+}
+.bt-yahoo .bt-help {
+  display: block;
+  margin-top: 10px;
+}
+.bt-yahoo-list {
+  padding-left: 20px;
+}
+.bt-yahoo-list li {
+  margin: 12px 0;
+}
+.bt-yahoo-list span,
+.bt-yahoo-list small {
+  display: block;
+  margin-top: 4px;
+}
+.bt-yahoo-error {
+  color: #8d3a30;
+}
+.bt-yahoo .secondary {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
 .bt-jump {
   display: flex;
   gap: 12px;

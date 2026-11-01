@@ -144,7 +144,7 @@ it("无行情时明确提醒，不默认编造价格或启动AI", async () => {
   const run = screen.getByRole("button", { name: "运行策略比较" });
   await waitFor(() => expect((run as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(run);
-  expect(screen.getByRole("alert").textContent).toMatch(/先导入日线数据/);
+  expect(screen.getByRole("alert").textContent).toMatch(/先获取Yahoo日线/);
   expect(fetcher).not.toHaveBeenCalled();
 });
 it("演示展示三策略、常见指标和非真实数据警告", async () => {
@@ -213,4 +213,106 @@ it("请求只在用户提问时发送，默认不含家庭快照，追问带有�
   expect(
     JSON.parse(fetcher.mock.calls[1][1]!.body as string).history,
   ).toHaveLength(2);
+});
+function yahooFixture(query: {
+  symbols: string[];
+  start: string;
+  end: string;
+}) {
+  return {
+    requested: query,
+    effectiveEnd: "2026-10-30",
+    results: query.symbols.map((symbol, i) => ({
+      symbol,
+      yahooSymbol: symbol.replace(".US", ""),
+      fetchedAt: "2026-11-01T04:00:00Z",
+      warnings: [],
+      ...(i ? { error: "Yahoo未返回历史（404）" } : {}),
+    })),
+    data: {
+      version: 1,
+      synthetic: false,
+      capturedAt: "2026-11-01T04:00:00Z",
+      assets: [
+        {
+          symbol: query.symbols[0],
+          currency: "USD",
+          basis: "total-return",
+          dividendsKnown: false,
+          source: "Yahoo Finance · synthetic fixture",
+          points: ["2020-01-02", "2020-01-03", "2020-01-06"].map((date, i) => ({
+            date,
+            close: 100 + i,
+            dividend: 0,
+            split: 1,
+          })),
+        },
+      ],
+    },
+  };
+}
+it("Yahoo仅点击时发送代码日期，部分成功预览，不自动删除失败持仓或改变权重", async () => {
+  const fetcher = vi.fn(async (_url: string, init: RequestInit) =>
+    Response.json(yahooFixture(JSON.parse(String(init.body)))),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const save = mount();
+  const button = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  await waitFor(() =>
+    expect((button as HTMLButtonElement).disabled).toBe(false),
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+  fireEvent.click(button);
+  await screen.findByText("已获取 1/2 项");
+  expect(fetcher.mock.calls[0][0]).toBe("/api/backtest/history");
+  expect(
+    Object.keys(JSON.parse(String(fetcher.mock.calls[0][1].body))).sort(),
+  ).toEqual(["end", "start", "symbols"]);
+  expect(
+    screen.queryByRole("table", { name: "行情质量与覆盖日期" }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "使用这批行情" }));
+  expect(
+    screen.getByRole("table", { name: "行情质量与覆盖日期" }).textContent,
+  ).toContain("SPY.US");
+  expect((screen.getByLabelText("标的2") as HTMLInputElement).value).toBe(
+    "AGG.US",
+  );
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "运行策略比较" }));
+  expect(screen.getByRole("alert").textContent).toMatch(/AGG/);
+});
+it("Yahoo抓取后修改日期使预览过期；不会把旧请求用于新组合", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) =>
+      Response.json(yahooFixture(JSON.parse(String(init.body)))),
+    ),
+  );
+  mount();
+  const button = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  await waitFor(() =>
+    expect((button as HTMLButtonElement).disabled).toBe(false),
+  );
+  fireEvent.click(button);
+  await screen.findByText("已获取 1/2 项");
+  fireEvent.change(screen.getByLabelText("开始日期"), {
+    target: { value: "2021-01-01" },
+  });
+  expect(
+    (screen.getByRole("button", { name: "使用这批行情" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByRole("alert").textContent).toMatch(/过期/);
+});
+it("Yahoo错误不覆盖既有行情，演示代码不会外发", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  await demo();
+  fireEvent.click(screen.getByRole("button", { name: "从Yahoo获取组合历史" }));
+  expect(screen.getByRole("alert").textContent).toMatch(/演示代码/);
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("table", { name: "同样的外部投入，不同的部署方式" }),
+  ).toBeTruthy();
 });
