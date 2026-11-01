@@ -280,9 +280,17 @@ test("自定义环节增删排序、专职模型、重复质询、历史重读�
   const fixture = await councilFixture(page);
   await page.goto("/council");
   const composer = page.locator(".council-composer");
-  await composer
-    .getByLabel("问题与已知条件")
-    .fill("合成问题：如何用小规模试验比较方案与停止条件？");
+  // SSR controls can be visible before hydration. Selected defaults prove the
+  // initial API response and mount effect have completed before we type.
+  await expect(
+    composer.getByRole("checkbox", { name: /GPT-6 Luna/ }),
+  ).toBeChecked();
+  await expect(
+    composer.getByRole("checkbox", { name: /DeepSeek V4\.1 Flash/ }),
+  ).toBeChecked();
+  const question = "合成问题：如何用小规模试验比较方案与停止条件？";
+  await composer.getByLabel("问题与已知条件").fill(question);
+  await expect(composer.getByLabel("问题与已知条件")).toHaveValue(question);
   await composer
     .getByLabel("研讨深度", { exact: true })
     .selectOption("standard");
@@ -335,7 +343,11 @@ test("自定义环节增删排序、专职模型、重复质询、历史重读�
   await composer
     .locator(".council-flow-editor")
     .screenshot({ path: `/tmp/together-custom-flow-${info.project.name}.png` });
+  await expect(composer.getByLabel("问题与已知条件")).toHaveValue(question);
   await composer.getByRole("checkbox", { name: /我同意把问题/ }).check();
+  await expect(
+    composer.getByRole("button", { name: "开始研讨", exact: true }),
+  ).toBeEnabled();
   await composer.getByRole("button", { name: "开始研讨", exact: true }).click();
   await expect(page.locator(".council-session")).toContainText("9/9 步已归档", {
     timeout: 18000,
