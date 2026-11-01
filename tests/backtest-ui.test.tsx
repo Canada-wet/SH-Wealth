@@ -577,13 +577,23 @@ it("Yahoo完整单币种预览自动带入币种需确认，混币预览不能�
   });
   vi.stubGlobal("fetch", fetcher);
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  vi.mocked(backtestCache).mockResolvedValueOnce({
+    config: {
+      ...p.config,
+      currency: "USD",
+      holdings: [
+        { symbol: "XIC.TO", weight: 70 },
+        { symbol: "ZAG.TO", weight: 30 },
+      ],
+    },
+    data: null,
+  });
   mount();
-  fireEvent.change(screen.getByLabelText("标的1"), {
-    target: { value: "XIC.TO" },
-  });
-  fireEvent.change(screen.getByLabelText("标的2"), {
-    target: { value: "ZAG.TO" },
-  });
+  await waitFor(() =>
+    expect((screen.getByLabelText("标的1") as HTMLInputElement).value).toBe(
+      "XIC.TO",
+    ),
+  );
   goStep(/历史数据/);
   const b = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
   await waitFor(() => expect((b as HTMLButtonElement).disabled).toBe(false));

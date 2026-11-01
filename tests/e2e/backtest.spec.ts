@@ -422,3 +422,87 @@ test("Collection配置云端往返、搜索与复制复用，官方参考仅手�
   );
   expect(marketCalls).toBe(1);
 });
+test("股票下拉仅选择核对通过项，任意输入不改组合、重复项禁用，支持键盘和手机", async ({
+  page,
+}, info) => {
+  const queries: string[] = [];
+  await page.route("**/api/backtest/securities?*", (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q")!;
+    queries.push(q);
+    const symbol = q.toUpperCase().includes("META") ? "META.US" : "NVDA.US";
+    return route.fulfill({
+      json: {
+        version: 1,
+        query: q,
+        options: q.toUpperCase().includes("INVALID")
+          ? []
+          : [
+              {
+                symbol,
+                providerSymbol: symbol.replace(/\.US$/, ""),
+                name:
+                  symbol === "NVDA.US"
+                    ? "NVIDIA Corporation"
+                    : "Meta Platforms",
+                exchange: "NASDAQ",
+                kind: "EQUITY",
+                currency: "USD",
+                verifiedAt: new Date().toISOString(),
+              },
+            ],
+        omitted: 0,
+        checkedAt: new Date().toISOString(),
+      },
+    });
+  });
+  await open(page);
+  await step(page, /组合设置/);
+  const first = page.getByRole("combobox", { name: "标的1", exact: true });
+  const original = await first.inputValue();
+  await first.fill("INVALID");
+  await expect(
+    page.getByRole("status").filter({ hasText: "没有通过核对" }),
+  ).toBeVisible();
+  await expect(page.getByRole("option", { name: /INVALID/ })).toHaveCount(0);
+  await first.press("Enter");
+  await first.press("Escape");
+  await expect(first).toHaveValue(original);
+  await first.fill("NVIDIA");
+  await expect(page.getByRole("option", { name: /NVDA.US/ })).toBeVisible();
+  await page.getByRole("option", { name: /NVDA.US/ }).click();
+  await expect(first).toHaveValue("NVDA.US");
+  await expect(first).toHaveAttribute("aria-expanded", "false");
+  const second = page.getByRole("combobox", { name: "标的2", exact: true });
+  await second.fill("NVDA");
+  await expect(page.getByRole("option", { name: /NVDA.US/ })).toBeDisabled();
+  await second.fill("META");
+  await expect(page.getByRole("option", { name: /META.US/ })).toBeVisible();
+  await second.press("ArrowDown");
+  await second.press("Enter");
+  await expect(second).toHaveValue("META.US");
+  for (const width of info.project.name === "desktop"
+    ? [768, 1440]
+    : [320, 390]) {
+    await page.setViewportSize({ width, height: 920 });
+    await first.click();
+    await first.fill("NVIDIA");
+    await expect(page.getByRole("option", { name: /NVDA.US/ })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+    const popup = await page.locator(".bt-security-popover").boundingBox();
+    expect(popup!.x).toBeGreaterThanOrEqual(0);
+    expect(popup!.x + popup!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: info.outputPath(`security-picker-${width}.png`),
+      fullPage: false,
+    });
+    await first.press("Escape");
+  }
+  expect(queries.every((q) => !q.includes("@"))).toBe(true);
+  await expect(first).toHaveValue("NVDA.US");
+});

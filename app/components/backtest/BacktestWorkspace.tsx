@@ -47,6 +47,7 @@ import {
 import { backtestCache, portfolioShelfCache } from "@/lib/backtest-cache";
 import PortfolioComparison from "./PortfolioComparison";
 import PortfolioCollection from "./PortfolioCollection";
+import SecurityPicker from "./SecurityPicker";
 import {
   portfolioCurrencies,
   cadReference,
@@ -927,18 +928,20 @@ export default function BacktestWorkspace({
                     {config.holdings.map((h, i) => (
                       <tr key={i}>
                         <td>
-                          <input
-                            aria-label={`标的${i + 1}`}
+                          <SecurityPicker
+                            label={`标的${i + 1}`}
                             value={h.symbol}
-                            maxLength={27}
-                            placeholder="NVDA.US"
-                            onChange={(e) =>
+                            excluded={config.holdings
+                              .filter((_, j) => j !== i)
+                              .map((h) => h.symbol)}
+                            disabled={busy || reading || yahooBusy}
+                            onSelect={(security) =>
                               patch({
                                 holdings: config.holdings.map((r, j) =>
                                   j === i
                                     ? {
                                         ...r,
-                                        symbol: e.target.value.toUpperCase(),
+                                        symbol: security.symbol,
                                       }
                                     : r,
                                 ),
@@ -1018,8 +1021,8 @@ export default function BacktestWorkspace({
                 </div>
               </div>
               <p className="bt-help">
-                最多8个标的。同一回测仅用一种计价币种；加币对冲 ETF
-                的币种指成交币种，不代表没有底层风险。
+                搜索后从下拉列表选择已核对的股票／ETF，不能提交任意手填代码。最多8个标的。同一回测仅用一种计价币种；加币对冲
+                ETF 的币种指成交币种，不代表没有底层风险。
               </p>
               <div className="bt-currency-panel" aria-label="证券计价币种识别">
                 <strong>按证券历史核对币种</strong>

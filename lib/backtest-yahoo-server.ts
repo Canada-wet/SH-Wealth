@@ -11,6 +11,10 @@ import {
 
 // Fixed public host, no cookies, crumb extraction, proxy rotation or automatic retry.
 let blockedUntil = 0;
+export const yahooIsCoolingDown = () => Date.now() < blockedUntil;
+export const coolDownYahoo = () => {
+  blockedUntil = Date.now() + 15 * 60_000;
+};
 export async function fetchYahooHistory(
   symbol: string,
   start: string,
@@ -19,7 +23,7 @@ export async function fetchYahooHistory(
   const mapped = yahooSymbol(symbol),
     fetchedAt = new Date().toISOString();
   const base = { symbol, yahooSymbol: mapped, fetchedAt, warnings: [] };
-  if (Date.now() < blockedUntil)
+  if (yahooIsCoolingDown())
     return {
       ...base,
       blocked: true,
@@ -43,7 +47,7 @@ export async function fetchYahooHistory(
       headers: { Accept: "application/json" },
     });
     if ([401, 403, 429].includes(response.status)) {
-      blockedUntil = Date.now() + 15 * 60_000;
+      coolDownYahoo();
       return {
         ...base,
         blocked: true,

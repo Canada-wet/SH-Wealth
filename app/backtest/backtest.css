@@ -869,6 +869,152 @@
   font-size: 12px !important;
   padding: 8px !important;
 }
+.bt-security-picker {
+  min-width: 0;
+  position: relative;
+}
+.bt-security-input {
+  position: relative;
+}
+.bt-security-input input {
+  padding-right: 23px !important;
+}
+.bt-security-input > svg {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #71816c;
+}
+.bt-security-caption {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #7b8a71;
+  margin-top: 5px;
+}
+.bt-security-popover {
+  position: fixed;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #d9e3d2;
+  border-radius: 14px;
+  box-shadow: 0 14px 46px #203d2b2b;
+  overflow: auto;
+  font-family: inherit;
+  color: #315143;
+  box-sizing: border-box;
+}
+.bt-security-popover > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 0 16px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.bt-security-popover > header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bt-security-popover > header button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  border: 0;
+  background: transparent;
+  color: #71816c;
+  cursor: pointer;
+}
+.bt-security-hint,
+.bt-security-status {
+  margin: 0;
+  padding: 3px 16px 10px;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: #7b8a71;
+}
+.bt-security-status {
+  color: #506b48;
+}
+.bt-security-options {
+  padding: 0 6px 6px;
+}
+.bt-security-options > button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  min-height: 70px;
+  text-align: left;
+  border: 0;
+  border-radius: 9px;
+  padding: 12px;
+  background: #fff;
+  color: #315143;
+  cursor: pointer;
+  font: inherit;
+  white-space: normal;
+}
+.bt-security-options > button:hover,
+.bt-security-options > button[aria-selected="true"] {
+  background: #edf4e8;
+  outline: 1px solid #b9cfad;
+  outline-offset: -1px;
+}
+.bt-security-options > button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bt-security-options > button > span:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.bt-security-options strong {
+  font-size: 13px;
+}
+.bt-security-options em {
+  font-size: 10px;
+  font-style: normal;
+  color: #71816c;
+}
+.bt-security-name {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.bt-security-options small {
+  font-size: 10px;
+  color: #87947c;
+}
+.bt-security-popover footer {
+  padding: 10px 16px;
+  border-top: 1px solid #edf0e7;
+  color: #87947c;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.bt-security-retry {
+  min-height: 44px;
+  margin: 0 16px 10px;
+  border: 1px solid #dbe5d3;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #315b4d;
+  background: #f2f6ee;
+  cursor: pointer;
+}
 .bt-holdings td button {
   width: 26px;
   height: 36px;

@@ -51,6 +51,8 @@ export type BacktestLab = {
   saved: { id: string; at: string; config: BacktestConfig }[];
 };
 export const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,23}\.(US|TO)$/;
+export const symbolIdentity = (symbol: string) =>
+  symbol.slice(0, -3).replaceAll(".", "-") + symbol.slice(-3);
 export function backtestToday(now = new Date()) {
   const p = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Toronto",
@@ -101,7 +103,8 @@ export function validateBacktestConfig(
     c.holdings.some(
       (h) => !h || !SYMBOL.test(h.symbol) || !between(h.weight, 0.01, 100),
     ) ||
-    new Set(c.holdings.map((h) => h.symbol)).size !== c.holdings.length ||
+    new Set(c.holdings.map((h) => symbolIdentity(h.symbol))).size !==
+      c.holdings.length ||
     Math.abs(c.holdings.reduce((s, h) => s + h.weight, 0) - 100) > 0.00001
   )
     throw Error(
