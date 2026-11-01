@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return json(
       {
         error:
-          "请核对1–8个真实证券代码与历史日期；不支持演示、重复、混合币种或未来区间。",
+          "请核对1–8个真实证券代码与历史日期；不支持演示、重复或未来区间。实际币种需在采用前核对。",
       },
       400,
     );

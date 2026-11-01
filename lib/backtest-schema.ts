@@ -107,14 +107,8 @@ export function validateBacktestConfig(
     throw Error(
       "组合需包含1–8个唯一标的，权重合计必须为100%。代码使用 NVDA.US 或 ZSP.TO 格式。",
     );
-  if (
-    c.holdings.some(
-      (h) => (h.symbol.endsWith(".TO") ? "CAD" : "USD") !== c.currency,
-    )
-  )
-    throw Error(
-      "第一版一次只回测一种计价币种；请分开比较加币与美元组合，避免把汇率忽略掉。",
-    );
+  // The actual historical asset currency is checked by runBacktest. A listing
+  // suffix cannot establish trading currency (e.g. USD-denominated TSX units).
   if (
     !Array.isArray(c.strategies) ||
     !c.strategies.length ||

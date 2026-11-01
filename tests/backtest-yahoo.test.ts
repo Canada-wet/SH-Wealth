@@ -58,7 +58,7 @@ it("代码精确映射美国/TSX份额类别，不猜证券或允许URL", () => 
   ])
     expect(() => yahooSymbol(s)).toThrow();
 });
-it("请求只保留公开代码日期，拒绝未来、重复、混币种、超量", () => {
+it("请求只保留公开代码日期，拒绝未来、重复、超量，不用后缀断定币种", () => {
   const good = { symbols: ["SPY.US"], start, end };
   expect(yahooRequest({ ...good, assets: "private", weights: [100] })).toEqual(
     good,
@@ -66,12 +66,28 @@ it("请求只保留公开代码日期，拒绝未来、重复、混币种、超�
   for (const bad of [
     { ...good, symbols: [] },
     { ...good, symbols: ["SPY.US", "SPY.US"] },
-    { ...good, symbols: ["SPY.US", "ZSP.TO"] },
     { ...good, end: "2099-01-01" },
     { ...good, start: "2020-02-30" },
     { ...good, symbols: Array.from({ length: 9 }, (_, i) => `T${i}.US`) },
   ])
     expect(() => yahooRequest(bad)).toThrow();
+  expect(
+    yahooRequest({ ...good, symbols: ["SPY.US", "ZSP.U.TO"] }).symbols,
+  ).toHaveLength(2);
+});
+it("TSX美元份额读取元数据USD，非CAD/USD仍拒绝", () => {
+  const r = parseYahooHistory(
+    payload("ZSP-U.TO", "USD"),
+    "ZSP.U.TO",
+    start,
+    end,
+  );
+  expect(r.asset.currency).toBe("USD");
+  const cad = parseYahooHistory(payload("ZSP.TO", "CAD"), "ZSP.TO", start, end);
+  expect(cad.asset.currency).toBe("CAD");
+  expect(() =>
+    parseYahooHistory(payload("ZSP.TO", "JPY"), "ZSP.TO", start, end),
+  ).toThrow();
 });
 it("多伦多跨日及夏冬令时都排除尚未完整的当日线", () => {
   expect(

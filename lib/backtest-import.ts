@@ -90,10 +90,19 @@ export function importBacktestCSV(
       date = get(r, "date");
     if (!SYMBOL.test(symbol) || !validDate(date))
       throw Error("标的代码或日期无效，使用 NVDA.US / ZSP.TO 和 YYYY-MM-DD。");
+    const currency = head.includes("currency")
+      ? get(r, "currency").toUpperCase()
+      : symbol.endsWith(".TO")
+        ? "CAD"
+        : "USD";
+    if (!["CAD", "USD"].includes(currency))
+      throw Error("CSV currency列必须为CAD或USD。");
+    if (groups.has(symbol) && groups.get(symbol)!.currency !== currency)
+      throw Error("同一标的的CSV计价币种必须一致。");
     if (!groups.has(symbol))
       groups.set(symbol, {
         symbol,
-        currency: symbol.endsWith(".TO") ? "CAD" : "USD",
+        currency: currency as "CAD" | "USD",
         basis,
         dividendsKnown: basis === "raw",
         source: source.slice(0, 200),

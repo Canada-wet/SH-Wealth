@@ -4,6 +4,10 @@ import {
   type BacktestConfig,
   type BacktestData,
 } from "./backtest-schema";
+import {
+  validatePortfolioShelf,
+  type PortfolioShelf,
+} from "./backtest-comparison";
 export type BacktestDraft = {
   config: BacktestConfig;
   data: BacktestData | null;
@@ -80,6 +84,44 @@ export async function backtestCache(
       tx.oncomplete = () => resolve(result);
       tx.onabort = tx.onerror = () =>
         reject(Error("回测未缓存到本机；请导出研究包，避免丢失。"));
+    });
+  } finally {
+    connection.close();
+  }
+}
+// Separate key: comparison edits persist even if the current editor has invalid inputs.
+export async function portfolioShelfCache(
+  scope: string,
+  value?: PortfolioShelf,
+): Promise<PortfolioShelf | null> {
+  if (!scope) throw Error("缺少家庭空间，未读取对照快照。");
+  if (value) validatePortfolioShelf(value);
+  const connection = await db();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = connection.transaction(
+          "drafts",
+          value ? "readwrite" : "readonly",
+        ),
+        store = tx.objectStore("drafts");
+      let result: PortfolioShelf | null = value ?? null;
+      if (value) store.put(value, `comparison:${scope}`);
+      else {
+        const r = store.get(`comparison:${scope}`);
+        r.onsuccess = () => {
+          try {
+            if (r.result) {
+              validatePortfolioShelf(r.result);
+              result = r.result;
+            }
+          } catch {
+            tx.abort();
+          }
+        };
+      }
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = tx.onabort = () =>
+        reject(Error("组合对照未缓存到本机；请导出对照包保留研究。"));
     });
   } finally {
     connection.close();

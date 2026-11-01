@@ -210,13 +210,16 @@ describe("覆盖、频率与输入保护", () => {
       }),
     ).toThrow();
   });
-  it("不混合USD与CAD，不接受重复标的或重复日期", () => {
+  it("以实际历史币种拒绝混币，不以交易所后缀猜测；不接受重复日期", () => {
+    const foreign = data();
+    foreign.assets[0].currency = "CAD";
+    expect(() => runBacktest(c(), foreign)).toThrow(/币种/);
     expect(() =>
       validateBacktestConfig({
         ...c(),
-        holdings: [{ symbol: "ZSP.TO", weight: 100 }],
+        holdings: [{ symbol: "ZSP.U.TO", weight: 100 }],
       }),
-    ).toThrow();
+    ).not.toThrow();
     const d = data();
     d.assets[0].points[1].date = d.assets[0].points[0].date;
     expect(() => validateBacktestData(d)).toThrow();

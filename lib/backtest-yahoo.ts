@@ -49,8 +49,6 @@ export function yahooRequest(raw: unknown, now = new Date()): YahooRequest {
   )
     throw Error("请选择1–8个唯一证券代码和有效历史日期，不支持未来日期。");
   r.symbols.forEach(yahooSymbol);
-  if (new Set(r.symbols.map((s) => s.endsWith(".TO"))).size !== 1)
-    throw Error("请分开获取美元和加币组合，不能忽略汇率混合回测。");
   return { symbols: [...r.symbols], start: r.start, end: r.end };
 }
 export function yahooCompletedEnd(end: string, now = new Date()) {
@@ -88,10 +86,11 @@ export function parseYahooHistory(
       adjclose?: { adjclose?: (number | null)[] }[];
     };
   };
-  const currency = symbol.endsWith(".TO") ? "CAD" : "USD";
+  const currency = r?.meta?.currency;
   if (
     r?.meta?.symbol !== yahooSymbol(symbol) ||
-    r.meta.currency !== currency ||
+    !["CAD", "USD"].includes(currency ?? "") ||
+    (symbol.endsWith(".US") && currency !== "USD") ||
     !["EQUITY", "ETF"].includes(r.meta.instrumentType ?? "") ||
     r.meta.dataGranularity !== "1d" ||
     !r.meta.exchangeTimezoneName
@@ -145,7 +144,7 @@ export function parseYahooHistory(
   points.sort((a, b) => a.date.localeCompare(b.date));
   const asset: HistoricalAsset = {
     symbol,
-    currency,
+    currency: currency as "CAD" | "USD",
     basis: "total-return",
     dividendsKnown: false,
     source: `Yahoo Finance · ${yahooSymbol(symbol)} · Adj Close · 非官方日线`,

@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { emptyState } from "../../lib/wealth";
 import { authenticate, cleanupAuthenticated } from "./auth-helper";
 import { defaultBacktest } from "../../lib/backtest-schema";
+import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ page }) => {
   await authenticate(page, { seed: emptyState() });
@@ -13,8 +14,15 @@ async function open(page: Page) {
     "已同步 Supabase",
   );
   await expect(
-    page.getByRole("button", { name: "运行策略比较", exact: true }),
+    page.getByRole("button", { name: "下一步：历史数据", exact: true }),
   ).toBeEnabled();
+  await step(page, /历史数据/);
+}
+async function step(page: Page, name: RegExp) {
+  await page
+    .getByRole("navigation", { name: "回测工作流" })
+    .getByRole("button", { name })
+    .click();
 }
 async function demo(page: Page) {
   await open(page);
@@ -41,6 +49,7 @@ test("三种图表与事件可用，保存和刷新后组合及行情仍在，�
   await page.getByRole("tab", { name: "历史冲击", exact: true }).click();
   await expect(page.locator(".bt-event h3").first()).toHaveText("全球金融危机");
   await expect(page.locator(".bt-event").last()).toContainText("未覆盖");
+  await step(page, /组合设置/);
   await page.getByLabel("计划名称", { exact: true }).fill("隔离回测计划");
   await page.getByRole("button", { name: "保存计划", exact: true }).click();
   await expect(page.locator(".bt-builder")).toContainText(
@@ -60,6 +69,7 @@ test("三种图表与事件可用，保存和刷新后组合及行情仍在，�
   await expect(page.getByLabel("计划名称", { exact: true })).toHaveValue(
     "隔离回测计划",
   );
+  await step(page, /历史数据/);
   await page.getByRole("button", { name: "运行策略比较", exact: true }).click();
   await expect(metrics).toContainText("年化回报 CAGR");
   for (const width of test.info().project.name.startsWith("mobile")
@@ -90,7 +100,8 @@ test("CSV拆股与分红按口径重算，短样本警告可见，AI仅在提交
     });
   });
   await open(page);
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByText("从CSV或研究包导入", { exact: true }).click();
+  await page.getByLabel("导入历史行情或研究包", { exact: true }).setInputFiles({
     name: "synthetic.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(
@@ -203,6 +214,210 @@ test("Yahoo逐项预览、采用复权历史、重算与刷新缓存；只发送
   }
   await page.waitForTimeout(1000);
   await page.reload();
+  await step(page, /历史数据/);
   await expect(page.locator(".bt-data-table")).toContainText("SPY.US");
   expect(calls).toHaveLength(1);
+});
+test("不同组合完整对照：复制改权重、同策略与基准、三种曲线、缓存和对照包往返", async ({
+  page,
+}, info) => {
+  test.setTimeout(60000);
+  let external = 0;
+  await page.route("**/api/backtest/history", (route) => {
+    external++;
+    return route.fulfill({
+      status: 503,
+      json: { error: "隔离用例不允许真实Yahoo请求" },
+    });
+  });
+  await demo(page);
+  await page.getByRole("button", { name: "加入组合对照", exact: true }).click();
+  await expect(page.getByLabel("组合1名称", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "复制到工作台修改", exact: true })
+    .click();
+  await page
+    .getByLabel("计划名称", { exact: true })
+    .fill("第二组合 · 隔离30/70");
+  await page.getByLabel("权重1", { exact: true }).fill("30");
+  await page.getByLabel("权重2", { exact: true }).fill("70");
+  await step(page, /历史数据/);
+  await page.getByRole("button", { name: "运行策略比较", exact: true }).click();
+  await page.getByRole("button", { name: "加入组合对照", exact: true }).click();
+  await page.getByLabel("统一策略", { exact: true }).selectOption("dca");
+  await page.getByRole("button", { name: "运行组合对照", exact: true }).click();
+  const results = page.getByRole("region", {
+    name: "组合对照结果",
+    exact: true,
+  });
+  await expect(results.getByRole("heading", { level: 2 })).toContainText("DCA");
+  const table = results.getByRole("table", {
+    name: "不同组合 · 同策略、同投入、同区间",
+  });
+  await expect(table.locator("thead th")).toHaveCount(3);
+  const initial = await table
+    .getByRole("row")
+    .filter({ hasText: "累计投入" })
+    .locator("td")
+    .allTextContents();
+  expect(initial[0]).toBe(initial[1]);
+  for (const chart of ["nav", "value", "drawdown"]) {
+    await page
+      .getByLabel("组合对照图表口径", { exact: true })
+      .selectOption(chart);
+    await expect(results.locator(".recharts-line-curve")).toHaveCount(2);
+  }
+  const options = page
+    .getByLabel("资金与费用基准", { exact: true })
+    .locator("option");
+  const second = await options.nth(1).getAttribute("value");
+  await page
+    .getByLabel("资金与费用基准", { exact: true })
+    .selectOption(second!);
+  await expect(results).toContainText("请重新运行");
+  await page.getByRole("button", { name: "运行组合对照", exact: true }).click();
+  for (const width of info.project.name === "desktop"
+    ? [768, 1440]
+    : [320, 390]) {
+    await page.setViewportSize({ width, height: 920 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+  }
+  await page.screenshot({
+    path: info.outputPath("portfolio-comparison.png"),
+    fullPage: true,
+  });
+  await expect(
+    page.getByText(
+      "组合快照与对照设置已缓存于本设备；跨设备请导出／导入对照包。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.waitForTimeout(1000);
+  await page.reload();
+  await page.getByRole("button", { name: "组合对照", exact: true }).click();
+  await expect(page.getByLabel("组合2名称", { exact: true })).toHaveValue(
+    "第二组合 · 隔离30/70",
+  );
+  await expect(page.getByLabel("统一策略", { exact: true })).toHaveValue("dca");
+  await page.getByRole("button", { name: "运行组合对照", exact: true }).click();
+  await expect(table).toBeVisible();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出对照包", exact: true }).click();
+  const pack = await readFile((await (await downloaded).path())!, "utf8");
+  expect(JSON.parse(pack).shelf.studies).toHaveLength(2);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "移除对照组合2", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "运行组合对照", exact: true }),
+  ).toBeDisabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByLabel("导入组合对照包", { exact: true }).setInputFiles({
+    name: "synthetic-comparison.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(pack),
+  });
+  await expect(page.getByLabel("组合2名称", { exact: true })).toHaveValue(
+    "第二组合 · 隔离30/70",
+  );
+  await page.getByRole("button", { name: "运行组合对照", exact: true }).click();
+  await expect(table).toBeVisible();
+  expect(external).toBe(0);
+});
+test("Collection配置云端往返、搜索与复制复用，官方参考仅手动用于规划", async ({
+  page,
+}) => {
+  let marketCalls = 0;
+  await page.route("**/api/market", (route) => {
+    marketCalls++;
+    return route.fulfill({
+      json: {
+        fetchedAt: new Date().toISOString(),
+        fx: [
+          {
+            id: "FXUSDCAD",
+            value: 1 / 1.38,
+            date: new Date().toISOString().slice(0, 10),
+            unit: " / CAD",
+            source:
+              "https://www.bankofcanada.ca/rates/exchange/daily-exchange-rates/",
+          },
+        ],
+      },
+    });
+  });
+  await demo(page);
+  await step(page, /组合设置/);
+  await page.getByLabel("计划名称", { exact: true }).fill("Collection原组合");
+  await page.getByRole("button", { name: "保存计划", exact: true }).click();
+  await expect(page.locator(".bt-header-tools")).toContainText(
+    "已同步 Supabase",
+  );
+  await page
+    .getByRole("button", { name: "组合Collection", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Collection原组合", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("搜索组合或股票代码", { exact: true }).fill("DEMO1.US");
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "复制为新组合", exact: true }).click();
+  await page.getByLabel("计划名称", { exact: true }).fill("Collection复制组合");
+  await page.getByLabel("权重1", { exact: true }).fill("30");
+  await page.getByLabel("权重2", { exact: true }).fill("70");
+  await page.getByRole("button", { name: "保存计划", exact: true }).click();
+  await expect(page.locator(".bt-header-tools")).toContainText(
+    "已同步 Supabase",
+  );
+  await page
+    .getByRole("button", { name: "组合Collection", exact: true })
+    .click();
+  await expect(page.locator(".bt-collection-card")).toHaveCount(2);
+  for (const width of test.info().project.name.startsWith("mobile")
+    ? [320, 390]
+    : [768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+  }
+  await page.reload();
+  await page
+    .getByRole("button", { name: "组合Collection", exact: true })
+    .click();
+  await expect(page.locator(".bt-collection-card")).toHaveCount(2);
+  await page.getByLabel("搜索组合或股票代码", { exact: true }).fill("复制");
+  await expect(page.locator(".bt-collection-card")).toHaveCount(1);
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "载入编辑", exact: true }).click();
+  await expect(page.getByLabel("权重1", { exact: true })).toHaveValue("30");
+  await page.getByText("我的投资偏好与规划", { exact: true }).click();
+  expect(marketCalls).toBe(0);
+  const rate = page.getByLabel("规划换算 · 1 USD = 多少 CAD", { exact: true });
+  const oldRate = await rate.inputValue();
+  await page
+    .getByRole("button", { name: "获取最新官方参考汇率", exact: true })
+    .click();
+  await expect(page.getByText(/1 USD = 1.38 CAD/)).toBeVisible();
+  await expect(rate).toHaveValue(oldRate);
+  await page
+    .getByRole("button", { name: "用于家庭规划换算", exact: true })
+    .click();
+  await expect(rate).toHaveValue("1.38");
+  await expect(page.getByLabel("起始资金 · USD", { exact: true })).toHaveValue(
+    "30000",
+  );
+  expect(marketCalls).toBe(1);
 });

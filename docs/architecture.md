@@ -12,6 +12,8 @@
 
 ## 1. 一分钟理解
 
+`0.16.0` 增量：回测新增`PortfolioCollection`（复用家庭配置CAS）、`PortfolioComparison`和`lib/backtest-comparison.ts`（统一假设及共同日期的确定性重算）。大体积对照快照为家庭scope的独立IndexedDB键，不写共享账本；配置云同步、行情本机缓存及20MB显式研究包分层不变。Yahoo适配读取实际证券币种而非仅凭交易所后缀；规划汇率复用鉴权`/api/market`的加拿大央行序列，用户显式采用，不参加历史收益。无新SQL、权限或模型调用；详见[回测文档](backtesting.md)。
+
 `0.15.0` 增量：[投资回测工作台](backtesting.md)使用浏览器确定性引擎和独立 `/api/backtest/advisor` 只读研究端点。命名配置保存在家庭JSON市场聚合，价格与最近对话为家庭ID隔离的IndexedDB本机缓存；不增加金融快照或交易权限。供应商尚未开通，真实历史走用户CSV；家庭汇总与官方观测分别显式授权，服务端重新计算后再发AI。新增独立 `/backtest` 搜索/最近/置顶入口，生产需增量安装 `backtest-navigation.sql` 扩展导航与行动来源白名单；基线架构图仍为原快照，不表示新版本已上线。
 
 Together 是面向两位授权家庭成员的 **Next.js 模块化单体应用**：一个 Web 应用承载家庭财富、市场研究、多模型研讨、学习收藏和兴趣生活；部署在 Vercel，身份和持久数据位于 Supabase。

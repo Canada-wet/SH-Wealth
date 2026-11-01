@@ -71,7 +71,7 @@ export async function fetchYahooHistory(
   }
 }
 // Cache only public symbol/date history (including failures to avoid hammering).
-const cachedYahoo = unstable_cache(fetchYahooHistory, ["backtest-yahoo-v1"], {
+const cachedYahoo = unstable_cache(fetchYahooHistory, ["backtest-yahoo-v2"], {
   revalidate: 3600,
 });
 export async function getYahooBatch(
