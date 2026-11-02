@@ -7,7 +7,21 @@ import {
 } from "../lib/backtest-yahoo";
 import { runBacktest } from "../lib/backtest";
 import { defaultBacktest } from "../lib/backtest-schema";
-vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn }));
+vi.mock("next/cache", () => ({
+  unstable_cache: (fn: (...args: string[]) => Promise<unknown>) => {
+    const cache = new Map<string, Promise<unknown>>();
+    return (...args: string[]) => {
+      const key = JSON.stringify(args);
+      if (cache.has(key)) return cache.get(key)!;
+      const work = Promise.resolve(fn(...args)).catch((e) => {
+        cache.delete(key);
+        throw e;
+      });
+      cache.set(key, work);
+      return work;
+    };
+  },
+}));
 const start = "2020-01-02",
   end = "2020-01-06";
 function payload(symbol = "SPY", currency = "USD") {
@@ -204,4 +218,35 @@ it("网络异常不重发、不泄漏原始错误，原价缺失不伪造成功"
   expect(r.data).toBeNull();
   expect(JSON.stringify(r)).not.toContain("secret-cookie");
   expect(fetcher).toHaveBeenCalledOnce();
+});
+it("瞬时失败不作为一小时成功缓存；明确的下一次用户请求可以恢复", async () => {
+  const fetcher = vi
+    .fn()
+    .mockRejectedValueOnce(Error("temporary"))
+    .mockResolvedValueOnce(Response.json(payload("VTV")));
+  vi.stubGlobal("fetch", fetcher);
+  const { getYahooBatch } = await import("../lib/backtest-yahoo-server");
+  const query = { symbols: ["VTV.US"], start, end };
+  expect((await getYahooBatch(query)).data).toBeNull();
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect((await getYahooBatch(query)).data?.assets[0].symbol).toBe("VTV.US");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("相同代码日期同时请求共用一个进行中的上游调用", async () => {
+  let finish!: (r: Response) => void;
+  const fetcher = vi.fn(
+    () =>
+      new Promise<Response>((r) => {
+        finish = r;
+      }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const { getYahooBatch } = await import("../lib/backtest-yahoo-server");
+  const query = { symbols: ["XCV.TO"], start, end };
+  const first = getYahooBatch(query),
+    second = getYahooBatch(query);
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  finish(Response.json(payload("XCV.TO", "CAD")));
+  expect((await first).data?.assets[0].currency).toBe("CAD");
+  expect((await second).data?.assets[0].currency).toBe("CAD");
 });

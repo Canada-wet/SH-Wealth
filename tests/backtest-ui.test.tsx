@@ -158,10 +158,60 @@ it("无行情时明确提醒，不默认编造价格或启动AI", async () => {
   mount();
   goStep(/历史数据/);
   const run = screen.getByRole("button", { name: "运行策略比较" });
-  await waitFor(() => expect((run as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(run);
-  expect(screen.getByRole("alert").textContent).toMatch(/先获取Yahoo日线/);
+  await waitFor(() => expect((run as HTMLButtonElement).disabled).toBe(true));
+  expect(screen.getByLabelText("当前组合数据就绪情况").textContent).toMatch(
+    /尚未载入.*SPY/,
+  );
   expect(fetcher).not.toHaveBeenCalled();
+});
+it("手机编辑清空权重不产生NaN，一键等权修正后可继续；新增空证券不准提交", async () => {
+  mount();
+  const next = screen.getByRole("button", { name: "下一步：历史数据" });
+  await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText("权重1"), { target: { value: "" } });
+  expect((screen.getByLabelText("权重1") as HTMLInputElement).value).toBe("");
+  expect(screen.getByLabelText("组合填写检查").textContent).not.toContain(
+    "NaN",
+  );
+  expect((next as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "一键等权" }));
+  expect((screen.getByLabelText("权重1") as HTMLInputElement).value).toBe("50");
+  expect((next as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "添加标的" }));
+  expect((next as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByLabelText("组合填写检查").textContent).toContain(
+    "第3项尚未选择证券",
+  );
+});
+it("完整行情可显式采用并运行，运行前不采用或请求AI", async () => {
+  const fetcher = vi.fn(async (_url: string, init: RequestInit) => {
+    const q = JSON.parse(String(init.body)),
+      r = yahooFixture(q);
+    r.data.assets = q.symbols.map((symbol: string) => ({
+      ...r.data.assets[0],
+      symbol,
+    }));
+    r.results = r.results.map(({ error: _error, ...r }) => r);
+    return Response.json(r);
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const save = mount();
+  goStep(/历史数据/);
+  const get = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  await waitFor(() => expect((get as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(get);
+  const use = await screen.findByRole("button", { name: "采用并运行比较" });
+  expect(
+    screen.queryByRole("table", { name: "行情质量与覆盖日期" }),
+  ).toBeNull();
+  fireEvent.click(use);
+  expect(
+    await screen.findByRole("table", {
+      name: "同样的外部投入，不同的部署方式",
+    }),
+  ).toBeTruthy();
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(save).not.toHaveBeenCalled();
 });
 it("演示展示三策略、常见指标和非真实数据警告", async () => {
   await demo();
@@ -290,16 +340,32 @@ it("Yahoo仅点击时发送代码日期，部分成功预览，不自动删除�
   expect(
     screen.queryByRole("table", { name: "行情质量与覆盖日期" }),
   ).toBeNull();
+  expect(
+    (screen.getByRole("button", { name: "使用这批行情" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "采用并运行比较",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "使用这批行情" }));
   expect(
-    screen.getByRole("table", { name: "行情质量与覆盖日期" }).textContent,
-  ).toContain("SPY.US");
+    screen.queryByRole("table", { name: "行情质量与覆盖日期" }),
+  ).toBeNull();
   expect((screen.getByLabelText("标的2") as HTMLInputElement).value).toBe(
     "AGG.US",
   );
   expect(save).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "运行策略比较" }));
-  expect(screen.getByRole("alert").textContent).toMatch(/AGG/);
+  expect(
+    (screen.getByRole("button", { name: "运行策略比较" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByLabelText("当前组合数据就绪情况").textContent).toMatch(
+    /AGG/,
+  );
 });
 it("Yahoo抓取后修改日期使预览过期；不会把旧请求用于新组合", async () => {
   vi.stubGlobal(
@@ -325,7 +391,9 @@ it("Yahoo抓取后修改日期使预览过期；不会把旧请求用于新组�
     (screen.getByRole("button", { name: "使用这批行情" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
-  expect(screen.getByRole("alert").textContent).toMatch(/过期/);
+  expect(
+    screen.getAllByRole("alert").some((a) => /过期/.test(a.textContent ?? "")),
+  ).toBe(true);
 });
 it("Yahoo错误不覆盖既有行情，演示代码不会外发", async () => {
   const fetcher = vi.fn();

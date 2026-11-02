@@ -12,7 +12,7 @@ jobs:
       - run: npm ci
       - run: npm run check:migrations
       - run: npm test
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run build
         env:
           NEXT_DIST_DIR: .next-test
@@ -21,6 +21,10 @@ jobs:
       - run: npm run test:e2e
         env:
           E2E_USE_MOCK_AUTH: "1"
+      - run: npx playwright test tests/e2e/backtest.spec.ts --project=mobile-safari
+        env:
+          E2E_USE_MOCK_AUTH: "1"
+          E2E_WEBKIT: "1"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

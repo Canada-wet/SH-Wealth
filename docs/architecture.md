@@ -12,6 +12,8 @@
 
 ## 1. 一分钟理解
 
+`0.16.1–0.16.2`：回测证券搜索为独立鉴权同源`/api/backtest/securities`，固定公开查询、精确元数据与近期报价核对，无AI或私人财富外发。`backtest-readiness.ts`区分当前配置与本机已载入数据，阻止缺项或口径错误运行；行情预览仍需显式采用。Yahoo历史仅缓存成功结果并共享进行中请求，失败不占一小时缓存，上游拒绝保留冷却。手机下拉按visualViewport定位，触摸保护及持仓卡片不改变家庭同步边界；[免费数据评估](backtest-free-data.md)列出尚未接入的备选，无新SQL或付费数据授权。
+
 `0.16.0` 增量：回测新增`PortfolioCollection`（复用家庭配置CAS）、`PortfolioComparison`和`lib/backtest-comparison.ts`（统一假设及共同日期的确定性重算）。大体积对照快照为家庭scope的独立IndexedDB键，不写共享账本；配置云同步、行情本机缓存及20MB显式研究包分层不变。Yahoo适配读取实际证券币种而非仅凭交易所后缀；规划汇率复用鉴权`/api/market`的加拿大央行序列，用户显式采用，不参加历史收益。无新SQL、权限或模型调用；详见[回测文档](backtesting.md)。
 
 `0.15.0` 增量：[投资回测工作台](backtesting.md)使用浏览器确定性引擎和独立 `/api/backtest/advisor` 只读研究端点。命名配置保存在家庭JSON市场聚合，价格与最近对话为家庭ID隔离的IndexedDB本机缓存；不增加金融快照或交易权限。供应商尚未开通，真实历史走用户CSV；家庭汇总与官方观测分别显式授权，服务端重新计算后再发AI。新增独立 `/backtest` 搜索/最近/置顶入口，生产需增量安装 `backtest-navigation.sql` 扩展导航与行动来源白名单；基线架构图仍为原快照，不表示新版本已上线。

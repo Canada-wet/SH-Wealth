@@ -163,3 +163,60 @@ it("恶意或失配响应拒绝，不能成为dropdown选项", async () => {
   expect(screen.queryByRole("option")).toBeNull();
   expect(select).not.toHaveBeenCalled();
 });
+it("Safari触摸候选先失焦到null也保留选项，点击仍可提交", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response("NVDA")),
+  );
+  const { select } = mount(),
+    input = search("NVDA");
+  const option = await screen.findByRole("option", { name: /NVDA.US/ });
+  fireEvent.pointerDown(option, { pointerType: "touch" });
+  fireEvent.blur(input, { relatedTarget: null });
+  expect(screen.getByRole("option", { name: /NVDA.US/ })).toBeTruthy();
+  fireEvent.pointerUp(option, { pointerType: "touch" });
+  fireEvent.click(option);
+  expect(select).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ symbol: "NVDA.US" }),
+  );
+});
+it("软键盘缩小visualViewport后，下拉按可见区域重新定位", async () => {
+  const viewport = Object.assign(new EventTarget(), {
+    offsetLeft: 0,
+    offsetTop: 100,
+    width: 390,
+    height: 400,
+  });
+  vi.stubGlobal("visualViewport", viewport);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response("NVDA")),
+  );
+  mount();
+  const field = screen.getByRole("combobox", { name: "标的1" });
+  vi.spyOn(field, "getBoundingClientRect").mockReturnValue({
+    x: 20,
+    left: 20,
+    right: 250,
+    top: 350,
+    bottom: 394,
+    y: 350,
+    width: 230,
+    height: 44,
+    toJSON: () => ({}),
+  });
+  search("NVDA");
+  await screen.findByRole("option", { name: /NVDA.US/ });
+  const popup = screen.getByRole("listbox").parentElement!;
+  expect(parseFloat(popup.style.top)).toBeGreaterThanOrEqual(112);
+  expect(
+    parseFloat(popup.style.top) + parseFloat(popup.style.maxHeight),
+  ).toBeLessThanOrEqual(500);
+  viewport.height = 250;
+  viewport.dispatchEvent(new Event("resize"));
+  await waitFor(() =>
+    expect(
+      parseFloat(popup.style.top) + parseFloat(popup.style.maxHeight),
+    ).toBeLessThanOrEqual(350),
+  );
+});

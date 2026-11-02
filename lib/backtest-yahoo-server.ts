@@ -74,10 +74,52 @@ export async function fetchYahooHistory(
     };
   }
 }
-// Cache only public symbol/date history (including failures to avoid hammering).
-const cachedYahoo = unstable_cache(fetchYahooHistory, ["backtest-yahoo-v2"], {
-  revalidate: 3600,
-});
+// Only successes belong in the hour-long cache. A temporary timeout must not
+// become an hour-long "missing security". Denials still share the cooldown.
+class HistoryFailure extends Error {
+  constructor(readonly result: YahooAssetResult) {
+    super("History unavailable");
+  }
+}
+const cachedHistory = unstable_cache(
+  async (symbol: string, start: string, end: string) => {
+    const result = await fetchYahooHistory(symbol, start, end);
+    if (!result.asset) throw new HistoryFailure(result);
+    return result;
+  },
+  ["backtest-yahoo-success-v3"],
+  {
+    revalidate: 3600,
+  },
+);
+const pending = new Map<string, Promise<YahooAssetResult>>();
+async function cachedYahoo(symbol: string, start: string, end: string) {
+  const key = `${symbol}:${start}:${end}`;
+  const existing = pending.get(key);
+  if (existing) return existing;
+  if (pending.size >= 100)
+    return {
+      symbol,
+      yahooSymbol: yahooSymbol(symbol),
+      fetchedAt: new Date().toISOString(),
+      warnings: [],
+      error: "历史服务繁忙，请稍后手动重试。",
+    };
+  const work = cachedHistory(symbol, start, end)
+    .catch((e) => {
+      if (e instanceof HistoryFailure) return e.result;
+      return {
+        symbol,
+        yahooSymbol: yahooSymbol(symbol),
+        fetchedAt: new Date().toISOString(),
+        warnings: [],
+        error: "历史缓存服务暂不可用，请稍后手动重试；未重发上游请求。",
+      };
+    })
+    .finally(() => pending.delete(key));
+  pending.set(key, work);
+  return work;
+}
 export async function getYahooBatch(
   request: YahooRequest,
 ): Promise<YahooBatch> {

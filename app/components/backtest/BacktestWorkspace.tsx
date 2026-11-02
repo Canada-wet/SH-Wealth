@@ -48,6 +48,8 @@ import { backtestCache, portfolioShelfCache } from "@/lib/backtest-cache";
 import PortfolioComparison from "./PortfolioComparison";
 import PortfolioCollection from "./PortfolioCollection";
 import SecurityPicker from "./SecurityPicker";
+import FreeDataGuide from "./FreeDataGuide";
+import { backtestReadiness, holdingIssues } from "@/lib/backtest-readiness";
 import {
   portfolioCurrencies,
   cadReference,
@@ -120,12 +122,30 @@ export default function BacktestWorkspace({
   const [yahoo, setYahoo] = useState<YahooBatch | null>(null),
     [yahooBusy, setYahooBusy] = useState(false),
     [yahooError, setYahooError] = useState("");
+  const [selectedCurrencies, setSelectedCurrencies] = useState<
+    Record<string, "USD" | "CAD">
+  >({});
   const yahooController = useRef<AbortController | null>(null);
   const fxController = useRef<AbortController | null>(null);
   const [fx, setFx] = useState<CadReference | null>(null),
     [fxBusy, setFxBusy] = useState(false),
     [fxError, setFxError] = useState("");
   const currencies = portfolioCurrencies(config.holdings, data);
+  const knownCurrencies = config.holdings.flatMap((h) => {
+    const currency =
+      data?.assets.find((a) => a.symbol === h.symbol)?.currency ??
+      selectedCurrencies[h.symbol];
+    return currency ? [`${h.symbol} · ${currency}`] : [];
+  });
+  const mixedListings =
+    new Set(
+      config.holdings.flatMap((h) => {
+        const currency =
+          data?.assets.find((a) => a.symbol === h.symbol)?.currency ??
+          selectedCurrencies[h.symbol];
+        return currency ? [currency] : [];
+      }),
+    ).size > 1;
   const previewCurrencies = portfolioCurrencies(
     config.holdings,
     yahoo?.data ?? null,
@@ -137,6 +157,16 @@ export default function BacktestWorkspace({
   };
   const yahooStale =
     !!yahoo && stableJSON(yahoo.requested) !== stableJSON(yahooSelection);
+  const readiness = useMemo(
+    () => backtestReadiness(config, data),
+    [config, data],
+  );
+  const builderIssues = holdingIssues(config.holdings);
+  const previewComplete =
+    !!yahoo?.data &&
+    config.holdings.every((h) =>
+      yahoo.data!.assets.some((a) => a.symbol === h.symbol),
+    );
   const [messages, setMessages] = useState<Chat[]>([]),
     [question, setQuestion] = useState(""),
     [household, setHousehold] = useState(false),
@@ -338,8 +368,10 @@ export default function BacktestWorkspace({
       autoScroll.current = false;
     }
   }, [report]);
-  const patch = (p: Partial<BacktestConfig>) =>
+  const patch = (p: Partial<BacktestConfig>) => {
+    setError("");
     setConfig((c) => ({ ...c, ...p }));
+  };
   const run = (c = config, d = data) => {
     try {
       if (!d)
@@ -407,6 +439,8 @@ export default function BacktestWorkspace({
     run(p.config, p.data);
   };
   const fetchYahoo = async () => {
+    if (yahooBusy || reading || busy || builderIssues.length) return;
+    setError("");
     setYahooError("");
     let query;
     try {
@@ -585,6 +619,45 @@ export default function BacktestWorkspace({
         : {}),
     });
     return true;
+  };
+  const adoptYahoo = (runAfter = false) => {
+    if (
+      !yahoo?.data ||
+      !previewComplete ||
+      yahooStale ||
+      previewCurrencies.mixed ||
+      yahooBusy
+    )
+      return;
+    if (config.dividends !== "reinvest") {
+      setYahooError("请先把分红处理改为再投资；复权总回报不能模拟现金分红。");
+      return;
+    }
+    if (
+      data &&
+      !confirm(
+        "用已获取的Yahoo历史替换当前研究行情？建议先导出旧研究包。组合和权重不会改变。",
+      )
+    )
+      return;
+    if (
+      previewCurrencies.currency &&
+      !adoptCurrency(previewCurrencies.currency)
+    )
+      return;
+    const nextConfig = {
+      ...config,
+      currency: previewCurrencies.currency ?? config.currency,
+      risk: {
+        ...config.risk,
+        ...(previewCurrencies.currency === "CAD" ? { cadPerUnit: 1 } : {}),
+      },
+    };
+    setData(yahoo.data);
+    setError("");
+    setYahooError("");
+    setNotice(`已采用${yahoo.data.assets.length}项Yahoo复权历史；权重未改动。`);
+    if (runAfter) run(nextConfig, yahoo.data);
   };
   const addComparison = () => {
     if (!report || !runData || stale || !shelfReady) return;
@@ -876,6 +949,7 @@ export default function BacktestWorkspace({
                 <label>
                   计价币种
                   <select
+                    aria-label="计价币种"
                     value={config.currency}
                     onChange={(e) =>
                       patch({ currency: e.target.value as "CAD" | "USD" })
@@ -935,7 +1009,11 @@ export default function BacktestWorkspace({
                               .filter((_, j) => j !== i)
                               .map((h) => h.symbol)}
                             disabled={busy || reading || yahooBusy}
-                            onSelect={(security) =>
+                            onSelect={(security) => {
+                              setSelectedCurrencies((c) => ({
+                                ...c,
+                                [security.symbol]: security.currency,
+                              }));
                               patch({
                                 holdings: config.holdings.map((r, j) =>
                                   j === i
@@ -945,8 +1023,8 @@ export default function BacktestWorkspace({
                                       }
                                     : r,
                                 ),
-                              })
-                            }
+                              });
+                            }}
                           />
                         </td>
                         <td>
@@ -956,12 +1034,25 @@ export default function BacktestWorkspace({
                             min="0.01"
                             max="100"
                             step="any"
-                            value={h.weight}
+                            value={
+                              Number.isFinite(h.weight) && h.weight !== 0
+                                ? h.weight
+                                : ""
+                            }
+                            inputMode="decimal"
+                            disabled={busy || reading || yahooBusy}
                             onChange={(e) =>
                               patch({
                                 holdings: config.holdings.map((r, j) =>
                                   j === i
-                                    ? { ...r, weight: e.target.valueAsNumber }
+                                    ? {
+                                        ...r,
+                                        weight: Number.isFinite(
+                                          e.target.valueAsNumber,
+                                        )
+                                          ? e.target.valueAsNumber
+                                          : 0,
+                                      }
                                     : r,
                                 ),
                               })
@@ -972,7 +1063,12 @@ export default function BacktestWorkspace({
                           <button
                             className="icon-button"
                             aria-label={`移除标的${i + 1}`}
-                            disabled={config.holdings.length === 1}
+                            disabled={
+                              config.holdings.length === 1 ||
+                              busy ||
+                              reading ||
+                              yahooBusy
+                            }
                             onClick={() =>
                               patch({
                                 holdings: config.holdings.filter(
@@ -991,7 +1087,12 @@ export default function BacktestWorkspace({
                 <div className="bt-row">
                   <button
                     className="bt-text-button"
-                    disabled={config.holdings.length >= 8}
+                    disabled={
+                      config.holdings.length >= 8 ||
+                      busy ||
+                      reading ||
+                      yahooBusy
+                    }
                     onClick={() =>
                       patch({
                         holdings: [
@@ -1002,6 +1103,20 @@ export default function BacktestWorkspace({
                     }
                   >
                     <Plus size={14} /> 添加标的
+                  </button>
+                  <button
+                    className="bt-text-button"
+                    disabled={busy || reading || yahooBusy}
+                    onClick={() =>
+                      patch({
+                        holdings: config.holdings.map((h) => ({
+                          ...h,
+                          weight: 100 / config.holdings.length,
+                        })),
+                      })
+                    }
+                  >
+                    一键等权
                   </button>
                   <span
                     className={
@@ -1024,6 +1139,26 @@ export default function BacktestWorkspace({
                 搜索后从下拉列表选择已核对的股票／ETF，不能提交任意手填代码。最多8个标的。同一回测仅用一种计价币种；加币对冲
                 ETF 的币种指成交币种，不代表没有底层风险。
               </p>
+              {mixedListings && (
+                <p className="bt-builder-check" role="status">
+                  已核对成交币种：{knownCurrencies.join("；")}
+                  。当前仅支持单币种历史回测，请分别构建USD与CAD组合；当下汇率不能代替逐日历史换汇。
+                </p>
+              )}
+              {!!builderIssues.length && (
+                <div
+                  className="bt-builder-check"
+                  role="status"
+                  aria-label="组合填写检查"
+                >
+                  <strong>完成这几项即可继续</strong>
+                  <ul>
+                    {builderIssues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="bt-currency-panel" aria-label="证券计价币种识别">
                 <strong>按证券历史核对币种</strong>
                 <div className="bt-currency-list">
@@ -1032,11 +1167,13 @@ export default function BacktestWorkspace({
                       {r.symbol || "待填代码"} ·{" "}
                       {r.currency
                         ? `${r.currency}${data?.synthetic ? "（合成）" : " · 行情记录"}`
-                        : r.symbol.endsWith(".US")
-                          ? "USD? · 待核对"
-                          : r.symbol.endsWith(".TO")
-                            ? "CAD/USD · 待核对"
-                            : "待识别"}
+                        : selectedCurrencies[r.symbol]
+                          ? `${selectedCurrencies[r.symbol]} · 证券已核对，待载入历史`
+                          : r.symbol.endsWith(".US")
+                            ? "USD? · 待核对"
+                            : r.symbol.endsWith(".TO")
+                              ? "CAD/USD · 待核对"
+                              : "待识别"}
                     </span>
                   ))}
                 </div>
@@ -1299,7 +1436,13 @@ export default function BacktestWorkspace({
             <div className="bt-step-footer">
               <button
                 className="primary"
-                disabled={!cacheReady}
+                disabled={
+                  !cacheReady ||
+                  !!builderIssues.length ||
+                  yahooBusy ||
+                  reading ||
+                  busy
+                }
                 onClick={() => setStep("data")}
               >
                 下一步：历史数据 <ArrowRight size={16} />
@@ -1322,11 +1465,49 @@ export default function BacktestWorkspace({
               <p>
                 按组合代码获取Yahoo可用历史，或导入你有权使用的CSV。只有点击才请求；不会把家庭资产、金额、权重或聊天发给Yahoo。
               </p>
+              <div
+                className="bt-readiness"
+                aria-label="当前组合数据就绪情况"
+                role="status"
+              >
+                <strong>
+                  {readiness.ready
+                    ? "当前组合行情已就绪，可直接运行"
+                    : "先为当前组合准备历史数据"}
+                </strong>
+                <ul>
+                  {readiness.rows.map((r, i) => (
+                    <li key={`${r.symbol}-${i}`}>
+                      <b>{r.symbol || `未选择证券${i + 1}`}</b>
+                      <span>
+                        {r.asset
+                          ? `${r.asset.currency} · 已载入${r.asset.points.length.toLocaleString()}日线`
+                          : "尚未载入 · 请获取并采用"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {!!readiness.issues.length && <p>{readiness.issues[0]}</p>}
+                {!!builderIssues.length && (
+                  <button
+                    className="bt-text-button"
+                    onClick={() => setStep("design")}
+                  >
+                    回到组合设置修正
+                  </button>
+                )}
+              </div>
               <div className="bt-yahoo">
                 <div className="bt-row bt-wrap">
                   <button
                     className="secondary"
-                    disabled={!cacheReady || yahooBusy || reading || busy}
+                    disabled={
+                      !cacheReady ||
+                      yahooBusy ||
+                      reading ||
+                      busy ||
+                      !!builderIssues.length
+                    }
                     onClick={() => void fetchYahoo()}
                   >
                     <Download size={16} />{" "}
@@ -1404,50 +1585,47 @@ export default function BacktestWorkspace({
                         标的或日期已改变，这批预览已过期；请重新获取。
                       </p>
                     )}
-                    <button
-                      className="secondary"
-                      disabled={
-                        !yahoo.data ||
-                        previewCurrencies.mixed ||
-                        yahooStale ||
-                        yahooBusy ||
-                        reading ||
-                        busy
-                      }
-                      onClick={() => {
-                        if (!yahoo.data || yahooStale) return;
-                        if (previewCurrencies.mixed) return;
-                        if (config.dividends !== "reinvest") {
-                          setYahooError(
-                            "请先把分红处理改为再投资；复权总回报不能模拟现金分红。",
-                          );
-                          return;
+                    {!previewComplete && (
+                      <p className="bt-yahoo-error" role="alert">
+                        尚有标的未获取成功，不能用不完整行情运行整个组合；请查看逐项原因，稍后手动重新获取或用CSV补齐。旧行情未被替换。
+                      </p>
+                    )}
+                    <div className="bt-row bt-wrap">
+                      <button
+                        className="secondary"
+                        disabled={
+                          !yahoo.data ||
+                          !previewComplete ||
+                          previewCurrencies.mixed ||
+                          yahooStale ||
+                          yahooBusy ||
+                          reading ||
+                          busy
                         }
-                        if (
-                          data &&
-                          !confirm(
-                            "用已获取的Yahoo历史替换当前研究行情？建议先导出旧研究包。组合和权重不会改变。",
-                          )
-                        )
-                          return;
-                        if (
-                          previewCurrencies.currency &&
-                          !adoptCurrency(previewCurrencies.currency)
-                        )
-                          return;
-                        setData(yahoo.data);
-                        setError("");
-                        setYahooError("");
-                        setNotice(
-                          `已采用${yahoo.data.assets.length}项Yahoo复权历史；请核对覆盖区间并重新运行。缺失标的需修改组合或另行补齐，权重未改动。`,
-                        );
-                      }}
-                    >
-                      使用这批行情
-                    </button>
+                        onClick={() => adoptYahoo()}
+                      >
+                        使用这批行情
+                      </button>
+                      <button
+                        className="primary"
+                        disabled={
+                          !previewComplete ||
+                          yahooStale ||
+                          previewCurrencies.mixed ||
+                          yahooBusy ||
+                          reading ||
+                          busy
+                        }
+                        onClick={() => adoptYahoo(true)}
+                      >
+                        <Play size={16} />
+                        采用并运行比较
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
+              <FreeDataGuide />
               <button
                 className="bt-text-button"
                 disabled={reading || !cacheReady || busy}
@@ -1633,7 +1811,13 @@ export default function BacktestWorkspace({
               )}
               <button
                 className="primary bt-run"
-                disabled={!cacheReady || reading || busy}
+                disabled={
+                  !cacheReady ||
+                  reading ||
+                  busy ||
+                  yahooBusy ||
+                  !readiness.ready
+                }
                 onClick={() => run()}
               >
                 <Play size={17} /> 运行策略比较

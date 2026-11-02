@@ -41,7 +41,8 @@ export default function SecurityPicker({
     popup = useRef<HTMLDivElement>(null),
     sequence = useRef(0),
     composing = useRef(false),
-    suppressFocus = useRef(false);
+    suppressFocus = useRef(false),
+    pointerInside = useRef(false);
   const id = useId(),
     listId = `${id}-list`,
     statusId = `${id}-status`;
@@ -74,15 +75,24 @@ export default function SecurityPicker({
     const place = () => {
       if (!input.current) return;
       const r = input.current.getBoundingClientRect(),
-        width = Math.min(Math.max(350, r.width), window.innerWidth - 24),
-        below = window.innerHeight - r.bottom - 12;
-      const height = Math.min(370, Math.max(below, r.top - 12));
+        viewport = window.visualViewport,
+        left = viewport?.offsetLeft ?? 0,
+        top = viewport?.offsetTop ?? 0,
+        viewWidth = viewport?.width ?? window.innerWidth,
+        viewHeight = viewport?.height ?? window.innerHeight,
+        width = Math.min(Math.max(350, r.width), viewWidth - 24),
+        below = top + viewHeight - r.bottom - 12,
+        above = r.top - top - 12;
+      const height = Math.min(370, Math.max(below, above));
       setPosition({
-        left: Math.max(12, Math.min(r.left, window.innerWidth - width - 12)),
+        left: Math.max(
+          left + 12,
+          Math.min(r.left, left + viewWidth - width - 12),
+        ),
         top:
-          below >= 200 || below >= r.top
+          below >= 200 || below >= above
             ? r.bottom + 5
-            : Math.max(12, r.top - height - 5),
+            : Math.max(top + 12, r.top - height - 5),
         width,
         maxHeight: Math.max(120, height),
       });
@@ -90,17 +100,23 @@ export default function SecurityPicker({
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
     const outside = (e: PointerEvent) => {
       if (
         !root.current?.contains(e.target as Node) &&
         !popup.current?.contains(e.target as Node)
-      )
+      ) {
+        pointerInside.current = false;
         close();
+      }
     };
     document.addEventListener("pointerdown", outside);
     return () => {
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
+      window.visualViewport?.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("scroll", place);
       document.removeEventListener("pointerdown", outside);
     };
   }, [open, disabled, value]);
@@ -151,7 +167,7 @@ export default function SecurityPicker({
         if (timeout) clearTimeout(timeout);
         if (n === sequence.current) setLoading(false);
       }
-    }, 450);
+    }, 550);
     return () => {
       sequence.current++;
       clearTimeout(timer);
@@ -185,7 +201,11 @@ export default function SecurityPicker({
       ref={root}
       onBlur={(e) => {
         const next = e.relatedTarget as Node | null;
-        if (!root.current?.contains(next) && !popup.current?.contains(next))
+        if (
+          !pointerInside.current &&
+          !root.current?.contains(next) &&
+          !popup.current?.contains(next)
+        )
           close();
       }}
     >
@@ -264,7 +284,22 @@ export default function SecurityPicker({
         !disabled &&
         position &&
         createPortal(
-          <div ref={popup} className="bt-security-popover" style={position}>
+          <div
+            ref={popup}
+            className="bt-security-popover"
+            style={position}
+            onPointerDown={() => {
+              pointerInside.current = true;
+            }}
+            onPointerUp={() => {
+              setTimeout(() => {
+                pointerInside.current = false;
+              }, 0);
+            }}
+            onPointerCancel={() => {
+              pointerInside.current = false;
+            }}
+          >
             <header>
               <span>
                 <Search size={14} />

@@ -340,7 +340,10 @@ export function runBacktest(
   validateBacktestData(data);
   const assets = config.holdings.map((h) => {
     const a = data.assets.find((a) => a.symbol === h.symbol);
-    if (!a) throw Error(`缺少 ${h.symbol} 的历史数据。`);
+    if (!a)
+      throw Error(
+        `尚未载入 ${h.symbol} 的历史数据，请先获取并采用当前组合行情；这不代表供应商没有这只证券。`,
+      );
     if (a.currency !== config.currency)
       throw Error("价格币种与组合不一致，不能忽略汇率直接相加。");
     return a;

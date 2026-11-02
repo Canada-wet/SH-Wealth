@@ -506,3 +506,121 @@ test("股票下拉仅选择核对通过项，任意输入不改组合、重复�
   expect(queries.every((q) => !q.includes("@"))).toBe(true);
   await expect(first).toHaveValue("NVDA.US");
 });
+test("VTV与XCV分别建仓：触摸选择、等权、未载入保护、采用并运行和更换持仓", async ({
+  page,
+}, info) => {
+  test.setTimeout(60000);
+  const requests: string[][] = [];
+  await page.route("**/api/backtest/securities?*", (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q")!;
+    const cad = q.toUpperCase().includes("XCV"),
+      symbol = cad ? "XCV.TO" : "VTV.US";
+    return route.fulfill({
+      json: {
+        version: 1,
+        query: q,
+        omitted: 0,
+        checkedAt: new Date().toISOString(),
+        options: [
+          {
+            symbol,
+            providerSymbol: cad ? symbol : "VTV",
+            name: cad ? "iShares Canadian Value ETF" : "Vanguard Value ETF",
+            exchange: cad ? "TSX" : "NYSE Arca",
+            kind: "ETF",
+            currency: cad ? "CAD" : "USD",
+            verifiedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/backtest/history", (route) => {
+    const q = route.request().postDataJSON();
+    requests.push(q.symbols);
+    return route.fulfill({
+      json: {
+        requested: q,
+        effectiveEnd: "2026-10-30",
+        results: q.symbols.map((symbol: string) => ({
+          symbol,
+          yahooSymbol: symbol.replace(/\.US$/, ""),
+          warnings: [],
+          fetchedAt: new Date().toISOString(),
+        })),
+        data: {
+          version: 1,
+          synthetic: false,
+          capturedAt: new Date().toISOString(),
+          assets: q.symbols.map((symbol: string) => ({
+            symbol,
+            currency: symbol.endsWith(".TO") ? "CAD" : "USD",
+            basis: "total-return",
+            dividendsKnown: false,
+            source: "Yahoo Finance · synthetic QA only",
+            points: ["2020-01-02", "2020-01-03", "2020-01-06"].map(
+              (date, i) => ({ date, close: 100 + i, dividend: 0, split: 1 }),
+            ),
+          })),
+        },
+      },
+    });
+  });
+  await open(page);
+  await step(page, /组合设置/);
+  await page.getByRole("button", { name: "移除标的2", exact: true }).click();
+  await page.getByLabel("权重1", { exact: true }).fill("");
+  await expect(
+    page.getByRole("button", { name: "下一步：历史数据", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByLabel("组合填写检查")).not.toContainText("NaN");
+  for (const code of ["XCV", "VTV"]) {
+    await page.getByRole("combobox", { name: "标的1", exact: true }).fill(code);
+    const option = page.getByRole("option", { name: new RegExp(`${code}\\.`) });
+    await expect(option).toBeVisible();
+    if (info.project.name.startsWith("mobile")) await option.tap();
+    else await option.click();
+    await expect(
+      page.getByRole("combobox", { name: "标的1", exact: true }),
+    ).toHaveValue(code === "XCV" ? "XCV.TO" : "VTV.US");
+    await page.getByRole("button", { name: "一键等权", exact: true }).click();
+    await page
+      .getByRole("button", { name: "下一步：历史数据", exact: true })
+      .click();
+    await expect(page.getByLabel("当前组合数据就绪情况")).toContainText(
+      "尚未载入",
+    );
+    await expect(
+      page.getByRole("button", { name: "运行策略比较", exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByRole("button", { name: "从Yahoo获取组合历史", exact: true })
+      .click();
+    const use = page.getByRole("button", {
+      name: "采用并运行比较",
+      exact: true,
+    });
+    await expect(use).toBeEnabled();
+    page.on("dialog", (dialog) => dialog.accept());
+    await use.click();
+    page.removeAllListeners("dialog");
+    await expect(
+      page.getByRole("table", { name: "同样的外部投入，不同的部署方式" }),
+    ).toBeVisible();
+    await expect(page.locator(".bt-chart .recharts-line-curve")).toHaveCount(3);
+    await step(page, /组合设置/);
+    for (const width of info.project.name.startsWith("mobile")
+      ? [320, 390]
+      : [768, 1440]) {
+      await page.setViewportSize({ width, height: 920 });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth + 1,
+          ),
+        )
+        .toBe(true);
+    }
+  }
+  expect(requests).toEqual([["XCV.TO"], ["VTV.US"]]);
+});
