@@ -295,6 +295,10 @@ export default function PortfolioComparison({
           });
         }}
       />
+      <p className="bt-help" role="status">
+        {status ||
+          "对照快照仅缓存于本设备的家庭空间，不自动同步价格或修改账本。"}
+      </p>
       <fieldset className="bt-snapshot-fieldset" disabled={preparing}>
         <details className="bt-snapshot-details" open={!lab.saved.length}>
           <summary>已有研究快照 · {shelf.studies.length}（本机）</summary>
@@ -397,10 +401,6 @@ export default function PortfolioComparison({
               ))}
             </div>
           )}
-          <p className="bt-help" role="status">
-            {status ||
-              "对照快照仅缓存于本设备的家庭空间，不自动同步价格或修改账本。"}
-          </p>
           {!!shelf.studies.length && (
             <div className="card bt-comparison-controls">
               <div className="bt-comparison-fields">

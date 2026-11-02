@@ -251,6 +251,12 @@ it("删除的库条目明确提示，只有用户清理后才更新已选列表"
   fireEvent.click(screen.getByRole("button", { name: "清理失效选择" }));
   expect(h.getShelf().collection).toEqual({ ids: ["p0"], baseline: "p0" });
 });
+it("本机缓存状态不会藏在已折叠的旧快照里", () => {
+  mount();
+  expect(
+    screen.getAllByRole("status").some((e) => e.textContent === "已缓存"),
+  ).toBe(true);
+});
 it("组合库卡片可勾选并直接进入对照，不触发载入或保存配置", () => {
   const load = vi.fn(),
     save = vi.fn(),
