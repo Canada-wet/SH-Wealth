@@ -28,6 +28,7 @@ export default function SecurityPicker({
     [active, setActive] = useState(-1),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
+    [cancelNotice, setCancelNotice] = useState(""),
     [selected, setSelected] = useState<Security | null>(null),
     [revision, setRevision] = useState(0);
   const [position, setPosition] = useState<{
@@ -49,6 +50,14 @@ export default function SecurityPicker({
   const used = (s: Security) =>
     excluded.some((x) => symbolIdentity(x) === symbolIdentity(s.symbol));
   const close = () => {
+    if (
+      open &&
+      query.trim() &&
+      query.trim().toUpperCase() !== value.toUpperCase()
+    )
+      setCancelNotice(
+        `未选择${query.trim().slice(0, 48)}，当前仍保留 ${value}。`,
+      );
     sequence.current++;
     setOpen(false);
     setQuery(value);
@@ -57,6 +66,7 @@ export default function SecurityPicker({
     if (disabled || used(s) || !options.includes(s)) return;
     sequence.current++;
     setSelected(s);
+    setCancelNotice("");
     setOpen(false);
     setQuery(s.symbol);
     onSelect(s);
@@ -154,7 +164,15 @@ export default function SecurityPicker({
         validateSecuritySearch(body, term);
         if (n === sequence.current) {
           setOptions(body.options);
-          setActive(-1);
+          const exact = body.options
+            .map((s, i) => ({ s, i }))
+            .filter(
+              ({ s }) =>
+                !used(s) &&
+                (s.symbol === term.toUpperCase() ||
+                  s.symbol.slice(0, -3) === term.toUpperCase()),
+            );
+          setActive(exact.length === 1 ? exact[0].i : -1);
         }
       } catch (e) {
         if (n === sequence.current)
@@ -243,6 +261,7 @@ export default function SecurityPicker({
             }
           }}
           onChange={(e) => {
+            setCancelNotice("");
             sequence.current++;
             setOptions([]);
             setActive(-1);
@@ -278,6 +297,11 @@ export default function SecurityPicker({
       {selected && selected.symbol === value && (
         <small className="bt-security-caption">
           {selected.name} · {selected.currency}
+        </small>
+      )}
+      {!open && cancelNotice && (
+        <small role="status" className="bt-security-caption">
+          {cancelNotice}
         </small>
       )}
       {open &&
@@ -371,14 +395,16 @@ export default function SecurityPicker({
                   </span>
                   <span className="bt-security-name">{s.name}</span>
                   <small>
-                    {used(s) ? "已在组合中" : "已在线核对"} ·{" "}
+                    {used(s) ? "已在组合中" : "已在线核对"}
+                    {s.verifiedBy === "tiingo" ? " · Tiingo" : ""} ·{" "}
                     {new Date(s.verifiedAt).toLocaleDateString()}
                   </small>
                 </button>
               ))}
             </div>
             <footer>
-              Yahoo公开资料（非官方接入）· 结果可能缓存，历史数据仍需另行获取。
+              Yahoo公开资料／已配置Tiingo的常见美股ETF精确匹配 ·
+              结果可能缓存，历史仍需另行获取。
             </footer>
           </div>,
           document.body,

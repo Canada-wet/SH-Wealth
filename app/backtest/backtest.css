@@ -1,6 +1,47 @@
 .bt-page {
   max-width: 1600px;
 }
+.bt-source-controls {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.bt-source-controls label {
+  display: grid;
+  gap: 7px;
+  font-weight: 650;
+}
+.bt-source-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+}
+.bt-source-controls small {
+  color: var(--muted, #647568);
+  overflow-wrap: anywhere;
+}
+.bt-source-controls .bt-text-button {
+  justify-self: start;
+}
+.bt-fx-conversion {
+  margin: 18px 0;
+  padding: 16px;
+  background: #eaf2ee;
+  border: 1px solid #c5d7cc;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.bt-fx-conversion p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 8px 0 12px;
+}
+.bt-fx-conversion button {
+  white-space: normal;
+  min-height: 44px;
+  max-width: 100%;
+}
 .bt-yahoo {
   border: 1px solid #dfe7d7;
   border-radius: 14px;
@@ -1692,7 +1733,11 @@
   .bt-holdings thead {
     display: none;
   }
-  .bt-holdings caption { display: block; width: 100%; text-align: left; }
+  .bt-holdings caption {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
   .bt-holdings tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;

@@ -93,7 +93,11 @@ const cachedHistory = unstable_cache(
   },
 );
 const pending = new Map<string, Promise<YahooAssetResult>>();
-async function cachedYahoo(symbol: string, start: string, end: string) {
+export async function getCachedYahooHistory(
+  symbol: string,
+  start: string,
+  end: string,
+) {
   const key = `${symbol}:${start}:${end}`;
   const existing = pending.get(key);
   if (existing) return existing;
@@ -140,7 +144,11 @@ export async function getYahooBatch(
       });
       continue;
     }
-    const result = await cachedYahoo(symbol, request.start, effectiveEnd);
+    const result = await getCachedYahooHistory(
+      symbol,
+      request.start,
+      effectiveEnd,
+    );
     const size = result.asset ? JSON.stringify(result.asset).length : 0;
     if (bytes + size > 3_500_000) {
       results.push({

@@ -3,7 +3,9 @@ export default function FreeDataGuide() {
     <details className="bt-details bt-free-data">
       <summary>免费数据怎么选？覆盖、额度与分红口径</summary>
       <p>
-        核查于2026-11-01。没有一个已验证的免费官方API同时保证美股、加拿大ETF、多年复权历史及家庭共享许可。以下备选尚未接入，也未替你开户或升级。
+        核查于2026-11-01。已接入Yahoo、Tiingo
+        EOD适配器和加拿大央行历史汇率。Tiingo须在服务器配置个人免费API
+        key后才会请求；不替用户开户、购买或承诺覆盖所有交易所。
       </p>
       <dl>
         <div>
@@ -19,11 +21,11 @@ export default function FreeDataGuide() {
               target="_blank"
               rel="noreferrer"
             >
-              Tiingo Starter
+              已接入：Tiingo Starter · 需要免费key
             </a>
           </dt>
           <dd>
-            免费档列出30+年历史、50次/小时、1,000次/天及500个代码/月；EOD提供复权价与公司行动。适合优先评估美股ETF；XCV等TSX覆盖与两人共享展示许可需另行确认，不能仅凭“免费”自动接入。
+            免费档列出30+年历史、50次/小时、1,000次/天及500个代码/月；当前接入仅接受核对身份后的美股股票与ETF，采用含分红拆股的复权日线。服务器变量TIINGO_API_KEY；自动模式在Yahoo失败后尝试，也可单选本来源。XCV等TSX仍使用Yahoo。请自行确认家庭使用许可与账户实际额度。
           </dd>
         </div>
         <div>
@@ -71,7 +73,10 @@ export default function FreeDataGuide() {
         </div>
       </dl>
       <p>
-        Stooq可作手动交叉核查，但本轮未验证XCV覆盖与可用分红总回报口径，不会自动把未知调整价混入当前总回报。基金官网NAV也不等于交易所成交价。已有合法CSV仍可导入；宏观数据可继续使用加拿大央行、FRED等官方来源，但它们不能替代ETF价格。
+        Stooq公开请求本轮返回403，未接成可用备用源，也不会绕过限制。Twelve
+        Data、EODHD及Alpha
+        Vantage尚未接入。加拿大央行FXUSDCAD无需key，自2017年起提供1
+        USD对应CAD的日均参考价；混币预览可明确点击换算，不会用今天的汇率补历史。基金官网NAV不等于交易所成交价。
       </p>
     </details>
   );

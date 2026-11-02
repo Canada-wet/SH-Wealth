@@ -197,7 +197,7 @@ it("完整行情可显式采用并运行，运行前不采用或请求AI", async
   vi.stubGlobal("fetch", fetcher);
   const save = mount();
   goStep(/历史数据/);
-  const get = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  const get = screen.getByRole("button", { name: "获取组合历史" });
   await waitFor(() => expect((get as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(get);
   const use = await screen.findByRole("button", { name: "采用并运行比较" });
@@ -326,7 +326,7 @@ it("Yahoo仅点击时发送代码日期，部分成功预览，不自动删除�
   vi.stubGlobal("fetch", fetcher);
   const save = mount();
   goStep(/历史数据/);
-  const button = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  const button = screen.getByRole("button", { name: "获取组合历史" });
   await waitFor(() =>
     expect((button as HTMLButtonElement).disabled).toBe(false),
   );
@@ -336,7 +336,7 @@ it("Yahoo仅点击时发送代码日期，部分成功预览，不自动删除�
   expect(fetcher.mock.calls[0][0]).toBe("/api/backtest/history");
   expect(
     Object.keys(JSON.parse(String(fetcher.mock.calls[0][1].body))).sort(),
-  ).toEqual(["end", "start", "symbols"]);
+  ).toEqual(["end", "provider", "start", "symbols"]);
   expect(
     screen.queryByRole("table", { name: "行情质量与覆盖日期" }),
   ).toBeNull();
@@ -367,6 +367,55 @@ it("Yahoo仅点击时发送代码日期，部分成功预览，不自动删除�
     /AGG/,
   );
 });
+it("多来源混币预览可用历史FX显式统一后运行，不改权重或财富", async () => {
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.startsWith("/api/backtest/fx"))
+      return Response.json({
+        source: "Bank of Canada FXUSDCAD",
+        fetchedAt: "2026-11-01T00:00:00Z",
+        points: ["2020-01-02", "2020-01-03", "2020-01-06"].map((date) => ({
+          date,
+          cadPerUsd: 1.3,
+        })),
+      });
+    const q = JSON.parse(String(init?.body)),
+      r = yahooFixture(q);
+    r.data.assets = q.symbols.map((symbol: string, i: number) => ({
+      ...r.data.assets[0],
+      symbol,
+      currency: i ? "CAD" : "USD",
+    }));
+    r.results = r.results.map(({ error: _error, ...x }) => x);
+    return Response.json({ ...r, providers: { tiingo: true } });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const save = mount();
+  goStep(/历史数据/);
+  const get = screen.getByRole("button", { name: "获取组合历史" });
+  await waitFor(() => expect((get as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(get);
+  await screen.findByText("已获取 2/2 项");
+  expect(screen.getByText(/Tiingo服务器凭证已配置/)).toBeTruthy();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "采用并运行比较",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "获取历史汇率并换算为USD" }),
+  );
+  await screen.findByText("已统一为USD · 待采用");
+  fireEvent.click(screen.getByRole("button", { name: "采用并运行比较" }));
+  await screen.findByRole("table", { name: "同样的外部投入，不同的部署方式" });
+  expect(screen.getAllByText(/日均参考价/).length).toBeGreaterThan(0);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(save).not.toHaveBeenCalled();
+  const query = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
+  expect(query.symbols).toEqual(["SPY.US", "AGG.US"]);
+  expect(query.provider).toBe("auto");
+});
 it("Yahoo抓取后修改日期使预览过期；不会把旧请求用于新组合", async () => {
   vi.stubGlobal(
     "fetch",
@@ -376,7 +425,7 @@ it("Yahoo抓取后修改日期使预览过期；不会把旧请求用于新组�
   );
   mount();
   goStep(/历史数据/);
-  const button = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  const button = screen.getByRole("button", { name: "获取组合历史" });
   await waitFor(() =>
     expect((button as HTMLButtonElement).disabled).toBe(false),
   );
@@ -400,7 +449,7 @@ it("Yahoo错误不覆盖既有行情，演示代码不会外发", async () => {
   vi.stubGlobal("fetch", fetcher);
   await demo();
   goStep(/历史数据/);
-  fireEvent.click(screen.getByRole("button", { name: "从Yahoo获取组合历史" }));
+  fireEvent.click(screen.getByRole("button", { name: "获取组合历史" }));
   expect(screen.getByRole("alert").textContent).toMatch(/演示代码/);
   expect(fetcher).not.toHaveBeenCalled();
   goStep(/比较结果/);
@@ -663,7 +712,7 @@ it("Yahoo完整单币种预览自动带入币种需确认，混币预览不能�
     ),
   );
   goStep(/历史数据/);
-  const b = screen.getByRole("button", { name: "从Yahoo获取组合历史" });
+  const b = screen.getByRole("button", { name: "获取组合历史" });
   await waitFor(() => expect((b as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(b);
   await screen.findByText(/已获取 2/);
@@ -679,7 +728,7 @@ it("Yahoo完整单币种预览自动带入币种需确认，混币预览不能�
   expect(fetcher).toHaveBeenCalledTimes(1);
   mixed = true;
   fireEvent.click(b);
-  await screen.findByText(/实际成交币种混合/);
+  await screen.findByText(/行情与回测币种不同/);
   expect(
     (screen.getByRole("button", { name: "使用这批行情" }) as HTMLButtonElement)
       .disabled,

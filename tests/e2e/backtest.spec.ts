@@ -179,14 +179,13 @@ test("Yahoo逐项预览、采用复权历史、重算与刷新缓存；只发送
   });
   await open(page);
   expect(calls).toHaveLength(0);
-  await page
-    .getByRole("button", { name: "从Yahoo获取组合历史", exact: true })
-    .click();
+  await page.getByRole("button", { name: "获取组合历史", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "已获取 2/2 项" }),
   ).toBeVisible();
   expect(Object.keys(calls[0] as object).sort()).toEqual([
     "end",
+    "provider",
     "start",
     "symbols",
   ]);
@@ -506,6 +505,155 @@ test("股票下拉仅选择核对通过项，任意输入不改组合、重复�
   expect(queries.every((q) => !q.includes("@"))).toBe(true);
   await expect(first).toHaveValue("NVDA.US");
 });
+test("多来源状态、VTV精确回车选股及混币历史FX换算，刷新保留审计", async ({
+  page,
+}, info) => {
+  await page.route("**/api/backtest/providers", (route) =>
+    route.fulfill({ json: { tiingo: true } }),
+  );
+  await page.route("**/api/backtest/securities?*", (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q")!,
+      cad = q.toUpperCase().includes("XCV"),
+      symbol = cad ? "XCV.TO" : "VTV.US";
+    return route.fulfill({
+      json: {
+        version: 1,
+        query: q,
+        omitted: 0,
+        checkedAt: new Date().toISOString(),
+        options: [
+          {
+            symbol,
+            providerSymbol: cad ? symbol : "VTV",
+            name: cad ? "iShares Canadian Value ETF" : "Vanguard Value ETF",
+            exchange: cad ? "TSX" : "NYSE Arca",
+            kind: "ETF",
+            currency: cad ? "CAD" : "USD",
+            verifiedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+  });
+  const dates = ["2020-01-02", "2020-01-03", "2020-01-06"];
+  await page.route("**/api/backtest/history", (route) => {
+    const q = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        requested: q,
+        effectiveEnd: "2026-10-30",
+        providers: { tiingo: true },
+        results: q.symbols.map((symbol: string) => ({
+          symbol,
+          yahooSymbol: symbol,
+          provider: symbol.endsWith(".TO") ? "yahoo" : "tiingo",
+          warnings: [],
+          fetchedAt: new Date().toISOString(),
+        })),
+        data: {
+          version: 1,
+          synthetic: false,
+          capturedAt: new Date().toISOString(),
+          assets: q.symbols.map((symbol: string) => ({
+            symbol,
+            currency: symbol.endsWith(".TO") ? "CAD" : "USD",
+            basis: "total-return",
+            dividendsKnown: false,
+            source: symbol.endsWith(".TO")
+              ? "Yahoo Finance · SYNTHETIC QA"
+              : "Tiingo EOD · SYNTHETIC QA",
+            points: dates.map((date, i) => ({
+              date,
+              close: 100 + i,
+              dividend: 0,
+              split: 1,
+            })),
+          })),
+        },
+      },
+    });
+  });
+  let fxCalls = 0;
+  await page.route("**/api/backtest/fx?*", (route) => {
+    fxCalls++;
+    expect(
+      [...new URL(route.request().url()).searchParams.keys()].sort(),
+    ).toEqual(["end", "start"]);
+    return route.fulfill({
+      json: {
+        source: "Bank of Canada FXUSDCAD",
+        fetchedAt: new Date().toISOString(),
+        points: dates.map((date) => ({ date, cadPerUsd: 1.3 })),
+      },
+    });
+  });
+  await open(page);
+  await page.getByRole("button", { name: "检查配置", exact: true }).click();
+  await expect(page.getByText(/Tiingo服务器凭证已配置/)).toBeVisible();
+  await step(page, /组合设置/);
+  await page.getByLabel("计价币种", { exact: true }).selectOption("CAD");
+  for (const [i, code] of ["VTV", "XCV"].entries()) {
+    const box = page.getByRole("combobox", {
+      name: `标的${i + 1}`,
+      exact: true,
+    });
+    await box.fill(code);
+    await expect(
+      page.getByRole("option", { name: new RegExp(code + "\\.") }),
+    ).toBeVisible();
+    await box.press("Enter");
+    await expect(box).toHaveValue(i ? "XCV.TO" : "VTV.US");
+  }
+  await page.getByRole("button", { name: "一键等权", exact: true }).click();
+  await step(page, /历史数据/);
+  await page.getByRole("button", { name: "获取组合历史", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "已获取 2/2 项" }),
+  ).toBeVisible();
+  expect(fxCalls).toBe(0);
+  await expect(
+    page.getByRole("button", { name: "采用并运行比较", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "获取历史汇率并换算为CAD", exact: true })
+    .click();
+  await expect(
+    page.getByText("已统一为CAD · 待采用", { exact: true }),
+  ).toBeVisible();
+  expect(fxCalls).toBe(1);
+  for (const width of info.project.name.startsWith("mobile")
+    ? [320, 390]
+    : [768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+  }
+  await page
+    .getByRole("button", { name: "采用并运行比较", exact: true })
+    .click();
+  await expect(
+    page.getByRole("table", { name: "同样的外部投入，不同的部署方式" }),
+  ).toBeVisible();
+  await expect(page.locator(".bt-critical-warnings")).toContainText(
+    "日均参考价",
+  );
+  await page.waitForTimeout(1000);
+  await page.reload();
+  await step(page, /历史数据/);
+  await expect(page.locator(".bt-source-status")).toContainText(
+    "历史日均汇率统一为CAD",
+  );
+  await page.getByRole("button", { name: "运行策略比较", exact: true }).click();
+  await expect(page.locator(".bt-critical-warnings")).toContainText(
+    "日均参考价",
+  );
+  expect(fxCalls).toBe(1);
+});
 test("VTV与XCV分别建仓：触摸选择、等权、未载入保护、采用并运行和更换持仓", async ({
   page,
 }, info) => {
@@ -594,7 +742,7 @@ test("VTV与XCV分别建仓：触摸选择、等权、未载入保护、采用�
       page.getByRole("button", { name: "运行策略比较", exact: true }),
     ).toBeDisabled();
     await page
-      .getByRole("button", { name: "从Yahoo获取组合历史", exact: true })
+      .getByRole("button", { name: "获取组合历史", exact: true })
       .click();
     const use = page.getByRole("button", {
       name: "采用并运行比较",

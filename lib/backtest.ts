@@ -384,6 +384,10 @@ export function runBacktest(
     "月供在每月首个共同交易日收盘加入；DCA分批部署原有本金，三种策略的外部现金流完全相同。",
     "分红在除息日按已有份额记账并可当日再投资，不模拟实际支付日、预扣税、结算与融资。",
   ];
+  if (data.conversion)
+    warnings.push(
+      `历史汇率换算至${data.conversion.base}：Bank of Canada FXUSDCAD日均参考价，非收盘成交价；仅用当日或此前4天内汇率。不含换汇点差，仅比较共同观测日，省略${data.conversion.omitted}个单项观测；跨市场日历下252日年化风险指标为近似值。汇率覆盖始于2017年。`,
+    );
   if (data.synthetic)
     warnings.unshift(
       "合成演示数据：用于体验和验证算法，不是真实市场，不可用于投资结论。",

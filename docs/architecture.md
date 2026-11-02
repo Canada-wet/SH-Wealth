@@ -12,6 +12,8 @@
 
 ## 1. 一分钟理解
 
+`0.17.0`：历史行情端点显式provider请求路由到`backtest-history-server.ts`，支持Yahoo主源/已配置Tiingo美股补充，完整单证券序列择一，不拼接复权价。新增鉴权同源`/api/backtest/providers`仅披露配置布尔、`/api/backtest/fx`固定访问BoC FXUSDCAD日均历史；供应商只接收公开代码/日期，Token只在服务器header。混币预览在用户点击后以纯函数转换，conversion审计随IndexedDB/显式研究包/对照保留，不写共享财富账本、不增加SQL或付费AI。原规划当下汇率路径不变；原始现金分红数据不自动换汇。限制见[回测说明](backtesting.md)与[免费数据接入](backtest-free-data.md)。
+
 `0.16.1–0.16.2`：回测证券搜索为独立鉴权同源`/api/backtest/securities`，固定公开查询、精确元数据与近期报价核对，无AI或私人财富外发。`backtest-readiness.ts`区分当前配置与本机已载入数据，阻止缺项或口径错误运行；行情预览仍需显式采用。Yahoo历史仅缓存成功结果并共享进行中请求，失败不占一小时缓存，上游拒绝保留冷却。手机下拉按visualViewport定位，触摸保护及持仓卡片不改变家庭同步边界；[免费数据评估](backtest-free-data.md)列出尚未接入的备选，无新SQL或付费数据授权。
 
 `0.16.0` 增量：回测新增`PortfolioCollection`（复用家庭配置CAS）、`PortfolioComparison`和`lib/backtest-comparison.ts`（统一假设及共同日期的确定性重算）。大体积对照快照为家庭scope的独立IndexedDB键，不写共享账本；配置云同步、行情本机缓存及20MB显式研究包分层不变。Yahoo适配读取实际证券币种而非仅凭交易所后缀；规划汇率复用鉴权`/api/market`的加拿大央行序列，用户显式采用，不参加历史收益。无新SQL、权限或模型调用；详见[回测文档](backtesting.md)。

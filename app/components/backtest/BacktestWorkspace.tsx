@@ -66,7 +66,9 @@ import {
   EMPTY_BACKTEST_LAB,
 } from "@/lib/backtest-context";
 import { stableJSON } from "@/lib/cloud-plan";
-import { yahooRequest, type YahooBatch } from "@/lib/backtest-yahoo";
+import { type YahooBatch } from "@/lib/backtest-yahoo";
+import { historyRequest, type HistoryProvider } from "@/lib/backtest-history";
+import { convertHistoryToBase, type HistoricalFx } from "@/lib/backtest-fx";
 import type { WealthState } from "@/lib/wealth";
 
 type Chat = { role: "user" | "assistant"; text: string };
@@ -122,6 +124,12 @@ export default function BacktestWorkspace({
   const [yahoo, setYahoo] = useState<YahooBatch | null>(null),
     [yahooBusy, setYahooBusy] = useState(false),
     [yahooError, setYahooError] = useState("");
+  const [provider, setProvider] = useState<HistoryProvider>("auto"),
+    [tiingoReady, setTiingoReady] = useState<boolean | null>(null),
+    [historicalFxBusy, setHistoricalFxBusy] = useState(false);
+  const historicalFxController = useRef<AbortController | null>(null);
+  const previewRef = useRef(yahoo);
+  previewRef.current = yahoo;
   const [selectedCurrencies, setSelectedCurrencies] = useState<
     Record<string, "USD" | "CAD">
   >({});
@@ -154,9 +162,13 @@ export default function BacktestWorkspace({
     symbols: config.holdings.map((h) => h.symbol),
     start: config.start,
     end: config.end,
+    provider,
   };
   const yahooStale =
-    !!yahoo && stableJSON(yahoo.requested) !== stableJSON(yahooSelection);
+    !!yahoo &&
+    (stableJSON(yahoo.requested) !== stableJSON(yahooSelection) ||
+      (!!yahoo.data?.conversion &&
+        yahoo.data.conversion.base !== config.currency));
   const readiness = useMemo(
     () => backtestReadiness(config, data),
     [config, data],
@@ -214,6 +226,7 @@ export default function BacktestWorkspace({
         request.current?.abort();
         yahooController.current?.abort();
         fxController.current?.abort();
+        historicalFxController.current?.abort();
       };
     }
     void backtestCache(scope)
@@ -251,6 +264,7 @@ export default function BacktestWorkspace({
       request.current?.abort();
       yahooController.current?.abort();
       fxController.current?.abort();
+      historicalFxController.current?.abort();
     };
   }, [scope]);
   useEffect(() => {
@@ -444,7 +458,7 @@ export default function BacktestWorkspace({
     setYahooError("");
     let query;
     try {
-      query = yahooRequest(yahooSelection);
+      query = historyRequest(yahooSelection);
     } catch (e) {
       setYahooError((e as Error).message);
       return;
@@ -453,6 +467,7 @@ export default function BacktestWorkspace({
     yahooController.current?.abort();
     yahooController.current = controller;
     setYahooBusy(true);
+    historicalFxController.current?.abort();
     setYahoo(null);
     const timeout = setTimeout(() => controller.abort(), 95000);
     try {
@@ -463,7 +478,7 @@ export default function BacktestWorkspace({
         body: JSON.stringify(query),
       });
       const result = await response.json();
-      if (!response.ok) throw Error(result.error || "Yahoo历史暂不可用。");
+      if (!response.ok) throw Error(result.error || "历史行情暂不可用。");
       if (
         !result ||
         stableJSON(result.requested) !== stableJSON(query) ||
@@ -487,6 +502,12 @@ export default function BacktestWorkspace({
           throw Error("行情范围或口径无效；未替换已有数据。");
       }
       if (mounted.current && !controller.signal.aborted) setYahoo(result);
+      if (
+        mounted.current &&
+        !controller.signal.aborted &&
+        typeof result.providers?.tiingo === "boolean"
+      )
+        setTiingoReady(result.providers.tiingo);
     } catch (e) {
       if (mounted.current && yahooController.current === controller)
         setYahooError(
@@ -498,6 +519,59 @@ export default function BacktestWorkspace({
       clearTimeout(timeout);
       if (mounted.current && yahooController.current === controller)
         setYahooBusy(false);
+    }
+  };
+  const convertPreview = async () => {
+    const preview = yahoo;
+    if (
+      !preview?.data ||
+      !previewComplete ||
+      yahooStale ||
+      historicalFxBusy ||
+      yahooBusy
+    )
+      return;
+    const c = new AbortController();
+    historicalFxController.current?.abort();
+    historicalFxController.current = c;
+    setHistoricalFxBusy(true);
+    setYahooError("");
+    const timeout = setTimeout(() => c.abort(), 30000);
+    try {
+      const r = await fetch(
+        `/api/backtest/fx?${new URLSearchParams({ start: preview.requested.start, end: preview.effectiveEnd })}`,
+        { signal: c.signal },
+      );
+      const f = await r.json();
+      if (!r.ok) throw Error(f.error || "历史汇率暂不可用。");
+      const converted = convertHistoryToBase(
+        preview.data,
+        f as HistoricalFx,
+        config.currency,
+      );
+      if (
+        mounted.current &&
+        !c.signal.aborted &&
+        previewRef.current === preview
+      )
+        setYahoo({ ...preview, data: converted });
+    } catch (e) {
+      if (
+        mounted.current &&
+        !c.signal.aborted &&
+        previewRef.current === preview
+      )
+        setYahooError((e as Error).message);
+      else if (
+        mounted.current &&
+        historicalFxController.current === c &&
+        c.signal.aborted
+      )
+        setYahooError("历史汇率等待已停止或超时，原始行情保留。");
+    } finally {
+      clearTimeout(timeout);
+      if (mounted.current && historicalFxController.current === c)
+        setHistoricalFxBusy(false);
     }
   };
   const save = () => {
@@ -626,7 +700,8 @@ export default function BacktestWorkspace({
       !previewComplete ||
       yahooStale ||
       previewCurrencies.mixed ||
-      yahooBusy
+      yahooBusy ||
+      historicalFxBusy
     )
       return;
     if (config.dividends !== "reinvest") {
@@ -636,7 +711,7 @@ export default function BacktestWorkspace({
     if (
       data &&
       !confirm(
-        "用已获取的Yahoo历史替换当前研究行情？建议先导出旧研究包。组合和权重不会改变。",
+        "用已获取的历史替换当前研究行情？建议先导出旧研究包。组合和权重不会改变。",
       )
     )
       return;
@@ -656,7 +731,9 @@ export default function BacktestWorkspace({
     setData(yahoo.data);
     setError("");
     setYahooError("");
-    setNotice(`已采用${yahoo.data.assets.length}项Yahoo复权历史；权重未改动。`);
+    setNotice(
+      `已采用${yahoo.data.assets.length}项复权历史；${yahoo.data.conversion ? "已按历史汇率统一币种；" : ""}权重未改动。`,
+    );
     if (runAfter) run(nextConfig, yahoo.data);
   };
   const addComparison = () => {
@@ -1142,7 +1219,7 @@ export default function BacktestWorkspace({
               {mixedListings && (
                 <p className="bt-builder-check" role="status">
                   已核对成交币种：{knownCurrencies.join("；")}
-                  。当前仅支持单币种历史回测，请分别构建USD与CAD组合；当下汇率不能代替逐日历史换汇。
+                  。下一步可按逐日历史汇率换算为统一币种后比较，或拆成独立组合；不会用今天的汇率回填历史。
                 </p>
               )}
               {!!builderIssues.length && (
@@ -1166,7 +1243,9 @@ export default function BacktestWorkspace({
                     <span key={i}>
                       {r.symbol || "待填代码"} ·{" "}
                       {r.currency
-                        ? `${r.currency}${data?.synthetic ? "（合成）" : " · 行情记录"}`
+                        ? data?.conversion
+                          ? `${data.conversion.native[r.symbol]}（原币） → ${r.currency}（回测）`
+                          : `${r.currency}${data?.synthetic ? "（合成）" : " · 行情记录"}`
                         : selectedCurrencies[r.symbol]
                           ? `${selectedCurrencies[r.symbol]} · 证券已核对，待载入历史`
                           : r.symbol.endsWith(".US")
@@ -1178,11 +1257,11 @@ export default function BacktestWorkspace({
                   ))}
                 </div>
                 <small>
-                  代码后缀只作线索；TSX也有美元份额。获取Yahoo历史后读取实际成交币种，不会仅凭代码自动兑换资金。
+                  代码后缀只作线索；TSX也有美元份额。载入历史后读取实际成交币种，不会仅凭代码自动兑换资金。
                 </small>
                 {currencies.mixed && (
                   <p role="alert">
-                    持仓实际包含多种币种：目前需拆成独立组合，不能用当前汇率拼接历史。
+                    持仓实际包含多种币种：请获取历史预览，再选择逐日汇率换算；不能用当前汇率拼接历史。
                   </p>
                 )}
                 {currencies.currency &&
@@ -1460,10 +1539,10 @@ export default function BacktestWorkspace({
                   <span className="bt-kicker">02 / EVIDENCE</span>
                   <h2>给策略接上历史</h2>
                 </div>
-                <span className="bt-pill">Yahoo 日线 / CSV</span>
+                <span className="bt-pill">多来源日线 / 历史汇率 / CSV</span>
               </div>
               <p>
-                按组合代码获取Yahoo可用历史，或导入你有权使用的CSV。只有点击才请求；不会把家庭资产、金额、权重或聊天发给Yahoo。
+                按组合代码获取可用历史，或导入你有权使用的CSV。只有点击才请求；行情供方仅接收证券代码和日期，不接收家庭资产、金额、权重或聊天。
               </p>
               <div
                 className="bt-readiness"
@@ -1498,12 +1577,60 @@ export default function BacktestWorkspace({
                 )}
               </div>
               <div className="bt-yahoo">
+                <div className="bt-source-controls">
+                  <label>
+                    历史行情来源
+                    <select
+                      aria-label="历史行情来源"
+                      value={provider}
+                      disabled={yahooBusy || historicalFxBusy}
+                      onChange={(e) =>
+                        setProvider(e.target.value as HistoryProvider)
+                      }
+                    >
+                      <option value="auto">
+                        自动 · Yahoo → Tiingo（美股补充）
+                      </option>
+                      <option value="yahoo">Yahoo · 无需 key</option>
+                      <option value="tiingo">Tiingo · 美股／ETF</option>
+                    </select>
+                  </label>
+                  <small role="status">
+                    {tiingoReady === null
+                      ? "Tiingo凭证状态未确认"
+                      : tiingoReady
+                        ? "Tiingo服务器凭证已配置 · 实际覆盖以返回结果为准"
+                        : "Tiingo待配置 TIINGO_API_KEY · Yahoo仍可使用"}
+                  </small>
+                  <button
+                    className="bt-text-button"
+                    onClick={() =>
+                      void fetch("/api/backtest/providers")
+                        .then(async (r) => {
+                          const b = await r.json();
+                          if (
+                            r.ok &&
+                            typeof b.tiingo === "boolean" &&
+                            mounted.current
+                          )
+                            setTiingoReady(b.tiingo);
+                        })
+                        .catch(() => {
+                          if (mounted.current)
+                            setYahooError("无法核对服务器配置，请稍后重试。");
+                        })
+                    }
+                  >
+                    检查配置
+                  </button>
+                </div>
                 <div className="bt-row bt-wrap">
                   <button
                     className="secondary"
                     disabled={
                       !cacheReady ||
                       yahooBusy ||
+                      historicalFxBusy ||
                       reading ||
                       busy ||
                       !!builderIssues.length
@@ -1511,7 +1638,7 @@ export default function BacktestWorkspace({
                     onClick={() => void fetchYahoo()}
                   >
                     <Download size={16} />{" "}
-                    {yahooBusy ? "正在获取Yahoo日线…" : "从Yahoo获取组合历史"}
+                    {yahooBusy ? "正在获取历史日线…" : "获取组合历史"}
                   </button>
                   {yahooBusy && (
                     <button
@@ -1523,12 +1650,13 @@ export default function BacktestWorkspace({
                   )}
                 </div>
                 <small className="bt-help">
-                  无需新增key · 非官方日线，可能缺失 · 先预览再采用
+                  先预览再采用 ·
+                  自动模式每只证券优先Yahoo，失败后才使用已配置的Tiingo；不拼接不同供方的复权价格。
                 </small>
                 <details className="bt-details">
                   <summary>数据口径与访问说明</summary>
                   <p>
-                    最多8只股票/ETF；美股用.US，多伦多用.TO，份额类别如CGL.C.TO会明确映射为CGL-C.TO。仅取多伦多日期之前的完整日线，公开历史缓存1小时。遇到拒绝或限流就停止；沿用现有研究请求频率限制，不产生模型调用。
+                    最多8只股票/ETF；美股用.US，多伦多用.TO，份额类别如CGL.C.TO会明确映射为CGL-C.TO。仅取多伦多日期之前的完整日线，成功历史缓存1小时。各供方独立冷却，不绕过限制。Tiingo免费档需自行注册和确认许可、额度，本接入不承诺TSX覆盖。加拿大央行免费日均历史汇率自2017年起；仅明确点击换算后使用。不产生模型调用。
                   </p>
                 </details>
                 {yahooError && (
@@ -1545,10 +1673,46 @@ export default function BacktestWorkspace({
                     <p>
                       已含拆股与分红，仅支持再投资，分红金额不单列。失败不改持仓或权重。
                     </p>
-                    {previewCurrencies.mixed && (
-                      <p role="alert" className="bt-yahoo-error">
-                        实际成交币种混合，不能采用为单一币种回测；请拆成独立组合。没有自动换汇或重配权重。
-                      </p>
+                    {yahoo.data &&
+                      !yahoo.data.conversion &&
+                      (previewCurrencies.mixed ||
+                        previewCurrencies.currency !== config.currency) && (
+                        <div className="bt-fx-conversion">
+                          <strong>行情与回测币种不同，先核对历史换汇</strong>
+                          <p>
+                            按各日历史汇率换算为当前设置的{config.currency}
+                            ；不修改本金、月供和权重，也不执行真实换汇。仅比较共同观测日，汇率覆盖不足时明确缩短区间。
+                          </p>
+                          <button
+                            className="secondary"
+                            disabled={
+                              !previewComplete ||
+                              yahooStale ||
+                              yahooBusy ||
+                              historicalFxBusy
+                            }
+                            onClick={() => void convertPreview()}
+                          >
+                            {historicalFxBusy
+                              ? "正在核对历史汇率…"
+                              : `获取历史汇率并换算为${config.currency}`}
+                          </button>
+                        </div>
+                      )}
+                    {yahoo.data?.conversion && (
+                      <div className="bt-fx-conversion" role="status">
+                        <strong>
+                          已统一为{yahoo.data.conversion.base} · 待采用
+                        </strong>
+                        <p>
+                          加拿大央行日均参考汇率，不含换汇点差；仅使用当日或此前4天内汇率，无未来引用。已省略
+                          {yahoo.data.conversion.omitted}
+                          个非共同/超出汇率覆盖的单项观测。
+                          {yahoo.data.conversion.rates[0].date} →{" "}
+                          {yahoo.data.conversion.rates.at(-1)!.date}
+                          。原始币种与逐日汇率随研究包保留。
+                        </p>
+                      </div>
                     )}
                     <ul className="bt-yahoo-list">
                       {yahoo.results.map((r) => {
@@ -1558,12 +1722,17 @@ export default function BacktestWorkspace({
                         return (
                           <li key={r.symbol}>
                             <strong>
-                              {r.symbol} → {r.yahooSymbol}
+                              {r.symbol} ·{" "}
+                              {r.provider === "tiingo"
+                                ? "Tiingo"
+                                : r.provider === "yahoo"
+                                  ? "Yahoo"
+                                  : r.yahooSymbol}
                             </strong>
                             <span>
                               {r.error ||
                                 (a
-                                  ? `${a.currency} · ${a.points.length.toLocaleString()}日线 · ${a.points[0].date} → ${a.points.at(-1)!.date}`
+                                  ? `${a.currency}${yahoo.data?.conversion ? `（回测，原币${yahoo.data.conversion.native[a.symbol]}）` : ""} · ${a.points.length.toLocaleString()}日线 · ${a.points[0].date} → ${a.points.at(-1)!.date}`
                                   : "无可用历史")}
                             </span>
                             {!r.error && (
@@ -1573,6 +1742,17 @@ export default function BacktestWorkspace({
                                 <details>
                                   <summary>来源说明</summary>
                                   {r.warnings.join(" ")}
+                                  {r.attempts?.map((a, i) => (
+                                    <p key={i}>
+                                      {a.provider} ·{" "}
+                                      {a.status === "ok"
+                                        ? "成功"
+                                        : a.status === "skipped"
+                                          ? "未请求"
+                                          : "未成功"}
+                                      {a.message ? ` · ${a.message}` : ""}
+                                    </p>
+                                  ))}
                                 </details>
                               </small>
                             )}
@@ -1599,6 +1779,7 @@ export default function BacktestWorkspace({
                           previewCurrencies.mixed ||
                           yahooStale ||
                           yahooBusy ||
+                          historicalFxBusy ||
                           reading ||
                           busy
                         }
@@ -1613,6 +1794,7 @@ export default function BacktestWorkspace({
                           yahooStale ||
                           previewCurrencies.mixed ||
                           yahooBusy ||
+                          historicalFxBusy ||
                           reading ||
                           busy
                         }
@@ -1769,7 +1951,17 @@ export default function BacktestWorkspace({
                             a.source.startsWith("Yahoo Finance"),
                           )
                         ? "Yahoo Finance历史 · 非官方接入／可能延迟，未经独立核验"
-                        : "用户导入历史 · 未经第三方独立核验"}
+                        : data.assets.some((a) =>
+                              a.source.startsWith("Tiingo EOD"),
+                            )
+                          ? "含Tiingo EOD历史 · 逐项来源见下表，未经独立核验"
+                          : "用户导入历史 · 未经第三方独立核验"}
+                    {data.conversion && (
+                      <small>
+                        已按加拿大央行历史日均汇率统一为{data.conversion.base}
+                        ；逐日汇率与原币种保存在研究包。
+                      </small>
+                    )}
                     <small>
                       读取于 {new Date(data.capturedAt).toLocaleString()}
                     </small>
@@ -1908,7 +2100,9 @@ export default function BacktestWorkspace({
                 <div className="bt-critical-warnings">
                   {report.warnings
                     .filter((w) =>
-                      /不足一年|少于60|未完整覆盖|部分数据未提供/.test(w),
+                      /不足一年|少于60|未完整覆盖|部分数据未提供|历史汇率换算/.test(
+                        w,
+                      ),
                     )
                     .map((w) => (
                       <p key={w}>{w}</p>

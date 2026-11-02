@@ -17,6 +17,7 @@ export type Security = {
   kind: "EQUITY" | "ETF";
   currency: "USD" | "CAD";
   verifiedAt: string;
+  verifiedBy?: "tiingo";
 };
 export type SecuritySearch = {
   version: 1;

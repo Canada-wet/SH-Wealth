@@ -57,13 +57,13 @@ function search(q: string) {
   fireEvent.change(input, { target: { value: q } });
   return input as HTMLInputElement;
 }
-it("只有点击已核对选项才提交，未匹配文字或单独回车不会改组合", async () => {
+it("名称查询须选择已核对选项，未匹配文字或单独回车不会改组合", async () => {
   const fetcher = vi.fn(async (u: string) =>
     response(new URL(u, "https://app.example").searchParams.get("q")!),
   );
   vi.stubGlobal("fetch", fetcher);
   const { select } = mount(),
-    input = search("NVDA");
+    input = search("NVIDIA");
   expect(select).not.toHaveBeenCalled();
   await screen.findByRole("option", { name: /NVDA.US/ });
   expect(input.getAttribute("aria-expanded")).toBe("true");
@@ -75,7 +75,26 @@ it("只有点击已核对选项才提交，未匹配文字或单独回车不会�
   );
   expect(input.value).toBe("NVDA.US");
   expect(input.getAttribute("aria-expanded")).toBe("false");
-  expect(fetcher.mock.calls[0][0]).toBe("/api/backtest/securities?q=NVDA");
+  expect(fetcher.mock.calls[0][0]).toBe("/api/backtest/securities?q=NVIDIA");
+});
+it("精确代码唯一匹配时回车即可提交，取消未选搜索会告知仍保留原代码", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response("NVDA")),
+  );
+  const { select } = mount(),
+    input = search("NVDA");
+  await screen.findByRole("option", { name: /NVDA.US/ });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(select).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ symbol: "NVDA.US" }),
+  );
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "VTV" } });
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(screen.getByRole("status").textContent).toContain(
+    "未选择VTV，当前仍保留 NVDA.US",
+  );
 });
 it("任意未选文字在Escape或离焦后恢复原代码，不创建自定义证券", async () => {
   vi.stubGlobal(

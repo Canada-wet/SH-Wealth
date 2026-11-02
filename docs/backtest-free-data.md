@@ -21,7 +21,17 @@
 | [Stooq](https://stooq.com/db/h/) | 有公开历史下载入口，但本轮自动访问未得到可核验数据 | 不预设其XCV覆盖、复权/分红口径或App展示许可，不自动fallback，更不绕过访问限制。用户取得有权使用的数据后可走CSV。 |
 | 基金官网/官方宏观 | [Vanguard VTV](https://advisors.vanguard.com/investments/products/vtv/vanguard-value-etf)、[BlackRock XCV资料](https://www.blackrock.com/ca/individual/en/literature/etf-summary/xcv-facts-en-ca.pdf)可核对基金身份、收益/分配；央行/FRED用于宏观 | NAV、基金公布的期间回报与交易所收盘价不同，不混成同一种时间序列。宏观数据不能替代ETF价格。 |
 
-## 当前采用方案
+## v0.17.0实际接入
+
+- `lib/backtest-history-server.ts`提供auto / yahoo / tiingo，旧无provider请求保持兼容。auto每标的先Yahoo，失败才调用已配置Tiingo；完整序列择一，不拼接两种Adj Close。固定公开域名，最多两个并发，60秒新任务预算，各供方独立401/403/429冷却，不绕过限制。
+- Tiingo仅支持`.US`，使用[官方Token header](https://www.tiingo.com/documentation/general/connecting)，key不进URL、浏览器、日志或导出。元数据核对精确ticker、美国交易所、名称和覆盖日期；EOD只接受有效每日`adjClose`，已含分红拆股，不再次累计分红。成功历史1小时、身份24小时缓存，失败不入成功缓存。每实例50上游请求/小时保护不等于账户分布式硬限额，最终以供方额度为准。
+- 添加Vercel Production `TIINGO_API_KEY`并重新部署；UI“检查配置”只显示布尔，不展示key。实际获取成功才能确认凭证与覆盖；不替用户注册或接受协议。未配置时auto继续Yahoo，单选Tiingo明确告知未配置。
+- Yahoo搜索失败时，有限常见ETF名单（含VTV、AVUV）支持精确代码Tiingo身份核对；不依赖官方标为beta且不推荐生产的搜索端点，不把模糊名称或任意输入当有效证券。
+- [加拿大央行Valet](https://www.bankofcanada.ca/valet/docs)的FXUSDCAD无需key；实测2007–2025请求仅从2017-01-03返回有效观测。严格核对CAD per USD单位。点击将整批预览换算为CAD或USD，不重下股票、不改金额/权重。使用当日或过去4天内汇率，无未来引用；不含外汇点差/税费，日均参考价不等于收盘成交汇率。
+- 仅真实total-return按共同价格日对齐，无价格前填；边界无覆盖可缩短并披露省略数，内部FX缺口超过4天、共同日线超过7天空档或稀疏样本拒绝。conversion保存原币种、逐日汇率/rateDate、来源/时间；结果、导出/导入、本机缓存及对照保留审计。已转换包不可再次换币，须重新获取原始预览。
+- Stooq一次普通公开下载返回403，未接成可用fallback，未绕过限制。Twelve Data/EODHD/Alpha Vantage仍未接入。
+
+## v0.16.2方案（历史记录，已被上节扩展）
 
 - 先把Yahoo已有覆盖用对：构建时核对证券，数据页逐项列出“已载入/尚未载入”，缺项禁用运行；完整预览可显式“采用并运行”。失败保留旧研究，不静默删标的、改权重或用演示价格补齐。
 - 成功缓存一小时，失败不存入该缓存；上游拒绝仍保持本实例15分钟冷却。缓存不是长期数据库，也没有伪装跨设备持久行情。

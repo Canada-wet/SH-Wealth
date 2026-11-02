@@ -45,6 +45,14 @@ export type BacktestData = {
   capturedAt: string;
   synthetic: boolean;
   assets: HistoricalAsset[];
+  conversion?: {
+    source: "Bank of Canada FXUSDCAD";
+    fetchedAt: string;
+    base: "CAD" | "USD";
+    native: Record<string, "CAD" | "USD">;
+    rates: { date: string; rateDate: string; cadPerUsd: number }[];
+    omitted: number;
+  };
 };
 export type BacktestLab = {
   version: 1;
@@ -178,6 +186,47 @@ export function validateBacktestData(
         );
       prior = p.date;
     }
+  }
+  if (d.conversion) {
+    const c = d.conversion;
+    if (
+      d.synthetic ||
+      c.source !== "Bank of Canada FXUSDCAD" ||
+      !["CAD", "USD"].includes(c.base) ||
+      typeof c.fetchedAt !== "string" ||
+      !Number.isFinite(Date.parse(c.fetchedAt)) ||
+      !c.native ||
+      Object.keys(c.native).length > 8 ||
+      !Number.isInteger(c.omitted) ||
+      c.omitted < 0 ||
+      !Array.isArray(c.rates) ||
+      c.rates.length < 2 ||
+      c.rates.length > 15000 ||
+      d.assets.some(
+        (a) =>
+          a.currency !== c.base ||
+          a.basis !== "total-return" ||
+          !["CAD", "USD"].includes(c.native[a.symbol]),
+      )
+    )
+      throw Error("历史汇率审计信息无效。");
+    let prior = "";
+    const dates = new Set<string>();
+    for (const r of c.rates) {
+      if (
+        !validDate(r.date) ||
+        !validDate(r.rateDate) ||
+        r.date <= prior ||
+        r.rateDate > r.date ||
+        (Date.parse(r.date) - Date.parse(r.rateDate)) / 86400000 > 4 ||
+        !between(r.cadPerUsd, 0.1, 10)
+      )
+        throw Error("历史汇率存在未来引用、缺口或无效价格。");
+      prior = r.date;
+      dates.add(r.date);
+    }
+    if (d.assets.some((a) => a.points.some((p) => !dates.has(p.date))))
+      throw Error("缺少对应日的历史汇率审计。");
   }
 }
 export function validBacktestLab(raw: unknown): raw is BacktestLab {

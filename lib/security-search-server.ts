@@ -3,6 +3,7 @@ import { boundedJSON } from "./backtest-http";
 import { SYMBOL } from "./backtest-schema";
 import { yahooSymbol } from "./backtest-yahoo";
 import { coolDownYahoo, yahooIsCoolingDown } from "./backtest-yahoo-server";
+import { getTiingoSecurity } from "./backtest-tiingo-server";
 import {
   securityCandidates,
   verifySecurity,
@@ -49,7 +50,7 @@ function sharedLookup(candidate: SecurityCandidate) {
   pendingLookups.set(key, work);
   return work;
 }
-export async function fetchSecuritySearch(
+async function fetchYahooSecuritySearch(
   query: string,
 ): Promise<SecuritySearch> {
   const u = new URL("https://query1.finance.yahoo.com/v1/finance/search");
@@ -88,6 +89,32 @@ export async function fetchSecuritySearch(
     omitted,
     checkedAt: new Date().toISOString(),
   };
+}
+export async function fetchSecuritySearch(
+  query: string,
+): Promise<SecuritySearch> {
+  let result: SecuritySearch | undefined, original: unknown;
+  try {
+    result = await fetchYahooSecuritySearch(query);
+  } catch (e) {
+    original = e;
+  }
+  if (result?.options.length) return result;
+  try {
+    const option = await getTiingoSecurity(query);
+    if (option)
+      return {
+        version: 1,
+        query,
+        options: [option],
+        omitted: 0,
+        checkedAt: new Date().toISOString(),
+      };
+  } catch {
+    /* A single independent fallback; never retry or expose raw errors. */
+  }
+  if (result) return result;
+  throw original;
 }
 export const getSecuritySearch = unstable_cache(
   fetchSecuritySearch,

@@ -16,8 +16,15 @@ export type YahooAssetResult = {
   error?: string;
   warnings: string[];
   blocked?: boolean;
+  provider?: "yahoo" | "tiingo";
+  attempts?: {
+    provider: "yahoo" | "tiingo";
+    status: "ok" | "failed" | "skipped";
+    message?: string;
+  }[];
 };
 export type YahooBatch = {
+  providers?: { tiingo: boolean };
   requested: YahooRequest;
   effectiveEnd: string;
   results: Omit<YahooAssetResult, "asset">[];

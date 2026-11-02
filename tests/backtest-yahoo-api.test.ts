@@ -1,7 +1,15 @@
 import { it, expect, vi, beforeEach } from "vitest";
-const m = vi.hoisted(() => ({ auth: vi.fn(), rpc: vi.fn(), batch: vi.fn() }));
+const m = vi.hoisted(() => ({
+  auth: vi.fn(),
+  rpc: vi.fn(),
+  batch: vi.fn(),
+  multi: vi.fn(),
+}));
 vi.mock("../lib/server-auth", () => ({ authorizeRequest: m.auth }));
 vi.mock("../lib/backtest-yahoo-server", () => ({ getYahooBatch: m.batch }));
+vi.mock("../lib/backtest-history-server", () => ({
+  getHistoricalBatch: m.multi,
+}));
 import { POST } from "../app/api/backtest/history/route";
 const good = { symbols: ["SPY.US"], start: "2020-01-01", end: "2020-12-31" };
 const req = (body: unknown, origin = "http://localhost") =>
@@ -15,6 +23,15 @@ beforeEach(() => {
   m.auth.mockResolvedValue({ status: 200, client: { rpc: m.rpc } });
   m.rpc.mockResolvedValue({ data: true });
   m.batch.mockResolvedValue({ data: null, results: [] });
+});
+it("显式供方走多来源适配，坏供方拒绝，不向上游转发私密字段", async () => {
+  m.multi.mockResolvedValue({ results: [], data: null });
+  expect(
+    (await POST(req({ ...good, provider: "auto", wealth: "private" }))).status,
+  ).toBe(200);
+  expect(m.multi).toHaveBeenCalledWith({ ...good, provider: "auto" });
+  expect(m.batch).not.toHaveBeenCalled();
+  expect((await POST(req({ ...good, provider: ["auto"] }))).status).toBe(400);
 });
 it("匿名和跨域不访问Yahoo或占用额度", async () => {
   m.auth.mockResolvedValueOnce({ status: 401, error: "请登录" });

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { authorizeRequest } from "@/lib/server-auth";
 import { boundedJSON, sameOrigin } from "@/lib/backtest-http";
-import { yahooRequest } from "@/lib/backtest-yahoo";
+import { historyRequest } from "@/lib/backtest-history";
 import { getYahooBatch } from "@/lib/backtest-yahoo-server";
+import { getHistoricalBatch } from "@/lib/backtest-history-server";
 export const maxDuration = 90;
 const json = (data: unknown, status = 200) =>
   NextResponse.json(data, {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ error: "请求来源无效。" }, 403);
   let query;
   try {
-    query = yahooRequest(await boundedJSON(request, 4096));
+    query = historyRequest(await boundedJSON(request, 4096));
   } catch {
     return json(
       {
@@ -28,13 +29,15 @@ export async function POST(request: Request) {
   try {
     const slot = await auth.client.rpc("take_wealth_advisor_slot");
     if (slot.error)
-      return json({ error: "研究请求频率检查失败，未访问Yahoo。" }, 503);
+      return json({ error: "研究请求频率检查失败，未访问行情供方。" }, 503);
     if (!slot.data)
       return json(
         { error: "研究请求较频繁，请稍后再获取；已有行情不受影响。" },
         429,
       );
-    return json(await getYahooBatch(query));
+    return json(
+      await (query.provider ? getHistoricalBatch(query) : getYahooBatch(query)),
+    );
   } catch {
     return json(
       { error: "历史数据服务暂不可用；未自动重发，已有行情不受影响。" },
