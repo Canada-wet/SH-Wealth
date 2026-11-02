@@ -12,6 +12,8 @@
 
 ## 1. 一分钟理解
 
+`0.17.1`：`CollectionComparisonPicker`把家庭组合配置接入本机对照，`backtest-collection-comparison.ts`负责冻结选择、精确缓存复用、公开代码去重分批、可选历史FX、总回报共同日历审计及确定性重算。`PortfolioShelf.collection`/研究`origin`保留本机选择与配置版本；不把大价格写入家庭JSON。取消、缺项或并发配置变化不覆盖旧研究；无新数据库、凭证、模型调用或交易权限。
+
 `0.17.0`：历史行情端点显式provider请求路由到`backtest-history-server.ts`，支持Yahoo主源/已配置Tiingo美股补充，完整单证券序列择一，不拼接复权价。新增鉴权同源`/api/backtest/providers`仅披露配置布尔、`/api/backtest/fx`固定访问BoC FXUSDCAD日均历史；供应商只接收公开代码/日期，Token只在服务器header。混币预览在用户点击后以纯函数转换，conversion审计随IndexedDB/显式研究包/对照保留，不写共享财富账本、不增加SQL或付费AI。原规划当下汇率路径不变；原始现金分红数据不自动换汇。限制见[回测说明](backtesting.md)与[免费数据接入](backtest-free-data.md)。
 
 `0.16.1–0.16.2`：回测证券搜索为独立鉴权同源`/api/backtest/securities`，固定公开查询、精确元数据与近期报价核对，无AI或私人财富外发。`backtest-readiness.ts`区分当前配置与本机已载入数据，阻止缺项或口径错误运行；行情预览仍需显式采用。Yahoo历史仅缓存成功结果并共享进行中请求，失败不占一小时缓存，上游拒绝保留冷却。手机下拉按visualViewport定位，触摸保护及持仓卡片不改变家庭同步边界；[免费数据评估](backtest-free-data.md)列出尚未接入的备选，无新SQL或付费数据授权。

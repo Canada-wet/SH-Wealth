@@ -11,7 +11,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { STRATEGIES, type BacktestStrategy } from "@/lib/backtest-schema";
+import {
+  STRATEGIES,
+  type BacktestStrategy,
+  type BacktestLab,
+  type BacktestConfig,
+  type BacktestData,
+} from "@/lib/backtest-schema";
+import CollectionComparisonPicker from "./CollectionComparisonPicker";
+import { stableJSON } from "@/lib/cloud-plan";
 import {
   exportPortfolioShelf,
   readPortfolioShelf,
@@ -46,6 +54,10 @@ export default function PortfolioComparison({
   onChange,
   onEdit,
   onBack,
+  lab,
+  draft,
+  onLibrary,
+  onPrepareBusy,
 }: {
   shelf: PortfolioShelf;
   ready: boolean;
@@ -53,12 +65,17 @@ export default function PortfolioComparison({
   onChange: (s: PortfolioShelf) => void;
   onEdit: (s: PortfolioStudy) => void;
   onBack: () => void;
+  lab: BacktestLab;
+  draft?: { config: BacktestConfig; data: BacktestData | null };
+  onLibrary: () => void;
+  onPrepareBusy: (busy: boolean) => void;
 }) {
   const [report, setReport] = useState<ComparisonReport | null>(null),
     [input, setInput] = useState<PortfolioShelf | null>(null),
     [error, setError] = useState("");
   const [chart, setChart] = useState<"nav" | "value" | "drawdown">("nav"),
     [event, setEvent] = useState("covid");
+  const [preparing, setPreparing] = useState(false);
   const file = useRef<HTMLInputElement>(null),
     result = useRef<HTMLElement>(null);
   const latestShelf = useRef(shelf),
@@ -70,7 +87,19 @@ export default function PortfolioComparison({
     },
     [],
   );
-  const stale = !!report && input !== shelf;
+  const libraryChanged = shelf.studies.some(
+    (s) =>
+      s.origin &&
+      shelf.selected.includes(s.id) &&
+      lab.saved.some((p) => p.id === s.origin!.planId) &&
+      !lab.saved.some(
+        (p) =>
+          p.id === s.origin!.planId &&
+          p.at === s.origin!.savedAt &&
+          stableJSON(p.config) === s.origin!.configKey,
+      ),
+  );
+  const stale = !!report && (input !== shelf || libraryChanged);
   const selected = shelf.studies.filter((p) => shelf.selected.includes(p.id));
   const base = report?.items.find((p) => p.id === report.baseline);
   const metric = (p: ComparisonReport["items"][number]) =>
@@ -174,22 +203,22 @@ export default function PortfolioComparison({
         <div>
           <p className="bt-kicker">PORTFOLIO / VS / PORTFOLIO</p>
           <h2>不同组合，同一把尺。</h2>
-          <p>勾选2–4个组合，统一策略、资金与共同历史，重新计算差异。</p>
+          <p>从组合库选2–4个组合，准备共同历史，再统一策略与资金比较。</p>
         </div>
         <div className="bt-action-row">
-          <button className="secondary" onClick={onBack}>
+          <button className="secondary" disabled={preparing} onClick={onBack}>
             <ArrowLeft size={15} /> 继续构建组合
           </button>
           <button
             className="bt-text-button"
-            disabled={!ready}
+            disabled={!ready || preparing}
             onClick={() => file.current?.click()}
           >
             <Upload size={15} /> 导入对照包
           </button>
           <button
             className="bt-text-button"
-            disabled={!shelf.studies.length}
+            disabled={!shelf.studies.length || preparing}
             onClick={exportPack}
           >
             <Download size={15} /> 导出对照包
@@ -200,7 +229,7 @@ export default function PortfolioComparison({
             aria-label="导入组合对照包"
             type="file"
             accept=".json"
-            disabled={!ready}
+            disabled={!ready || preparing}
             onChange={async (e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
@@ -235,170 +264,222 @@ export default function PortfolioComparison({
           {error}
         </p>
       )}
-      {!shelf.studies.length ? (
-        <div className="card bt-comparison-empty">
-          <Copy size={28} />
-          <h3>先把两个组合放到一起。</h3>
-          <p>
-            在工作台运行后，点击「加入组合对照」。也可以复制已有快照修改持仓，再运行加入。
-          </p>
-          <button className="secondary" disabled={!ready} onClick={demo}>
-            体验两个组合 · 合成演示
-          </button>
-        </div>
-      ) : (
-        <div className="bt-portfolio-cards">
-          {shelf.studies.map((p, i) => (
-            <article
-              className={`card bt-portfolio-card ${shelf.selected.includes(p.id) ? "is-selected" : ""}`}
-              key={p.id}
-              style={{ borderTopColor: colors[i] }}
-            >
-              <div className="bt-row">
-                <label className="bt-check">
-                  <input
-                    type="checkbox"
-                    aria-label={`参与对照：${p.title}`}
-                    checked={shelf.selected.includes(p.id)}
-                    onChange={() => toggle(p.id)}
-                  />
-                  组合 {String.fromCharCode(65 + i)}
-                </label>
-                <span className="bt-pill">
-                  {p.data.synthetic ? "合成演示" : p.config.currency}
-                  {shelf.baseline === p.id ? " · 基准" : ""}
-                </span>
-              </div>
-              <label>
-                组合{i + 1}名称
-                <input
-                  value={p.title}
-                  maxLength={100}
-                  onChange={(e) =>
-                    update({
-                      ...shelf,
-                      studies: shelf.studies.map((s) =>
-                        s.id === p.id ? { ...s, title: e.target.value } : s,
-                      ),
-                    })
-                  }
-                />
-              </label>
-              <p className="bt-portfolio-holdings">
-                {p.config.holdings
-                  .map((h) => `${h.symbol} ${Number(h.weight.toFixed(2))}%`)
-                  .join(" · ")}
+      <CollectionComparisonPicker
+        lab={lab}
+        shelf={shelf}
+        draft={draft}
+        ready={ready}
+        onChange={update}
+        onLibrary={onLibrary}
+        onBusy={(b) => {
+          setPreparing(b);
+          onPrepareBusy(b);
+        }}
+        onPrepared={(next, r) => {
+          update(next);
+          setReport(r);
+          setInput(next);
+          setEvent(
+            BACKTEST_EVENTS.find(
+              (e) =>
+                r.items[0].report.results[0].events.find((x) => x.id === e.id)
+                  ?.coverage !== "none",
+            )?.id ?? BACKTEST_EVENTS[0].id,
+          );
+          requestAnimationFrame(() => {
+            result.current?.focus({ preventScroll: true });
+            result.current?.scrollIntoView?.({
+              block: "start",
+              behavior: "smooth",
+            });
+          });
+        }}
+      />
+      <fieldset className="bt-snapshot-fieldset" disabled={preparing}>
+        <details className="bt-snapshot-details" open={!lab.saved.length}>
+          <summary>已有研究快照 · {shelf.studies.length}（本机）</summary>
+          {!shelf.studies.length ? (
+            <div className="card bt-comparison-empty">
+              <Copy size={28} />
+              <h3>也可以继续已有的研究快照</h3>
+              <p>
+                组合库是主要入口。临时研究仍可从工作台运行后加入，或导入已有对照包；下方演示不会代表你的真实组合。
               </p>
-              <small>
-                {p.config.start} → {p.config.end}
-              </small>
-              <div className="bt-action-row">
-                <button className="bt-text-button" onClick={() => onEdit(p)}>
-                  <Copy size={14} /> 复制到工作台修改
-                </button>
+              <button className="secondary" disabled={!ready} onClick={demo}>
+                体验两个组合 · 合成演示
+              </button>
+            </div>
+          ) : (
+            <div className="bt-portfolio-cards">
+              {shelf.studies.map((p, i) => (
+                <article
+                  className={`card bt-portfolio-card ${shelf.selected.includes(p.id) ? "is-selected" : ""}`}
+                  key={p.id}
+                  style={{ borderTopColor: colors[i] }}
+                >
+                  <div className="bt-row">
+                    <label className="bt-check">
+                      <input
+                        type="checkbox"
+                        aria-label={`参与对照：${p.title}`}
+                        checked={shelf.selected.includes(p.id)}
+                        onChange={() => toggle(p.id)}
+                      />
+                      组合 {String.fromCharCode(65 + i)}
+                    </label>
+                    <span className="bt-pill">
+                      {p.data.synthetic ? "合成演示" : p.config.currency}
+                      {shelf.baseline === p.id ? " · 基准" : ""}
+                    </span>
+                  </div>
+                  <label>
+                    组合{i + 1}名称
+                    <input
+                      value={p.title}
+                      maxLength={100}
+                      onChange={(e) =>
+                        update({
+                          ...shelf,
+                          studies: shelf.studies.map((s) =>
+                            s.id === p.id ? { ...s, title: e.target.value } : s,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <p className="bt-portfolio-holdings">
+                    {p.config.holdings
+                      .map((h) => `${h.symbol} ${Number(h.weight.toFixed(2))}%`)
+                      .join(" · ")}
+                  </p>
+                  <small>
+                    {p.config.start} → {p.config.end}
+                    {p.origin && (
+                      <>
+                        <br />
+                        来源：组合库 ·{" "}
+                        {new Date(p.origin.savedAt).toLocaleString()}
+                      </>
+                    )}
+                  </small>
+                  <div className="bt-action-row">
+                    <button
+                      className="bt-text-button"
+                      onClick={() => onEdit(p)}
+                    >
+                      <Copy size={14} /> 复制到工作台修改
+                    </button>
+                    <button
+                      className="bt-text-button"
+                      aria-label={`移除对照组合${i + 1}`}
+                      onClick={() => {
+                        if (
+                          !confirm(
+                            "只从本机对照中移除此快照？原家庭计划、当前草稿和真实持仓不受影响。",
+                          )
+                        )
+                          return;
+                        const next = shelf.selected.filter((x) => x !== p.id);
+                        update({
+                          ...shelf,
+                          studies: shelf.studies.filter((s) => s.id !== p.id),
+                          selected: next,
+                          baseline: next.includes(shelf.baseline)
+                            ? shelf.baseline
+                            : (next[0] ?? ""),
+                        });
+                      }}
+                    >
+                      <Trash2 size={14} /> 移除
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <p className="bt-help" role="status">
+            {status ||
+              "对照快照仅缓存于本设备的家庭空间，不自动同步价格或修改账本。"}
+          </p>
+          {!!shelf.studies.length && (
+            <div className="card bt-comparison-controls">
+              <div className="bt-comparison-fields">
+                <label>
+                  统一策略
+                  <select
+                    aria-label="统一策略"
+                    value={shelf.strategy}
+                    onChange={(e) =>
+                      update({
+                        ...shelf,
+                        strategy: e.target.value as BacktestStrategy,
+                      })
+                    }
+                  >
+                    {Object.entries(STRATEGIES).map(([key, name]) => (
+                      <option value={key} key={key}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  资金与费用基准
+                  <select
+                    aria-label="资金与费用基准"
+                    value={shelf.baseline}
+                    disabled={!selected.length}
+                    onChange={(e) =>
+                      update({ ...shelf, baseline: e.target.value })
+                    }
+                  >
+                    {!selected.length && <option value="">请先勾选组合</option>}
+                    {selected.map((p) => (
+                      <option value={p.id} key={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
-                  className="bt-text-button"
-                  aria-label={`移除对照组合${i + 1}`}
+                  className="primary"
+                  disabled={selected.length < 2}
                   onClick={() => {
-                    if (
-                      !confirm(
-                        "只从本机对照中移除此快照？原家庭计划、当前草稿和真实持仓不受影响。",
-                      )
-                    )
-                      return;
-                    const next = shelf.selected.filter((x) => x !== p.id);
-                    update({
-                      ...shelf,
-                      studies: shelf.studies.filter((s) => s.id !== p.id),
-                      selected: next,
-                      baseline: next.includes(shelf.baseline)
-                        ? shelf.baseline
-                        : (next[0] ?? ""),
-                    });
+                    try {
+                      if (libraryChanged)
+                        throw Error(
+                          "组合库配置已更新，请在上方准备最新组合后再运行；旧快照仍保留。",
+                        );
+                      const r = runPortfolioComparison(shelf);
+                      setReport(r);
+                      setInput(shelf);
+                      setEvent(
+                        BACKTEST_EVENTS.find(
+                          (e) =>
+                            r.items[0].report.results[0].events.find(
+                              (x) => x.id === e.id,
+                            )?.coverage !== "none",
+                        )?.id ?? BACKTEST_EVENTS[0].id,
+                      );
+                      setError("");
+                      requestAnimationFrame(() =>
+                        result.current?.focus({ preventScroll: true }),
+                      );
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
                   }}
                 >
-                  <Trash2 size={14} /> 移除
+                  <Play size={16} /> 运行组合对照
                 </button>
               </div>
-            </article>
-          ))}
-        </div>
-      )}
-      <p className="bt-help" role="status">
-        {status ||
-          "对照快照仅缓存于本设备的家庭空间，不自动同步价格或修改账本。"}
-      </p>
-      {!!shelf.studies.length && (
-        <div className="card bt-comparison-controls">
-          <div className="bt-comparison-fields">
-            <label>
-              统一策略
-              <select
-                aria-label="统一策略"
-                value={shelf.strategy}
-                onChange={(e) =>
-                  update({
-                    ...shelf,
-                    strategy: e.target.value as BacktestStrategy,
-                  })
-                }
-              >
-                {Object.entries(STRATEGIES).map(([key, name]) => (
-                  <option value={key} key={key}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              资金与费用基准
-              <select
-                aria-label="资金与费用基准"
-                value={shelf.baseline}
-                disabled={!selected.length}
-                onChange={(e) => update({ ...shelf, baseline: e.target.value })}
-              >
-                {!selected.length && <option value="">请先勾选组合</option>}
-                {selected.map((p) => (
-                  <option value={p.id} key={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="primary"
-              disabled={selected.length < 2}
-              onClick={() => {
-                try {
-                  const r = runPortfolioComparison(shelf);
-                  setReport(r);
-                  setInput(shelf);
-                  setEvent(
-                    BACKTEST_EVENTS.find(
-                      (e) =>
-                        r.items[0].report.results[0].events.find(
-                          (x) => x.id === e.id,
-                        )?.coverage !== "none",
-                    )?.id ?? BACKTEST_EVENTS[0].id,
-                  );
-                  setError("");
-                  requestAnimationFrame(() =>
-                    result.current?.focus({ preventScroll: true }),
-                  );
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              <Play size={16} /> 运行组合对照
-            </button>
-          </div>
-          <p>
-            统一使用基准组合的资金、月供和费用等假设；各组合保留自己的持仓权重。实际区间取全部所选持仓的共同历史，不补缺失价格。
-          </p>
-        </div>
-      )}
+              <p>
+                统一使用基准组合的资金、月供和费用等假设；各组合保留自己的持仓权重。实际区间取全部所选持仓的共同历史，不补缺失价格。
+              </p>
+            </div>
+          )}
+        </details>
+      </fieldset>
       {report && (
         <section
           className="card bt-comparison-results"

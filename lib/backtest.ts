@@ -388,6 +388,10 @@ export function runBacktest(
     warnings.push(
       `历史汇率换算至${data.conversion.base}：Bank of Canada FXUSDCAD日均参考价，非收盘成交价；仅用当日或此前4天内汇率。不含换汇点差，仅比较共同观测日，省略${data.conversion.omitted}个单项观测；跨市场日历下252日年化风险指标为近似值。汇率覆盖始于2017年。`,
     );
+  if (data.alignment)
+    warnings.push(
+      `共同总回报日历：仅对已含分红拆股的复权价格对齐共同观测日，省略${data.alignment.omitted}个单项观测，不前填证券；日均汇率/跨市场日历下252日年化风险是近似值。`,
+    );
   if (data.synthetic)
     warnings.unshift(
       "合成演示数据：用于体验和验证算法，不是真实市场，不可用于投资结论。",

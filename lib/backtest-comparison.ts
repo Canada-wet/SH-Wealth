@@ -15,6 +15,7 @@ export type PortfolioStudy = {
   at: string;
   config: BacktestConfig;
   data: BacktestData;
+  origin?: { planId: string; savedAt: string; configKey: string };
 };
 export type PortfolioShelf = {
   version: 1;
@@ -22,6 +23,7 @@ export type PortfolioShelf = {
   selected: string[];
   baseline: string;
   strategy: BacktestStrategy;
+  collection?: { ids: string[]; baseline: string };
 };
 export const EMPTY_PORTFOLIO_SHELF: PortfolioShelf = {
   version: 1,
@@ -63,10 +65,32 @@ export function validatePortfolioShelf(
     ids.add(p.id);
     validateBacktestConfig(p.config);
     validateBacktestData(p.data);
+    if (
+      p.origin &&
+      (typeof p.origin.planId !== "string" ||
+        !p.origin.planId ||
+        p.origin.planId.length > 100 ||
+        typeof p.origin.savedAt !== "string" ||
+        !Number.isFinite(Date.parse(p.origin.savedAt)) ||
+        typeof p.origin.configKey !== "string" ||
+        p.origin.configKey.length > 6000)
+    )
+      throw Error("组合库来源记录无效。");
     observations += p.data.assets.reduce((n, a) => n + a.points.length, 0);
   }
   if (observations > 240000)
     throw Error("对照历史过大，请缩短日期或减少快照后重试。");
+  if (s.collection) {
+    const c = s.collection;
+    if (
+      !Array.isArray(c.ids) ||
+      c.ids.length > 4 ||
+      new Set(c.ids).size !== c.ids.length ||
+      c.ids.some((id) => typeof id !== "string" || !id || id.length > 100) ||
+      (c.ids.length ? !c.ids.includes(c.baseline) : c.baseline !== "")
+    )
+      throw Error("请从组合库选择最多4个唯一组合，基准须在所选组合中。");
+  }
   if (
     s.selected.some((id) => !ids.has(id)) ||
     (s.selected.length ? !s.selected.includes(s.baseline) : s.baseline !== "")
@@ -180,7 +204,7 @@ export function runPortfolioComparison(
   if (returnTypes.has("price"))
     warnings.push("此次仅比较价格回报，缺少分红，不是总回报比较。");
   for (const w of items[0].report.warnings.filter((w) =>
-    /不足一年|少于60/.test(w),
+    /不足一年|少于60|历史汇率换算|共同总回报日历/.test(w),
   ))
     warnings.push(w);
   return {

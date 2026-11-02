@@ -4,8 +4,31 @@ import { authenticate, cleanupAuthenticated } from "./auth-helper";
 import { defaultBacktest, backtestToday } from "../../lib/backtest-schema";
 import { readFile } from "node:fs/promises";
 
-test.beforeEach(async ({ page }) => {
-  await authenticate(page, { seed: emptyState() });
+test.beforeEach(async ({ page }, info) => {
+  const seed = emptyState();
+  if (info.title.startsWith("组合库直接勾选"))
+    seed.preferences.backtestLab = {
+      version: 1,
+      saved: Array.from({ length: 6 }, (_, i) => ({
+        id: `collection-${i}`,
+        at: `2026-10-${20 + i}T00:00:00Z`,
+        config: {
+          ...defaultBacktest("2026-10-30"),
+          start: "2020-01-01",
+          name:
+            i === 0 ? "核心USD组合" : i === 1 ? "稳健CAD组合" : `备用组合${i}`,
+          currency: i === 1 ? "CAD" : "USD",
+          holdings:
+            i === 0
+              ? [
+                  { symbol: "VTV.US", weight: 70 },
+                  { symbol: "AVUV.US", weight: 30 },
+                ]
+              : [{ symbol: i === 1 ? "XCV.TO" : "VTV.US", weight: 100 }],
+        },
+      })),
+    };
+  await authenticate(page, { seed });
 });
 test.afterEach(async ({ page }) => cleanupAuthenticated(page));
 async function open(page: Page) {
@@ -504,6 +527,138 @@ test("股票下拉仅选择核对通过项，任意输入不改组合、重复�
   }
   expect(queries.every((q) => !q.includes("@"))).toBe(true);
   await expect(first).toHaveValue("NVDA.US");
+});
+test("组合库直接勾选、缺失行情去重获取、混币并排比较，刷新复用且工作台不变", async ({
+  page,
+}, info) => {
+  const dates = ["2020-01-02", "2020-01-03", "2020-01-06", "2020-01-07"],
+    requests: Record<string, unknown>[] = [];
+  let fxCalls = 0;
+  await page.route("**/api/backtest/history", (route) => {
+    const q = route.request().postDataJSON();
+    requests.push(q);
+    return route.fulfill({
+      json: {
+        requested: q,
+        effectiveEnd: "2026-10-30",
+        results: [],
+        data: {
+          version: 1,
+          synthetic: false,
+          capturedAt: new Date().toISOString(),
+          assets: q.symbols.map((symbol: string) => ({
+            symbol,
+            currency: symbol.endsWith(".TO") ? "CAD" : "USD",
+            basis: "total-return",
+            dividendsKnown: false,
+            source: "SYNTHETIC UI fixture only",
+            points: dates
+              .filter((d) => !symbol.endsWith(".TO") || d !== "2020-01-03")
+              .map((date, i) => ({
+                date,
+                close: 100 + i,
+                dividend: 0,
+                split: 1,
+              })),
+          })),
+        },
+      },
+    });
+  });
+  await page.route("**/api/backtest/fx?*", (route) => {
+    fxCalls++;
+    return route.fulfill({
+      json: {
+        source: "Bank of Canada FXUSDCAD",
+        fetchedAt: new Date().toISOString(),
+        points: dates.map((date) => ({ date, cadPerUsd: 1.3 })),
+      },
+    });
+  });
+  await open(page);
+  await page
+    .getByRole("button", { name: "组合Collection", exact: true })
+    .click();
+  await expect(page.locator(".bt-collection-card")).toHaveCount(6);
+  await page
+    .getByRole("checkbox", { name: "加入对照：核心USD组合", exact: true })
+    .check();
+  await page
+    .getByRole("checkbox", { name: "加入对照：稳健CAD组合", exact: true })
+    .check();
+  await page
+    .getByRole("button", { name: "对照已选组合（2）", exact: true })
+    .click();
+  await expect(
+    page.getByRole("checkbox", { name: "选择组合：核心USD组合", exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: "选择组合：稳健CAD组合", exact: true }),
+  ).toBeChecked();
+  await page
+    .getByRole("searchbox", { name: "搜索可对照组合", exact: true })
+    .fill("VTV");
+  await expect(page.getByText("已选 2/4 个", { exact: true })).toBeVisible();
+  await page
+    .getByLabel("组合库对照基准", { exact: true })
+    .selectOption("collection-1");
+  expect(requests).toHaveLength(0);
+  expect(fxCalls).toBe(0);
+  await page
+    .getByRole("button", { name: "准备行情并对比", exact: true })
+    .click();
+  const report = page.getByRole("region", {
+    name: "组合对照结果",
+    exact: true,
+  });
+  await expect(report).toBeVisible();
+  await expect(report).toContainText("3个相同交易日 · CAD");
+  await expect(
+    page.getByRole("table", { name: "不同组合 · 同策略、同投入、同区间" }),
+  ).toBeVisible();
+  expect(requests).toHaveLength(1);
+  expect(requests[0].symbols).toEqual(["VTV.US", "AVUV.US", "XCV.TO"]);
+  expect(Object.keys(requests[0]).sort()).toEqual([
+    "end",
+    "provider",
+    "start",
+    "symbols",
+  ]);
+  expect(fxCalls).toBe(1);
+  await expect(
+    page.locator(".bt-comparison-results .recharts-line-curve"),
+  ).toHaveCount(2);
+  for (const width of info.project.name.startsWith("mobile")
+    ? [320, 390]
+    : [768, 1440]) {
+    await page.setViewportSize({ width, height: 920 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
+  }
+  await page.waitForTimeout(1000);
+  await page.reload();
+  await expect(
+    page.getByRole("combobox", { name: "标的1", exact: true }),
+  ).toHaveValue("SPY.US");
+  await expect(page.getByLabel("权重1", { exact: true })).toHaveValue("70");
+  await page.getByRole("button", { name: "组合对照", exact: true }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "选择组合：核心USD组合", exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByText("可复用本机真实研究", { exact: true }),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "准备行情并对比", exact: true })
+    .click();
+  await expect(report).toBeVisible();
+  expect(requests).toHaveLength(1);
+  expect(fxCalls).toBe(1);
 });
 test("多来源状态、VTV精确回车选股及混币历史FX换算，刷新保留审计", async ({
   page,

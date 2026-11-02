@@ -208,6 +208,27 @@ export default function BacktestWorkspace({
     [shelfDirty, setShelfDirty] = useState(false),
     [shelfStatus, setShelfStatus] = useState("");
   const shelfWrite = useRef<Promise<unknown>>(Promise.resolve());
+  const [comparisonBusy, setComparisonBusy] = useState(false);
+  const toggleLibraryComparison = (id: string) => {
+    if (comparisonBusy || !shelfReady) return;
+    const previous = shelf.collection ?? { ids: [], baseline: "" };
+    const ids = previous.ids.includes(id)
+      ? previous.ids.filter((x) => x !== id)
+      : [...previous.ids, id];
+    if (ids.length > 4) {
+      setNotice("每次最多对照4个组合，请先取消一项。");
+      return;
+    }
+    changeShelf({
+      ...shelf,
+      collection: {
+        ids,
+        baseline: ids.includes(previous.baseline)
+          ? previous.baseline
+          : (ids[0] ?? ""),
+      },
+    });
+  };
   const stale =
     !!report &&
     (stableJSON(config) !== stableJSON(report.config) || data !== runData);
@@ -921,6 +942,7 @@ export default function BacktestWorkspace({
         <div role="group" aria-label="比较方式">
           <button
             aria-pressed={mode === "workspace"}
+            disabled={comparisonBusy}
             onClick={() => setMode("workspace")}
           >
             策略工作台
@@ -928,15 +950,16 @@ export default function BacktestWorkspace({
           <button
             aria-label="组合对照"
             aria-pressed={mode === "portfolios"}
-            disabled={busy || reading || yahooBusy}
+            disabled={busy || reading || yahooBusy || comparisonBusy}
             onClick={() => setMode("portfolios")}
           >
-            组合对照 <span>{shelf.studies.length}</span>
+            组合对照{" "}
+            <span>{shelf.collection?.ids.length || shelf.studies.length}</span>
           </button>
           <button
             aria-label="组合Collection"
             aria-pressed={mode === "collection"}
-            disabled={busy || reading || yahooBusy}
+            disabled={busy || reading || yahooBusy || comparisonBusy}
             onClick={() => setMode("collection")}
           >
             组合库 <span>{lab.saved.length}</span>
@@ -2735,6 +2758,11 @@ export default function BacktestWorkspace({
       </div>
       <div hidden={mode !== "portfolios"}>
         <PortfolioComparison
+          key={scope}
+          lab={lab}
+          draft={{ config, data }}
+          onLibrary={() => setMode("collection")}
+          onPrepareBusy={setComparisonBusy}
           shelf={shelf}
           ready={shelfReady}
           status={shelfStatus}
@@ -2755,6 +2783,9 @@ export default function BacktestWorkspace({
           onRemove={removePlan}
           onSave={save}
           onBack={() => setMode("workspace")}
+          comparisonIDs={shelf.collection?.ids ?? []}
+          onToggleCompare={toggleLibraryComparison}
+          onCompare={() => setMode("portfolios")}
         />
       </div>
     </>

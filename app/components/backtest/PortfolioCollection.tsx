@@ -18,6 +18,9 @@ export default function PortfolioCollection({
   onRemove,
   onSave,
   onBack,
+  comparisonIDs = [],
+  onToggleCompare,
+  onCompare,
 }: {
   lab: BacktestLab;
   selected: string;
@@ -26,6 +29,9 @@ export default function PortfolioCollection({
   onRemove: (id: string) => void;
   onSave: () => void;
   onBack: () => void;
+  comparisonIDs?: string[];
+  onToggleCompare?: (id: string) => void;
+  onCompare?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [currency, setCurrency] = useState("all");
@@ -49,10 +55,19 @@ export default function PortfolioCollection({
           <p className="bt-kicker">COLLECTION / REUSE</p>
           <h2>你的组合库</h2>
           <p>
-            保存配置、搜索标的，载入或复制后继续研究。最多12个家庭共享组合。
+            保存配置、搜索标的，勾选2–4个组合可直接对照。最多12个家庭共享组合。
           </p>
         </div>
         <div className="bt-action-row">
+          {onCompare && (
+            <button
+              className="primary"
+              disabled={comparisonIDs.length < 2}
+              onClick={onCompare}
+            >
+              对照已选组合（{comparisonIDs.length}）
+            </button>
+          )}
           <button className="secondary" onClick={onBack}>
             回到工作台
           </button>
@@ -94,7 +109,7 @@ export default function PortfolioCollection({
       <details className="bt-details">
         <summary>配置云端同步 · 行情仅本机</summary>
         <p className="bt-help">
-          是否保存成功以页顶状态为准。Collection不重复存真实资产或聊天；行情跨设备请用研究包／对照包。对照快照与可编辑配置分开管理。
+          是否保存成功以页顶状态为准。组合库保存共享配置，不重复存资产或聊天；选择后在对照页准备行情。行情跨设备请用研究包／对照包；本机快照不会自动更新库里的配置。
         </p>
       </details>
       {!plans.length && (
@@ -116,6 +131,20 @@ export default function PortfolioCollection({
                 {p.config.currency} · {p.config.holdings.length}项
               </span>
               {selected === p.id && <span className="bt-pill">当前载入</span>}
+              {onToggleCompare && (
+                <label className="bt-check bt-collection-select">
+                  <input
+                    type="checkbox"
+                    aria-label={`加入对照：${p.config.name}`}
+                    checked={comparisonIDs.includes(p.id)}
+                    disabled={
+                      !comparisonIDs.includes(p.id) && comparisonIDs.length >= 4
+                    }
+                    onChange={() => onToggleCompare(p.id)}
+                  />
+                  对照
+                </label>
+              )}
             </div>
             <h3>{p.config.name}</h3>
             <p className="bt-collection-holdings">

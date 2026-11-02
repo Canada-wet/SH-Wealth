@@ -45,6 +45,12 @@ export type BacktestData = {
   capturedAt: string;
   synthetic: boolean;
   assets: HistoricalAsset[];
+  alignment?: {
+    method: "total-return-common-dates";
+    start: string;
+    end: string;
+    omitted: number;
+  };
   conversion?: {
     source: "Bank of Canada FXUSDCAD";
     fetchedAt: string;
@@ -227,6 +233,24 @@ export function validateBacktestData(
     }
     if (d.assets.some((a) => a.points.some((p) => !dates.has(p.date))))
       throw Error("缺少对应日的历史汇率审计。");
+  }
+  if (d.alignment) {
+    const a = d.alignment;
+    if (
+      a.method !== "total-return-common-dates" ||
+      !validDate(a.start) ||
+      !validDate(a.end) ||
+      a.start >= a.end ||
+      !Number.isInteger(a.omitted) ||
+      a.omitted < 0 ||
+      a.omitted > 120000 ||
+      d.assets.some(
+        (x) =>
+          x.basis !== "total-return" ||
+          x.points.some((p) => p.date < a.start || p.date > a.end),
+      )
+    )
+      throw Error("共同总回报日历审计无效。");
   }
 }
 export function validBacktestLab(raw: unknown): raw is BacktestLab {
