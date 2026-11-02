@@ -159,13 +159,23 @@ export async function prepareCollectionComparison(options: {
     );
   const downloaded = new Map<string, HistoricalAsset>();
   let capturedAt = "";
-  for (let offset = 0; offset < missing.length; offset += 8) {
+  // The history endpoint also bounds response bytes. Long windows need fewer
+  // symbols per batch so valid multi-decade ETF data is not rejected by size.
+  const years = Math.max(
+    1,
+    (Date.parse(end) - Date.parse(start)) / 86400000 / 365.25,
+  );
+  const batchSize = Math.max(
+    1,
+    Math.min(8, Math.floor(2_300_000 / (years * 260 * 110))),
+  );
+  for (let offset = 0; offset < missing.length; offset += batchSize) {
     signal.throwIfAborted();
     onProgress?.(
-      `正在获取第${Math.floor(offset / 8) + 1}/${Math.ceil(missing.length / 8)}批历史；仅发送证券代码和共同日期…`,
+      `正在获取第${Math.floor(offset / batchSize) + 1}/${Math.ceil(missing.length / batchSize)}批历史；仅发送证券代码和共同日期…`,
     );
     const query = historyRequest({
-      symbols: missing.slice(offset, offset + 8),
+      symbols: missing.slice(offset, offset + batchSize),
       start,
       end,
       provider: options.provider ?? "auto",

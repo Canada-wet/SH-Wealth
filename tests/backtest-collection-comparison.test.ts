@@ -270,7 +270,7 @@ it("外部取消或失配响应不生成新快照，不会自动再发请求", a
   ).rejects.toThrow(/完整行情/);
   expect(bad).toHaveBeenCalledOnce();
 });
-it("不同组合大量代码按8个一批，重复持仓只取一次", async () => {
+it("不同组合大量代码不超过8个一批，重复持仓只取一次", async () => {
   const args = setup();
   args.lab.saved[0].config.holdings = Array.from({ length: 8 }, (_, i) => ({
     symbol: `T${i}.US`,
@@ -287,4 +287,23 @@ it("不同组合大量代码按8个一批，重复持仓只取一次", async () 
     f.mock.calls.map(([, i]) => JSON.parse(String(i?.body)).symbols.length),
   ).toEqual([8, 4]);
   expect(r.shelf.studies[0].config.holdings).toHaveLength(8);
+});
+it("多年历史按传输预算缩小批次，避免常见ETF因包太大被误判缺数据", async () => {
+  const args = setup();
+  args.lab.saved.forEach((p, j) => {
+    p.config.start = "2007-01-01";
+    p.config.end = "2025-12-31";
+    p.config.holdings = Array.from({ length: 8 }, (_, i) => ({
+      symbol: `T${i + j * 4}.US`,
+      weight: 12.5,
+    }));
+  });
+  const f = fetcher();
+  await prepareCollectionComparison({ ...args, fetcher: f });
+  expect(f).toHaveBeenCalledTimes(3);
+  expect(
+    f.mock.calls.every(
+      ([, i]) => JSON.parse(String(i?.body)).symbols.length <= 4,
+    ),
+  ).toBe(true);
 });
