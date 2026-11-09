@@ -139,6 +139,9 @@ export default function Markets() {
     [exchange, setExchange] = useState<MarketInstrument["exchange"]>("NASDAQ"),
     [name, setName] = useState(""),
     [reload, setReload] = useState(0);
+  const [quoteRefreshRequestedAt, setQuoteRefreshRequestedAt] = useState<
+    string | null
+  >(null);
   const chart = useRef<HTMLDetailsElement | null>(null);
   const [chartFocus, setChartFocus] = useState(0);
   const initialAnchor = useRef(false);
@@ -241,6 +244,18 @@ export default function Markets() {
       localStorage.setItem("together-market-embeds", next ? "on" : "off");
     } catch {}
   };
+  const reconnectQuotes = () => {
+    if (!live || !store.ready) return;
+    setReload((value) => value + 1);
+    setQuoteRefreshRequestedAt(new Date().toISOString());
+    setNotice(
+      "已请求重新连接自选卡片、行情表和已打开的图表；报价时间与延迟以来源窗口为准，不代表已取得最新价格。",
+    );
+  };
+  const refreshMarket = () => {
+    void refresh();
+    reconnectQuotes();
+  };
   const exportSnapshot = () => {
     if (!data) return;
     const url = URL.createObjectURL(
@@ -286,10 +301,10 @@ export default function Markets() {
             <button
               className="secondary"
               disabled={!store.ready || busy}
-              onClick={() => void refresh()}
+              onClick={refreshMarket}
             >
               <RefreshCw size={14} />
-              {busy ? "读取中…" : "刷新官方数据"}
+              {busy ? "读取中…" : "刷新市场数据"}
             </button>
           </div>
         </header>
@@ -393,6 +408,9 @@ export default function Markets() {
           ready={store.ready}
           onEnable={toggleLive}
           onSelect={openChart}
+          refreshVersion={reload}
+          refreshRequestedAt={quoteRefreshRequestedAt}
+          onRefresh={reconnectQuotes}
         />
         <MarketWealth
           state={store.state}
@@ -530,8 +548,8 @@ export default function Markets() {
             </div>
             <button
               className="text-button"
-              disabled={!live}
-              onClick={() => setReload((value) => value + 1)}
+              disabled={!live || !store.ready}
+              onClick={reconnectQuotes}
             >
               重新连接行情
             </button>
@@ -770,6 +788,7 @@ export default function Markets() {
                 live &&
                 chartOpen && (
                   <QuoteFrame
+                    key={`chart-${reload}`}
                     title="所选证券历史图表"
                     src={widgetUrl("chart", list, tradingSymbol(instrument))}
                     height={520}

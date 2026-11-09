@@ -198,9 +198,97 @@ it("报价状态只接收当前供应商窗口的消息，不让其他窗口伪�
   expect(card.getAttribute("data-state")).toBe("waiting");
   message("tv-widget-ready");
   expect(card.getAttribute("data-state")).toBe("ready");
+  expect(screen.getByText(/行情窗口已响应；报价时间与延迟/)).toBeTruthy();
   message("tv-widget-no-data");
   message("tv-widget-ready");
   expect(card.getAttribute("data-state")).toBe("unavailable");
+});
+it("整组刷新重建卡片连接、重置状态与尺寸，拒绝旧窗口消息且不改筛选", () => {
+  const onRefresh = vi.fn();
+  const props = {
+    rows: DEFAULT_WATCHLIST,
+    live: true,
+    ready: true,
+    onEnable: vi.fn(),
+    onSelect: vi.fn(),
+    onRefresh,
+  };
+  const view = render(<MarketPulse {...props} refreshVersion={0} />);
+  fireEvent.change(screen.getByLabelText("搜索涨跌速览"), {
+    target: { value: "nvda" },
+  });
+  const oldFrame = screen.getByTitle(
+    "当前涨跌NASDAQ:NVDA",
+  ) as HTMLIFrameElement;
+  const oldSource = oldFrame.contentWindow;
+  const signal = (source: Window | null, name: string, data?: unknown) =>
+    act(() =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://www.tradingview-widget.com",
+          source,
+          data: { name, data },
+        }),
+      ),
+    );
+  signal(oldSource, "tv-widget-resize-iframe", { height: 160 });
+  signal(oldSource, "tv-widget-ready");
+  expect(oldFrame.height).toBe("160");
+  fireEvent.click(screen.getByRole("button", { name: "刷新自选行情" }));
+  expect(onRefresh).toHaveBeenCalledOnce();
+  view.rerender(
+    <MarketPulse
+      {...props}
+      refreshVersion={1}
+      refreshRequestedAt="2026-11-09T15:00:00.000Z"
+    />,
+  );
+  const next = screen.getByTitle("当前涨跌NASDAQ:NVDA") as HTMLIFrameElement;
+  expect(next).not.toBe(oldFrame);
+  expect(next.height).toBe("90");
+  expect(screen.getByRole("article").getAttribute("data-state")).toBe(
+    "waiting",
+  );
+  signal(oldSource, "tv-widget-ready");
+  expect(screen.getByRole("article").getAttribute("data-state")).toBe(
+    "waiting",
+  );
+  expect(screen.getByLabelText("搜索涨跌速览")).toHaveProperty("value", "nvda");
+  expect(screen.getByText(/非报价更新时间/)).toBeTruthy();
+  expect(view.container.querySelector("time")?.dateTime).toBe(
+    "2026-11-09T15:00:00.000Z",
+  );
+  signal(next.contentWindow, "tv-widget-ready");
+  expect(screen.getByRole("article").getAttribute("data-state")).toBe("ready");
+});
+it("批量刷新不提前连接屏幕外卡片；暂停或未就绪不能触发刷新", () => {
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const onRefresh = vi.fn();
+  const props = {
+    rows: DEFAULT_WATCHLIST.slice(0, 2),
+    live: true,
+    ready: true,
+    onEnable: vi.fn(),
+    onSelect: vi.fn(),
+    onRefresh,
+  };
+  const view = render(<MarketPulse {...props} refreshVersion={0} />);
+  view.rerender(<MarketPulse {...props} refreshVersion={1} />);
+  expect(view.container.querySelectorAll("iframe[src]")).toHaveLength(0);
+  view.rerender(<MarketPulse {...props} live={false} refreshVersion={1} />);
+  fireEvent.click(screen.getByRole("button", { name: "刷新自选行情" }));
+  expect(onRefresh).not.toHaveBeenCalled();
+  expect(view.container.querySelector("iframe")).toBeNull();
+  view.rerender(<MarketPulse {...props} ready={false} refreshVersion={1} />);
+  fireEvent.click(screen.getByRole("button", { name: "刷新自选行情" }));
+  expect(onRefresh).not.toHaveBeenCalled();
+  expect(view.container.querySelectorAll("iframe[src]")).toHaveLength(0);
 });
 it("速览明确授权后才加载，按同一清单筛选币种，支持选图和空列表", () => {
   const onEnable = vi.fn(),

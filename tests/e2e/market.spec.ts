@@ -517,7 +517,7 @@ test("断网刷新恢复上次快照与真实时间，重试恢复新读取", as
       },
     }),
   );
-  await page.getByRole("button", { name: "刷新官方数据" }).click();
+  await page.getByRole("button", { name: "刷新市场数据" }).click();
   await expect(page.locator(".market-fx-grid")).toContainText(
     "保留上次有效观测",
   );
@@ -764,7 +764,7 @@ test("官方数据刷新失败保留原结果和源日期，明确显示旧数�
       body: JSON.stringify({ error: "合成数据源暂不可用" }),
     }),
   );
-  await page.getByRole("button", { name: "刷新官方数据" }).click();
+  await page.getByRole("button", { name: "刷新市场数据" }).click();
   await expect(
     page.locator(".markets-page .error-banner[role=alert]"),
   ).toContainText("保留上次成功");

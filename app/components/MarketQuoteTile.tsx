@@ -12,11 +12,13 @@ export default function MarketQuoteTile({
   ready,
   onSelect,
   enabled = true,
+  refreshVersion = 0,
 }: {
   row: MarketInstrument;
   ready: boolean;
   onSelect: (row: MarketInstrument) => void;
   enabled?: boolean;
+  refreshVersion?: number;
 }) {
   const [attempt, setAttempt] = useState(0);
   const tile = useRef<HTMLElement>(null);
@@ -50,6 +52,7 @@ export default function MarketQuoteTile({
   // A cached frame may signal readiness before deferred effects run.
   useLayoutEffect(() => {
     setStatus("waiting");
+    setHeight(90);
     if (!near || missing || !enabled) return;
     const timer = setTimeout(
       () => setStatus((current) => (current === "waiting" ? "slow" : current)),
@@ -79,7 +82,7 @@ export default function MarketQuoteTile({
       clearTimeout(timer);
       window.removeEventListener("message", receive);
     };
-  }, [src, attempt, near, missing, enabled]);
+  }, [src, attempt, near, missing, enabled, refreshVersion]);
   useEffect(() => {
     if (!near || missing || !enabled) return;
     let scheduled = 0;
@@ -141,7 +144,7 @@ export default function MarketQuoteTile({
         </div>
       ) : (
         <iframe
-          key={attempt}
+          key={`${src}-${attempt}-${refreshVersion}`}
           ref={frame}
           src={near ? src : undefined}
           data-src={src}
@@ -153,7 +156,7 @@ export default function MarketQuoteTile({
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
       )}
-      {enabled && !missing && status !== "ready" && (
+      {enabled && !missing && (
         <small
           className="market-quote-status"
           role={
@@ -166,7 +169,9 @@ export default function MarketQuoteTile({
               ? "暂无报价，请核对来源"
               : status === "slow"
                 ? "连接超时或被浏览器拦截，请重试或打开来源。"
-                : "正在连接行情…"}
+                : status === "ready"
+                  ? "行情窗口已响应；报价时间与延迟请看窗口内标注。"
+                  : "正在连接行情…"}
         </small>
       )}
       <div className="market-quote-footer">

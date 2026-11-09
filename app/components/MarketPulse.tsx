@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { RESEARCH_THEMES, researchTheme } from "@/lib/market-research";
-import { Search, X, SlidersHorizontal } from "lucide-react";
+import { Search, X, SlidersHorizontal, RefreshCw } from "lucide-react";
 import MarketQuoteTile from "./MarketQuoteTile";
 import { instrumentKey, type MarketInstrument } from "@/lib/market";
 
@@ -11,12 +11,18 @@ export default function MarketPulse({
   ready,
   onEnable,
   onSelect,
+  refreshVersion = 0,
+  refreshRequestedAt,
+  onRefresh,
 }: {
   rows: MarketInstrument[];
   live: boolean;
   ready: boolean;
   onEnable: () => void;
   onSelect: (row: MarketInstrument) => void;
+  refreshVersion?: number;
+  refreshRequestedAt?: string | null;
+  onRefresh?: () => void;
 }) {
   const [scope, setScope] = useState("all");
   const [query, setQuery] = useState("");
@@ -74,9 +80,21 @@ export default function MarketPulse({
             最新价格 · 当日涨跌额 · 当日涨跌幅。与前收盘比较，不是你的持仓收益。
           </p>
         </div>
-        <a className="text-button" href="#securities">
-          管理自选 ↓
-        </a>
+        <div className="market-pulse-actions">
+          {onRefresh && (
+            <button
+              className="secondary"
+              disabled={!ready || !live}
+              onClick={onRefresh}
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+              刷新自选行情
+            </button>
+          )}
+          <a className="text-button" href="#securities">
+            管理自选 ↓
+          </a>
+        </div>
       </div>
       {!live && rows.length > 0 && (
         <div className="market-action-hint market-pulse-enable">
@@ -211,6 +229,19 @@ export default function MarketPulse({
         显示 {visible.length} / {rows.length} 个自选 · {covered.length}{" "}
         个报价入口 · {live ? "当前设备已开启" : "当前设备未开启"}
         {missing.length ? ` · ${missing.length} 个暂无覆盖` : ""}
+        {refreshRequestedAt && (
+          <>
+            {" · 重连请求 "}
+            <time dateTime={refreshRequestedAt}>
+              {new Date(refreshRequestedAt).toLocaleTimeString("zh-CN", {
+                timeZone: "America/Toronto",
+                hour12: false,
+              })}
+              {" Toronto"}
+            </time>
+            {"，非报价更新时间"}
+          </>
+        )}
       </p>
       {theme !== "all" && (
         <p className="desk-help">
@@ -245,6 +276,7 @@ export default function MarketPulse({
               ready={ready}
               onSelect={onSelect}
               enabled={live}
+              refreshVersion={refreshVersion}
             />
           ))}
         </div>

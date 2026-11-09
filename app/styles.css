@@ -1126,6 +1126,17 @@ main {
 .market-section {
   margin-bottom: 22px;
 }
+.market-pulse-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.market-pulse .market-pulse-actions .secondary,
+.market-pulse .market-pulse-actions .text-button {
+  min-height: 44px;
+}
 .market-pulse-toolbar,
 .market-pulse-toolbar > div {
   display: flex;
@@ -1444,6 +1455,9 @@ main {
   }
   .market-pulse .card-head {
     gap: 10px;
+  }
+  .market-pulse-actions {
+    justify-content: flex-start;
   }
   .market-quote-heading,
   .market-quote-footer a,
